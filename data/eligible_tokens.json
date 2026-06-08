@@ -1,0 +1,24 @@
+{
+  "_note": "Subconjunto-foco (líquido) dos tokens elegíveis, com endereços Binance-Peg na BSC. VERIFICADOS on-chain via symbol()/decimals() (scripts/verify_tokens.py). Para a lista completa dos 149, popular conforme regras do hackathon. Trade fora da lista oficial NÃO conta no PnL.",
+  "_status": "Focos verificados on-chain. Reconferir contra a CMC antes da janela ao vivo.",
+  "base": {
+    "USDT": "0x55d398326f99059fF775485246999027B3197955"
+  },
+  "tokens": {
+    "ETH": "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
+    "XRP": "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE",
+    "ADA": "0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47",
+    "DOGE": "0xbA2aE424d960c26247Dd6c32edC70B295c744C43",
+    "LINK": "0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD",
+    "LTC": "0x4338665CBB7B2485A8855A139b75D5e34AB0DB94",
+    "AVAX": "0x1CE0c2827e2eF14D5C4f29a091d735A204794041",
+    "DOT": "0x7083609fCE4d1d8Dc0C979AAb8c869Ea2C873402",
+    "UNI": "0xBf5140A22578168FD562DCcF235E5D43A02ce9B1",
+    "AAVE": "0xfb6115445Bff7b52FeB98650C87f44907E58f802",
+    "ATOM": "0x0Eb3a705fc54725037CC9e008bDede697f62F335",
+    "BCH": "0x8fF795a6F4D97E7887C79beA79aba5cc76444aDf",
+    "SHIB": "0x2859e4544C4bB03966803b044A93563Bd2D0DD4D",
+    "FLOKI": "0xfb5B838b6cfEEdC2873aB27866079AC55363D37E",
+    "TWT": "0x4B0F1812e5Df2A09796481Ff14017e6005508003"
+  }
+}

@@ -1,0 +1,28 @@
+# Segredos e credenciais — NUNCA versionar
+.env
+*.key
+secrets/
+~/.twak/
+wallets/
+*.keystore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Logs e estado de runtime
+logs/
+*.log
+state/
+data/runtime/
+
+# SO / editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

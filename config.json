@@ -1,0 +1,58 @@
+{
+  "_comment": "Boomerang AI — regras unificadas. 'user' = ajustável via Telegram. 'dev_safety' e 'hackathon' = imutáveis (leis de segurança e regras do evento).",
+
+  "user": {
+    "token_focus": ["ETH", "XRP", "DOGE", "ADA", "LINK", "LTC", "AVAX", "DOT", "UNI", "AAVE", "ATOM", "BCH", "SHIB", "FLOKI", "TWT"],
+    "stop_loss_pct": 4.0,
+    "take_profit_pct": 10.0,
+    "mode": "conservative"
+  },
+
+  "dev_safety": {
+    "position_size_pct": 5.0,
+    "max_position_pct": 40.0,
+    "min_confidence_score": 65,
+    "min_confidence_score_aggressive": 60,
+    "min_confidence_score_conservative": 70,
+    "prefilter_min_vol_change_pct": 10.0,
+    "max_slippage_pct": 0.5,
+    "oracle_divergence_max_pct": 1.5,
+    "trailing_stop_trigger_pct": 5.0,
+    "max_concurrent_positions": 3,
+    "trade_cooldown_seconds": 900,
+    "base_stable_symbol": "USDC",
+    "min_position_usd": 2.0
+  },
+
+  "hackathon": {
+    "competition_contract": "0x212c61b9b72c95d95bf29cf032f5e5635629aed5",
+    "global_drawdown_dq_pct": 30.0,
+    "global_drawdown_safety_pct": 23.0,
+    "min_trades_per_day": 1,
+    "heartbeat_after_hours": 20,
+    "min_portfolio_usd": 1.0,
+    "eligible_tokens_source": "official_149_bep20_cmc",
+    "eligible_tokens_file": "data/eligible_tokens.json"
+  },
+
+  "network": {
+    "bsc_rpc_url": "https://bsc-dataseed.bnbchain.org",
+    "bsc_chain_id": 56,
+    "pancakeswap_router_v2": "0x10ED43C718714eb63d5aA57B78B54704E256024E",
+    "usdt_bsc_address": "0x55d398326f99059fF775485246999027B3197955",
+    "usdc_bsc_address": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d"
+  },
+
+  "cmc": {
+    "mcp_endpoint": "https://mcp.coinmarketcap.com/mcp",
+    "x402_endpoint": "https://mcp.coinmarketcap.com/x402/mcp",
+    "x402_payment_chain": "base",
+    "x402_payment_token": "USDC",
+    "x402_cost_per_request_usd": 0.01
+  },
+
+  "loop": {
+    "scan_interval_seconds": 300,
+    "position_monitor_interval_seconds": 2
+  }
+}

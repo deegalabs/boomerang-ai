@@ -1,0 +1,161 @@
+"""Carregamento de configuração (config.json) e segredos (.env).
+
+Separa claramente as três camadas de regras:
+  - user       → ajustável pelo dono via Telegram
+  - dev_safety → leis de segurança imutáveis (código)
+  - hackathon  → regras fixas do evento
+
+Segredos NUNCA vêm do config.json; só do ambiente (.env / variáveis de SO).
+"""
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # dotenv é opcional em produção (segredos podem vir do SO)
+    def load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
+        return False
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+@dataclass(frozen=True)
+class Secrets:
+    """Segredos vindos do ambiente. Nunca logar nem serializar."""
+
+    agent_private_key: str | None
+    wallet_password: str | None
+    owner_wallet_address: str | None
+    twak_access_id: str | None
+    twak_hmac_secret: str | None
+    cmc_api_key: str | None
+    anthropic_api_key: str | None
+    llm_model: str
+    telegram_bot_token: str | None
+    telegram_master_user_id: int | None
+    bsc_rpc_url_override: str | None
+
+    @classmethod
+    def from_env(cls) -> "Secrets":
+        master_id = os.getenv("TELEGRAM_MASTER_USER_ID")
+        return cls(
+            agent_private_key=os.getenv("AGENT_PRIVATE_KEY"),
+            wallet_password=os.getenv("WALLET_PASSWORD"),
+            owner_wallet_address=os.getenv("OWNER_WALLET_ADDRESS"),
+            twak_access_id=os.getenv("TWAK_ACCESS_ID"),
+            twak_hmac_secret=os.getenv("TWAK_HMAC_SECRET"),
+            cmc_api_key=os.getenv("CMC_API_KEY"),
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+            llm_model=os.getenv("LLM_MODEL", "claude-opus-4-8"),
+            telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN"),
+            telegram_master_user_id=int(master_id) if master_id else None,
+            bsc_rpc_url_override=os.getenv("BSC_RPC_URL"),
+        )
+
+
+@dataclass(frozen=True)
+class Config:
+    """Configuração não-secreta carregada de config.json."""
+
+    user: dict[str, Any]
+    dev_safety: dict[str, Any]
+    hackathon: dict[str, Any]
+    network: dict[str, Any]
+    cmc: dict[str, Any]
+    loop: dict[str, Any]
+    secrets: Secrets = field(repr=False)
+
+    # ── Atalhos de leitura usados em todo o projeto ──────────────────────────
+    @property
+    def position_size_pct(self) -> float:
+        return float(self.dev_safety["position_size_pct"])
+
+    @property
+    def max_position_pct(self) -> float:
+        return float(self.dev_safety.get("max_position_pct", 40.0))
+
+    @property
+    def prefilter_min_vol_change(self) -> float:
+        return float(self.dev_safety.get("prefilter_min_vol_change_pct", 10.0))
+
+    @property
+    def max_slippage_pct(self) -> float:
+        return float(self.dev_safety["max_slippage_pct"])
+
+    @property
+    def oracle_divergence_max_pct(self) -> float:
+        return float(self.dev_safety["oracle_divergence_max_pct"])
+
+    @property
+    def trailing_trigger_pct(self) -> float:
+        return float(self.dev_safety["trailing_stop_trigger_pct"])
+
+    @property
+    def trade_cooldown_seconds(self) -> int:
+        return int(self.dev_safety["trade_cooldown_seconds"])
+
+    @property
+    def max_concurrent_positions(self) -> int:
+        return int(self.dev_safety["max_concurrent_positions"])
+
+    @property
+    def min_position_usd(self) -> float:
+        return float(self.dev_safety["min_position_usd"])
+
+    @property
+    def min_confidence_score(self) -> int:
+        """Corte de confiança, sensível ao modo escolhido pelo usuário."""
+        mode = str(self.user.get("mode", "conservative")).lower()
+        key = f"min_confidence_score_{mode}"
+        return int(self.dev_safety.get(key, self.dev_safety["min_confidence_score"]))
+
+    @property
+    def user_stop_loss_pct(self) -> float:
+        return float(self.user["stop_loss_pct"])
+
+    @property
+    def user_take_profit_pct(self) -> float:
+        """Lucro-alvo por trade (% acima da entrada). 0 = desativado (deixa o trailing correr)."""
+        return float(self.user.get("take_profit_pct", 0.0) or 0.0)
+
+    @property
+    def drawdown_safety_pct(self) -> float:
+        return float(self.hackathon["global_drawdown_safety_pct"])
+
+    @property
+    def drawdown_dq_pct(self) -> float:
+        return float(self.hackathon["global_drawdown_dq_pct"])
+
+    @property
+    def heartbeat_after_hours(self) -> float:
+        return float(self.hackathon["heartbeat_after_hours"])
+
+    @property
+    def min_portfolio_usd(self) -> float:
+        return float(self.hackathon["min_portfolio_usd"])
+
+    @property
+    def bsc_rpc_url(self) -> str:
+        return self.secrets.bsc_rpc_url_override or str(self.network["bsc_rpc_url"])
+
+
+def load_config(path: str | Path | None = None) -> Config:
+    """Carrega .env + config.json e devolve um objeto Config validado."""
+    load_dotenv(ROOT / ".env")
+    cfg_path = Path(path) if path else ROOT / "config.json"
+    data = json.loads(cfg_path.read_text(encoding="utf-8"))
+    data.pop("_comment", None)
+    return Config(
+        user=data["user"],
+        dev_safety=data["dev_safety"],
+        hackathon=data["hackathon"],
+        network=data["network"],
+        cmc=data["cmc"],
+        loop=data["loop"],
+        secrets=Secrets.from_env(),
+    )

@@ -1,0 +1,21 @@
+# Boomerang AI — dependências
+# Núcleo on-chain (Filtro 2 / validação BSC)
+web3==7.*
+
+# Identidade do agente on-chain (ERC-8004) + prêmio especial BNB
+bnbagent
+
+# Cérebro / decisão (Filtro 1)
+anthropic>=0.40
+mcp>=1.2            # cliente Model Context Protocol (CMC Agent Hub)
+httpx>=0.27         # chamadas HTTP / x402
+
+# Interface (Process A)
+python-telegram-bot==21.*
+
+# Dashboard web (só-leitura)
+starlette>=0.37
+uvicorn>=0.30
+
+# Infra
+python-dotenv>=1.0
