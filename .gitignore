@@ -6,9 +6,13 @@ secrets/
 wallets/
 *.keystore
 
-# Node / CLI do TWAK (instalado localmente via pnpm)
+# Node / CLI do TWAK + certificados locais (infra de máquina)
 node_modules/
-tools/twakcli/
+tools/
+
+# Keystore da identidade ERC-8004 (chave privada) — NUNCA versionar.
+# O cartão público de prova (boomerang/identity/agent_card.json) É versionado.
+identity_wallet/
 
 # Python
 __pycache__/

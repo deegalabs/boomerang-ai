@@ -2,8 +2,8 @@
 # Núcleo on-chain (Filtro 2 / validação BSC)
 web3==7.*
 
-# Identidade do agente on-chain (ERC-8004) + prêmio especial BNB
-bnbagent
+# Identidade do agente on-chain (ERC-8004) via BNB AI Agent SDK
+bnbagent>=0.3.6
 
 # Cérebro / decisão (Filtro 1)
 anthropic>=0.40

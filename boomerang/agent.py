@@ -18,6 +18,7 @@ from pathlib import Path
 
 from boomerang.brain.cmc_analyzer import AttentionAnalyzer, momentum_prescore, passes_prefilter
 from boomerang.config import Config
+from boomerang.identity import bnb_agent as identity
 from boomerang.ipc import Alert, AlertBus, AlertType
 from boomerang.persistence import append_trade, load_state, save_state
 from boomerang.risk import RiskEngine
@@ -136,6 +137,7 @@ class BoomerangAgent:
             "agent_address": self.agent_address,
             "holdings": self._last_holdings,
             "positions": [asdict(p) for p in self.positions],
+            "identity": identity.summary(),
         }
 
     def _save(self) -> None:

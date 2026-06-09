@@ -1,0 +1,14 @@
+{
+  "agent_id": 131071,
+  "tx": "0x93b2d496350f23aafc0872e0d6e5b0d736d0cb76260fd33f957b79bbe8f66947",
+  "address": "0xd06be7Cf5D097F13Dbf6C35943616EC21641abc9",
+  "network": "bsc-mainnet",
+  "chain_id": 56,
+  "registry": "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+  "name": "Boomerang AI",
+  "description": "Autonomous BNB Chain trading agent. Reads CoinMarketCap attention, decides with Claude, and executes self-custody swaps via Trust Wallet Agent Kit.",
+  "endpoint": "https://boomerang.deegalabs.ai/erc8183/status",
+  "agent_uri": "data:application/json;base64,eyJkZXNjcmlwdGlvbiI6IkF1dG9ub21vdXMgQk5CIENoYWluIHRyYWRpbmcgYWdlbnQuIFJlYWRzIENvaW5NYXJrZXRDYXAgYXR0ZW50aW9uLCBkZWNpZGVzIHdpdGggQ2xhdWRlLCBhbmQgZXhlY3V0ZXMgc2VsZi1jdXN0b2R5IHN3YXBzIHZpYSBUcnVzdCBXYWxsZXQgQWdlbnQgS2l0LiIsImltYWdlIjoiIiwibmFtZSI6IkJvb21lcmFuZyBBSSIsInJlZ2lzdHJhdGlvbnMiOltdLCJzZXJ2aWNlcyI6W3siY2FwYWJpbGl0aWVzIjpbInRyYWRpbmciXSwiZW5kcG9pbnQiOiJodHRwczovL2Jvb21lcmFuZy5kZWVnYWxhYnMuYWkvZXJjODE4My9zdGF0dXMiLCJuYW1lIjoiRVJDLTgxODMiLCJ2ZXJzaW9uIjoiMC4xLjAifV0sInR5cGUiOiJodHRwczovL2VpcHMuZXRoZXJldW0ub3JnL0VJUFMvZWlwLTgwMDQjcmVnaXN0cmF0aW9uLXYxIn0=",
+  "registered_at": 1781037070,
+  "gas_free": true
+}

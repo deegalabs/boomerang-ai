@@ -9,6 +9,20 @@
   <p class="lead" style="font-size:1.02rem">{{ t.lv_sub }}</p>
   <div id="lvAddr" class="mono" style="font-size:.8rem;color:var(--faint);margin-top:10px">·</div>
 
+  <div class="card card--glow" id="lvIdCard" style="margin-top:18px;display:none">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="pill pill--gold" style="font-size:11px">ERC-8004</span>
+      <span class="card__lbl" style="margin:0">{{ t.lv_id_title }}</span>
+      <span class="pill pill--up" id="lvIdNet" style="font-size:10px"></span>
+    </div>
+    <p class="mut" style="font-size:.86rem;margin:8px 0 12px">{{ t.lv_id_sub }}</p>
+    <div class="grid cols-3" style="gap:12px">
+      <div><span class="card__lbl">{{ t.lv_id_agent }}</span><span class="v mono grad-gold" id="lvIdAgent" style="font-size:1.3rem">·</span></div>
+      <div><span class="card__lbl">{{ t.lv_id_wallet }}</span><span class="v mono" id="lvIdWallet" style="font-size:.86rem">·</span></div>
+      <div><span class="card__lbl">{{ t.lv_id_proof }}</span><span class="v" id="lvIdProof" style="font-size:.86rem">·</span></div>
+    </div>
+  </div>
+
   <div class="grid cols-4" style="margin-top:26px">
     <div class="card card--glow stat"><span class="card__lbl">{{ t.s_equity }}</span><span class="v mono grad-gold" id="lvEquity">·</span></div>
     <div class="card stat"><span class="card__lbl">{{ t.s_drawdown }}</span><span class="v mono" id="lvDd">·</span></div>
@@ -29,6 +43,7 @@ const L = {
   amount: "{{ t.lv_amount }}", stop: "{{ t.lv_stop }}", entry: "{{ t.lv_entry }}",
   type: "{{ t.lv_type }}", buy: "{{ t.lv_buy }}", sell: "{{ t.lv_sell }}", tx: "{{ t.lv_tx }}",
   token: "{{ t.th_token }}", pnl: "{{ t.th_pnl }}", updated: "{{ t.lv_updated }}",
+  idProof: "{{ t.lv_id_proof }}", idRegistry: "{{ t.lv_id_registry }}",
 };
 const SCAN = "https://bscscan.com";
 const usd = v => v==null ? "·" : "$"+Number(v).toFixed(2);
@@ -43,6 +58,20 @@ async function tick(){
   try { d = await (await fetch("/api/live")).json(); }
   catch(e){ document.getElementById("lvState").textContent = L.offline; return; }
   const s = d.state || {}, trades = d.trades || [];
+
+  // Identidade on-chain ERC-8004
+  const id = d.identity || s.identity || {};
+  const idCard = document.getElementById("lvIdCard");
+  if (id.registered) {
+    idCard.style.display = "";
+    document.getElementById("lvIdNet").textContent = id.network || "";
+    document.getElementById("lvIdAgent").textContent = "#" + id.agent_id;
+    document.getElementById("lvIdWallet").innerHTML =
+      `<a href="${SCAN}/address/${id.address}" target="_blank" style="color:var(--info)">${short(id.address)} ↗</a>`;
+    document.getElementById("lvIdProof").innerHTML =
+      `<a href="${id.explorer}" target="_blank" style="color:var(--info)">${L.idProof} ↗</a>` +
+      (id.registry_url ? ` · <a href="${id.registry_url}" target="_blank" style="color:var(--faint)">${L.idRegistry} ↗</a>` : "");
+  }
 
   const st = s.state || "IDLE";
   const stEl = document.getElementById("lvState");

@@ -63,6 +63,22 @@ async def main() -> None:
     except Exception as exc:  # noqa: BLE001
         log.warning("Endereco do agente indisponivel: %s", exc)
 
+    # Identidade on-chain ERC-8004 (BNB AI Agent SDK). Só leitura no startup.
+    from boomerang.identity import bnb_agent as identity
+    from boomerang.ipc import Alert, AlertType
+    _id = identity.summary()
+    if _id.get("registered"):
+        log.info("Identidade ERC-8004: agentId %s em %s (tx %s)",
+                 _id["agent_id"], _id["network"], _id["tx"])
+        await alerts.emit(Alert(
+            AlertType.STARTED, "Identidade on-chain ERC-8004",
+            f"agentId {_id['agent_id']} registrado na BNB Chain ({_id['network']}).\n"
+            f"Carteira de identidade: {_id['address']}\n"
+            f"Prova: {_id['explorer']}",
+            {"identity": _id}))
+    else:
+        log.info("Identidade ERC-8004 ainda nao registrada (rode scripts/register_identity.py).")
+
     # Equity preciso (on-chain, conta posições abertas) agora que temos o endereço.
     try:
         acc = agent._equity_usd()

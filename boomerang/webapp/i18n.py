@@ -88,6 +88,10 @@ TR: dict[str, dict[str, str]] = {
         "lv_coin": "Coin", "lv_value": "Value", "lv_share": "Share", "lv_amount": "Amount",
         "lv_stop": "Stop", "lv_type": "Type", "lv_buy": "BUY", "lv_sell": "SELL", "lv_tx": "Tx",
         "lv_entry": "Entry", "lv_offline": "agent offline or idle", "lv_updated": "updated",
+        "lv_id_title": "On-chain identity (ERC-8004)", "lv_id_agent": "Agent ID",
+        "lv_id_sub": "Registered on BNB Chain via the BNB AI Agent SDK. Gas-free, verifiable by anyone.",
+        "lv_id_wallet": "Identity wallet", "lv_id_proof": "Proof on BscScan",
+        "lv_id_registry": "Registry", "lv_id_unreg": "not registered yet",
     },
     "pt": {
         "tagline": "Agente de trading autônomo na BNB Chain",
@@ -159,6 +163,10 @@ TR: dict[str, dict[str, str]] = {
         "lv_coin": "Moeda", "lv_value": "Valor", "lv_share": "Parte", "lv_amount": "Valor",
         "lv_stop": "Stop", "lv_type": "Tipo", "lv_buy": "COMPRA", "lv_sell": "VENDA", "lv_tx": "Tx",
         "lv_entry": "Entrada", "lv_offline": "agente desligado ou parado", "lv_updated": "atualizado",
+        "lv_id_title": "Identidade on-chain (ERC-8004)", "lv_id_agent": "ID do agente",
+        "lv_id_sub": "Registrada na BNB Chain via BNB AI Agent SDK. Gas-free, verificável por qualquer um.",
+        "lv_id_wallet": "Carteira de identidade", "lv_id_proof": "Prova na BscScan",
+        "lv_id_registry": "Registro", "lv_id_unreg": "ainda não registrada",
     },
 }
 

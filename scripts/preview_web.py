@@ -19,6 +19,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
+from boomerang.identity import bnb_agent as identity
 from boomerang.persistence import load_state, load_trades
 from boomerang.webapp import auth, demo
 from boomerang.webapp.i18n import docs_nav, nav_items, pick_lang, strings
@@ -93,7 +94,8 @@ async def live_page(request):  # noqa: ANN001
 
 
 async def api_live(request):  # noqa: ANN001 — público, só leitura do estado persistido
-    return JSONResponse({"state": load_state() or {}, "trades": load_trades()})
+    return JSONResponse({"state": load_state() or {}, "trades": load_trades(),
+                         "identity": identity.summary()})
 
 
 # ── Console privado (dono) + SIWE ────────────────────────────────────────────
