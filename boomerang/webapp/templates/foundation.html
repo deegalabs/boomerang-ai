@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Boomerang AI — Design System{% endblock %}
+{% block content %}
+
+<!-- ===================== HERO ===================== -->
+<section class="wrap section split" style="min-height:86vh">
+  <div>
+    <span class="eyebrow reveal d1">{{ t.fnd_eyebrow }}</span>
+    <h1 class="display reveal d2" style="margin-top:20px">
+      {{ t.fnd_title.split(' ')[:-1] | join(' ') }}
+      <span class="grad-gold">{{ t.fnd_title.split(' ')[-1] }}</span>
+    </h1>
+    <p class="lead reveal d3" style="margin-top:22px">{{ t.fnd_sub }}</p>
+    <div class="reveal d4" style="display:flex;gap:12px;margin-top:32px;flex-wrap:wrap">
+      <a class="btn btn--gold" href="#components">{{ t.fnd_components }}</a>
+      <a class="btn btn--ghost" href="#color">{{ t.fnd_color }}</a>
+    </div>
+    <div class="reveal d5 hero-stats">
+      <div><span class="hs-v mono grad-gold">15</span><span class="hs-l">tokens</span></div>
+      <div><span class="hs-v mono">V2+V3</span><span class="hs-l">liquidity</span></div>
+      <div><span class="hs-v mono" style="color:var(--up)">24/7</span><span class="hs-l">autonomous</span></div>
+    </div>
+  </div>
+
+  <!-- Kinetic boomerang + floating glass stat -->
+  <div class="reveal d3 hero-stage">
+    <div class="hero-glow"></div>
+    <div class="orbit"></div><div class="orbit orbit--2"></div>
+    <svg class="hero-bmrg" viewBox="0 0 200 200" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="hb" x1="40" y1="40" x2="160" y2="160" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FBD66B"/><stop offset="1" stop-color="#F3BA2F"/>
+        </linearGradient>
+        <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <path class="trail" d="M38 152 A74 74 0 0 1 152 38" stroke="url(#hb)" stroke-width="2"
+            stroke-linecap="round" fill="none" opacity=".4"/>
+      <g class="wing">
+        <path d="M56 140 L96 50 a8 8 0 0 1 12 0 L148 140" stroke="url(#hb)" stroke-width="22"
+              stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </g>
+      <circle r="3.4" fill="#FFE9A8" filter="url(#glow)">
+        <animateMotion dur="3.2s" repeatCount="indefinite" path="M38 152 A74 74 0 0 1 152 38" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines=".5 0 .5 1"/>
+      </circle>
+    </svg>
+  </div>
+</section>
+
+<!-- ===================== IDENTITY ===================== -->
+<section class="wrap section" style="padding-top:0">
+  <div class="grid cols-2" style="align-items:center;gap:40px">
+    <div class="card card--glow reveal" style="display:grid;place-items:center;padding:48px;background:radial-gradient(120% 120% at 50% 0%, #11182a, #0a0e18)">
+      <div style="display:flex;align-items:center;gap:14px;font-family:var(--font-display);font-weight:700;font-size:2rem">
+        <span style="font-size:46px;display:inline-flex">{% include "partials/mark.html" %}</span>
+        Boomerang<b style="color:var(--gold)"> AI</b>
+      </div>
+    </div>
+    <div class="reveal d2">
+      <span class="eyebrow">{{ t.fnd_identity }}</span>
+      <h2 style="margin:14px 0 12px">Throw. Return. Profit.</h2>
+      <p class="lead" style="font-size:1.05rem">{{ t.fnd_identity_d }}</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TYPOGRAPHY ===================== -->
+<section class="wrap section" style="padding-top:0">
+  <span class="eyebrow reveal">{{ t.fnd_type }}</span>
+  <div class="grid cols-3 reveal d2" style="margin-top:22px">
+    <div class="card">
+      <span class="card__lbl">Display — Clash Display</span>
+      <div style="font-family:var(--font-display);font-weight:700;font-size:3.4rem;line-height:1;margin-top:14px">Ag</div>
+      <div style="font-family:var(--font-display);font-weight:600;font-size:1.2rem;margin-top:10px;color:var(--muted)">Momentum captured</div>
+    </div>
+    <div class="card">
+      <span class="card__lbl">Body — Hanken Grotesk</span>
+      <div style="font-size:1.05rem;margin-top:14px">The agent reads attention on CoinMarketCap, validates liquidity on-chain, and executes with self-custody.</div>
+    </div>
+    <div class="card">
+      <span class="card__lbl">Data — JetBrains Mono</span>
+      <div class="mono" style="font-size:1.5rem;margin-top:14px;color:var(--gold)">$8.02</div>
+      <div class="mono" style="font-size:.95rem;margin-top:8px;color:var(--up)">+2.34%  ▲</div>
+      <div class="mono" style="font-size:.8rem;margin-top:8px;color:var(--faint)">0x7b1a…de69</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== COLOR ===================== -->
+<section id="color" class="wrap section" style="padding-top:0">
+  <span class="eyebrow reveal">{{ t.fnd_color }}</span>
+  <div class="grid cols-4 reveal d2" style="margin-top:22px">
+    <div class="swatch" style="background:linear-gradient(180deg,#FBD66B,#F3BA2F);color:#14160E">BNB Gold · #F3BA2F</div>
+    <div class="swatch" style="background:var(--up);color:#06120d">Profit · #34E5A4</div>
+    <div class="swatch" style="background:var(--down);color:#1a0808">Loss · #FF6B6B</div>
+    <div class="swatch" style="background:var(--info);color:#04101f">Info · #5AA9FF</div>
+    <div class="swatch" style="background:var(--bg)">Space · #06080F</div>
+    <div class="swatch" style="background:var(--surface)">Surface · #131A2A</div>
+    <div class="swatch" style="background:var(--line)">Line · #232C40</div>
+    <div class="swatch" style="background:var(--surface);color:var(--muted)">Muted · #93A0B8</div>
+  </div>
+</section>
+
+<!-- ===================== COMPONENTS ===================== -->
+<section id="components" class="wrap section" style="padding-top:0">
+  <span class="eyebrow reveal">{{ t.fnd_components }}</span>
+
+  <!-- Buttons + pills -->
+  <div class="grid cols-2 reveal d2" style="margin-top:22px">
+    <div class="card">
+      <span class="card__lbl">{{ t.fnd_buttons }}</span>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">
+        <button class="btn btn--gold">{{ t.connect }}</button>
+        <button class="btn btn--ghost">{{ t.console }}</button>
+        <button class="btn btn--danger">Panic</button>
+      </div>
+    </div>
+    <div class="card">
+      <span class="card__lbl">{{ t.fnd_pills }}</span>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+        <span class="pill pill--up"><span class="dot"></span>IN POSITION</span>
+        <span class="pill pill--gold">SCANNING</span>
+        <span class="pill pill--down">STOP-LOSS</span>
+        <span class="pill">HEARTBEAT</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live data tiles -->
+  <div style="margin-top:18px">
+    <span class="card__lbl reveal" style="display:block;margin-bottom:10px">{{ t.fnd_stats }}</span>
+    <div class="grid cols-4 reveal d2">
+      <div class="card card--glow stat"><span class="card__lbl">{{ t.s_equity }}</span><span class="v mono grad-gold" data-count="8.02" data-prefix="$">$0.00</span></div>
+      <div class="card stat"><span class="card__lbl">{{ t.s_pnl }}</span><span class="v mono" style="color:var(--up)">+2.34%</span></div>
+      <div class="card stat"><span class="card__lbl">{{ t.s_drawdown }}</span><span class="v mono">0.0%</span></div>
+      <div class="card stat"><span class="card__lbl">{{ t.s_position }}</span><span class="v">ADA</span></div>
+    </div>
+  </div>
+
+  <!-- Table + controls -->
+  <div class="grid cols-2" style="margin-top:18px;align-items:start">
+    <div class="card reveal">
+      <span class="card__lbl">{{ t.fnd_table }}</span>
+      <table class="tbl" style="margin-top:12px">
+        <tr><th>{{ t.th_token }}</th><th>{{ t.th_entry }}</th><th>{{ t.th_now }}</th><th>{{ t.th_pnl }}</th></tr>
+        <tr><td><b>ADA</b></td><td class="mono">$0.1674</td><td class="mono">$0.1713</td><td class="mono" style="color:var(--up)">+2.34%</td></tr>
+        <tr><td><b>ETH</b></td><td class="mono">$1689.6</td><td class="mono">$1701.2</td><td class="mono" style="color:var(--up)">+0.69%</td></tr>
+        <tr><td><b>FLOKI</b></td><td class="mono">$0.000025</td><td class="mono">$0.000024</td><td class="mono" style="color:var(--down)">-1.10%</td></tr>
+      </table>
+    </div>
+    <div class="card reveal d2">
+      <span class="card__lbl">{{ t.fnd_controls }}</span>
+      <div class="field" style="margin-top:16px">
+        <label>{{ t.lbl_focus }}</label>
+        <select class="select"><option>All liquid</option><option>ADA</option><option>ETH</option></select>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label>{{ t.lbl_stop }}</label>
+        <div class="seg"><button>2%</button><button class="on">4%</button><button>5%</button></div>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label>{{ t.lbl_target }}</label>
+        <div class="seg"><button>+5%</button><button class="on">+10%</button><button>+15%</button><button>∞</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

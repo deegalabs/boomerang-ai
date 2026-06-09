@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ big }} — Boomerang AI{% endblock %}
+{% block content %}
+<section class="wrap section split" style="min-height:64vh">
+  <div>
+    <span class="eyebrow reveal d1">{{ phase }}</span>
+    <h1 class="display reveal d2" style="margin:18px 0 16px">{{ big }}</h1>
+    <p class="lead reveal d3">{{ soon }}</p>
+    <a class="btn btn--ghost reveal d4" href="/" style="margin-top:26px">← {{ back }}</a>
+  </div>
+  <div class="reveal d3" style="display:grid;place-items:center;position:relative;min-height:280px">
+    <div class="orbit"></div>
+    <span style="font-size:120px;display:inline-flex">{% include "partials/mark.html" %}</span>
+  </div>
+</section>
+{% endblock %}

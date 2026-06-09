@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Boomerang AI{% endblock %}</title>
+  <meta name="description" content="{{ t.tagline }} — Boomerang AI.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+  <!-- Display: Bricolage Grotesque · Body: Hanken Grotesk · Mono: JetBrains Mono -->
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="icon" href="/static/img/favicon.svg">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <!-- ============ NAV ============ -->
+  <header class="nav">
+    <div class="wrap nav__in">
+      <a class="brand" href="/" aria-label="Boomerang AI">
+        {% include "partials/mark.html" %}
+        <span>Boomerang<b> AI</b></span>
+      </a>
+
+      <nav class="nav__links">
+        {% for path, label in nav %}
+          <a href="{{ path }}"{% if path == active %} class="active"{% endif %}>{{ label }}</a>
+        {% endfor %}
+      </nav>
+
+      <div class="nav__right">
+        <span class="lang">
+          <a href="?lang=en" class="{{ 'on' if lang == 'en' else '' }}">EN</a>
+          <a href="?lang=pt" class="{{ 'on' if lang == 'pt' else '' }}">PT</a>
+        </span>
+        <a class="btn btn--gold btn--sm" href="/console">
+          <span class="dot" style="color:#14160E"></span>{{ t.connect }}
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ PAGE ============ -->
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="foot">
+    <div class="wrap" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px;display:inline-flex">{% include "partials/mark.html" %}</span>
+        <span class="mono" style="font-size:.8rem;color:var(--muted)">{{ t.foot_note }}</span>
+      </div>
+      <div style="font-size:.8rem">{{ t.foot_rights }}</div>
+    </div>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -13,9 +13,10 @@ httpx>=0.27         # chamadas HTTP / x402
 # Interface (Process A)
 python-telegram-bot==21.*
 
-# Dashboard web (só-leitura)
+# Dashboard web (só-leitura) + site (landing/docs/console)
 starlette>=0.37
 uvicorn>=0.30
+jinja2>=3.1            # templating server-side (sem build)
 
 # Infra
 python-dotenv>=1.0
