@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}{{ t.console }} · Boomerang AI{% endblock %}
+{% block content %}
+<div class="wrap section" style="max-width:980px">
+
+{% if not authed %}
+  <!-- ============ PORTA DE LOGIN ============ -->
+  <div class="split" style="min-height:60vh;align-items:center">
+    <div>
+      <span class="eyebrow">{{ t.console }} · {{ "Demo" if lang=="pt" else "Demo" }}</span>
+      <h1 class="display" style="font-size:clamp(2rem,4.4vw,3.1rem);margin:14px 0 14px">
+        {{ "Experimente o painel de controle" if lang=="pt" else "Try the control panel" }}
+      </h1>
+      <p class="lead" style="font-size:1.05rem">
+        {{ "Conecte a sua carteira e ganhe um agente de demonstração só seu. Configure, opere e pause à vontade — tudo SIMULADO, sem dinheiro real e sem transação. Você só assina uma mensagem (sem gás) para entrar." if lang=="pt"
+           else "Connect your wallet and get your own demo agent. Configure, trade and pause freely — all SIMULATED, no real money and no transaction. You only sign a message (no gas) to enter." }}
+      </p>
+      <div style="margin-top:28px">
+        <button class="btn btn--gold" id="btnConnect">🦊 {{ t.connect }}</button>
+        <p class="mono" id="loginMsg" style="margin-top:14px;font-size:.82rem;color:var(--faint)"></p>
+      </div>
+    </div>
+    <div class="hero-stage"><div class="hero-glow"></div><div class="orbit"></div>
+      <span style="font-size:120px;display:inline-flex">{% include "partials/mark.html" %}</span>
+    </div>
+  </div>
+{% else %}
+  <!-- ============ CONSOLE (AUTENTICADO) ============ -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div><span class="eyebrow">{{ t.console }}</span>
+      <h1 class="display" style="font-size:clamp(1.8rem,3.6vw,2.6rem);margin-top:12px">{{ t.console }}</h1></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="pill pill--up"><span class="dot"></span><span class="mono">{{ owner_short }}</span></span>
+      <button class="btn btn--ghost btn--sm" id="btnLogout">{{ "Sair" if lang=="pt" else "Log out" }}</button>
+    </div>
+  </div>
+  <p id="cMsg" class="mono" style="font-size:.82rem;color:var(--gold);min-height:18px;margin-top:8px"></p>
+  <div class="callout callout--warn" style="margin-top:6px"><span class="ico">🧪</span><p>{{ "Modo demonstração: agente e saldo SIMULADOS (banca fictícia de $100). Nada aqui vai para a blockchain. A prova real do agente operando, com transações verificáveis no BscScan, está em" if lang=="pt" else "Demo mode: SIMULATED agent and balance ($100 fake bankroll). Nothing here goes to the blockchain. The real proof of the agent operating, with transactions verifiable on BscScan, is at" }} <a href="/live">/live</a>.</p></div>
+
+  <!-- Overview -->
+  <div class="grid cols-4" style="margin-top:14px">
+    <div class="card card--glow stat"><span class="card__lbl">{{ "Estado" if lang=="pt" else "State" }}</span><span class="v" id="oState" style="font-size:1.3rem">·</span></div>
+    <div class="card stat"><span class="card__lbl">{{ t.s_equity }}</span><span class="v mono grad-gold" id="oEquity">·</span></div>
+    <div class="card stat"><span class="card__lbl">{{ t.s_drawdown }}</span><span class="v mono" id="oDd">·</span></div>
+    <div class="card stat"><span class="card__lbl">{{ t.lv_positions }}</span><span class="v" id="oPos">·</span></div>
+  </div>
+
+  <div class="grid cols-2" style="margin-top:18px;align-items:start">
+    <!-- Configurar -->
+    <div class="card">
+      <span class="card__lbl">{{ "Configurar" if lang=="pt" else "Configure" }}</span>
+      <div id="acNow" class="mono" style="font-size:.8rem;color:var(--gold);margin-top:8px;min-height:16px">·</div>
+      <div class="field" style="margin-top:12px"><label>{{ t.lbl_focus }}</label>
+        <select class="select" id="cfgFocus">
+          <option value="ALL">{{ "Todas as líquidas" if lang=="pt" else "All liquid" }}</option>
+          {% for s in ["ETH","XRP","DOGE","ADA","LINK","LTC","AVAX","DOT","UNI","AAVE","ATOM","BCH","SHIB","FLOKI","TWT"] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select></div>
+      <div class="field" style="margin-top:12px"><label>{{ t.lbl_stop }}</label>
+        <div class="seg" id="cfgStop">{% for v in [2,4,5] %}<button data-v="{{ v }}"{% if v==4 %} class="on"{% endif %}>{{ v }}%</button>{% endfor %}</div></div>
+      <div class="field" style="margin-top:12px"><label>{{ t.lbl_target }}</label>
+        <div class="seg" id="cfgTp">{% for v in [5,10,15,0] %}<button data-v="{{ v }}"{% if v==10 %} class="on"{% endif %}>{{ "∞" if v==0 else "+"~v~"%" }}</button>{% endfor %}</div></div>
+      <button class="btn btn--gold btn--sm" id="btnSave" style="margin-top:18px">{{ "Salvar" if lang=="pt" else "Save" }}</button>
+    </div>
+
+    <!-- Controles -->
+    <div class="card">
+      <span class="card__lbl">{{ "Controles" if lang=="pt" else "Controls" }}</span>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+        <button class="btn btn--ghost" id="btnPause">⏸️ {{ "Pausar / Retomar" if lang=="pt" else "Pause / Resume" }}</button>
+        <button class="btn btn--ghost" id="btnWithdraw">🪃 {{ "Sacar tudo para minha carteira" if lang=="pt" else "Withdraw all to my wallet" }}</button>
+        <button class="btn btn--danger" id="btnPanic">🚨 {{ "Pânico (liquidar e travar)" if lang=="pt" else "Panic (liquidate and halt)" }}</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid cols-2" style="margin-top:18px;align-items:start">
+    <!-- Trade manual -->
+    <div class="card">
+      <span class="card__lbl">{{ "Trade manual" if lang=="pt" else "Manual trade" }}</span>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+        <select class="select" id="buySym" style="flex:1">
+          {% for s in ["ETH","ADA","FLOKI","DOGE","SHIB","XRP","LTC","LINK","AVAX","BCH","ATOM","DOT","UNI","AAVE","TWT"] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
+        <button class="btn btn--gold btn--sm" id="btnBuy">{{ "Comprar" if lang=="pt" else "Buy" }}</button>
+      </div>
+      <div id="posList" style="margin-top:14px"><span class="mut">{{ t.lv_none }}</span></div>
+    </div>
+
+    <!-- Carteira / depósito -->
+    <div class="card">
+      <span class="card__lbl">{{ t.lv_composition }}</span>
+      <div id="cComp" style="margin-top:12px"><span class="mut">·</span></div>
+      <div style="margin-top:14px;border-top:1px solid var(--line-soft);padding-top:12px">
+        <div class="card__lbl">{{ "Depositar (endereço do agente)" if lang=="pt" else "Deposit (agent address)" }}</div>
+        <div class="mono" id="cAddr" style="font-size:.78rem;color:var(--info);word-break:break-all;margin-top:6px">·</div>
+        <p class="mut" style="font-size:.8rem;margin-top:6px">{{ "Envie USDC e um pouco de BNB pela rede BNB Smart Chain (BEP-20)." if lang=="pt" else "Send USDC and a little BNB over the BNB Smart Chain (BEP-20) network." }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Atividade recente -->
+  <div class="card" style="margin-top:18px">
+    <span class="card__lbl">{{ "Atividade recente" if lang=="pt" else "Recent activity" }}</span>
+    <div id="cActivity" style="margin-top:12px"><span class="mut">{{ "Nenhuma ação ainda. Configure e faça uma compra para ver o que acontece." if lang=="pt" else "No actions yet. Configure and buy to see what happens." }}</span></div>
+    <p class="mut" style="font-size:.78rem;margin-top:12px;border-top:1px solid var(--line-soft);padding-top:10px">🧪 {{ "Cada ação é simulada, sem transação on-chain. No agente real, toda compra/venda gera um hash verificável no BscScan — veja em" if lang=="pt" else "Each action is simulated, with no on-chain transaction. In the real agent, every buy/sell produces a hash verifiable on BscScan — see it at" }} <a href="/live">/live</a>.</p>
+  </div>
+{% endif %}
+</div>
+
+<script>
+const LANG = "{{ lang }}";
+const T = {
+  signing: LANG=="pt"?"Assinando…":"Signing…", connecting: LANG=="pt"?"Conectando…":"Connecting…",
+  noWallet: LANG=="pt"?"Nenhuma carteira detectada. Instale a MetaMask ou a extensão da Trust Wallet.":"No wallet detected. Install MetaMask or the Trust Wallet extension.",
+  notOwner: LANG=="pt"?"Esta carteira não é a do dono. Conecte a carteira dona do agente.":"This wallet is not the owner. Connect the owner wallet.",
+  ok: LANG=="pt"?"Pronto!":"Done!", fail: LANG=="pt"?"Falhou":"Failed",
+  confirmPanic: LANG=="pt"?"PÂNICO: vai vender tudo e travar o agente. Confirmar?":"PANIC: will sell everything and halt the agent. Confirm?",
+  confirmWithdraw: LANG=="pt"?"Sacar tudo para a sua carteira pessoal e pausar. Confirmar?":"Withdraw all to your personal wallet and pause. Confirm?",
+};
+const msg = (el,txt,clr) => { const e=document.getElementById(el); if(e){e.textContent=txt; if(clr)e.style.color=clr;} };
+
+// ---- Login (porta) ----
+const btnConnect = document.getElementById("btnConnect");
+if (btnConnect) btnConnect.onclick = async () => {
+  if (!window.ethereum) { msg("loginMsg", T.noWallet, "var(--down)"); return; }
+  try {
+    msg("loginMsg", T.connecting, "var(--faint)");
+    const [addr] = await window.ethereum.request({ method: "eth_requestAccounts" });
+    const r = await (await fetch("/api/auth/nonce", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address:addr})})).json();
+    if (!r.message) { msg("loginMsg", T.fail, "var(--down)"); return; }
+    msg("loginMsg", T.signing, "var(--faint)");
+    const signature = await window.ethereum.request({ method:"personal_sign", params:[r.message, addr] });
+    const v = await (await fetch("/api/auth/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address:addr,message:r.message,signature})})).json();
+    if (v.ok) { location.reload(); } else { msg("loginMsg", T.notOwner, "var(--down)"); }
+  } catch (e) { msg("loginMsg", (e.message||T.fail), "var(--down)"); }
+};
+
+// ---- Console (autenticado) ----
+const btnLogout = document.getElementById("btnLogout");
+if (btnLogout) {
+  btnLogout.onclick = async () => { await fetch("/api/auth/logout",{method:"POST"}); location.reload(); };
+
+  const usd = v => v==null?"·":"$"+Number(v).toFixed(2);
+  const px = v => { v=Number(v); return isNaN(v)?"·":"$"+(v>=1?v.toFixed(4):v.toFixed(6)); };
+
+  async function refresh(){
+    const d = await (await fetch("/api/console/state")).json();
+    const s = d.state||{};
+    document.getElementById("oState").textContent = s.state||"·";
+    document.getElementById("oEquity").textContent = usd(s.equity_usd);
+    document.getElementById("oDd").textContent = (Number(s.drawdown_pct||0)).toFixed(1)+"%";
+    const pos = s.positions||[];
+    document.getElementById("oPos").textContent = pos.length;
+    document.getElementById("cAddr").textContent = s.agent_address||"·";
+    const h = s.holdings||[];
+    document.getElementById("cComp").innerHTML = h.length
+      ? h.map(x=>`<div style="display:flex;justify-content:space-between;padding:4px 0"><span><b>${x.symbol}</b></span><span class="mono mut">${usd(x.value_usd)} · ${(x.pct||0).toFixed(0)}%</span></div>`).join("")
+      : `<span class="mut">·</span>`;
+    document.getElementById("posList").innerHTML = pos.length
+      ? pos.map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line-soft)"><span><b>${p.symbol}</b> <span class="mut mono">${px(p.entry_price)}</span></span><button class="btn btn--danger btn--sm" data-sell="${p.symbol}">${LANG=="pt"?"Vender":"Sell"}</button></div>`).join("")
+      : `<span class="mut">${LANG=="pt"?"nenhuma posição":"no positions"}</span>`;
+    posList.querySelectorAll("[data-sell]").forEach(b=> b.onclick=()=>action("sell",{symbol:b.dataset.sell}));
+
+    // configuração ativa (você vê o que salvou)
+    const tpTxt = s.take_profit_pct ? "+"+s.take_profit_pct+"%" : "∞";
+    const acNow = document.getElementById("acNow");
+    if (acNow) acNow.textContent = (LANG=="pt"?"Ativo: foco ":"Active: focus ")+(s.token_focus||"·")+" · stop "+(s.stop_loss_pct||0)+"% · "+(LANG=="pt"?"alvo ":"target ")+tpTxt;
+
+    // botão pausar reflete o estado
+    const bp = document.getElementById("btnPause");
+    if (bp) bp.textContent = s.paused ? (LANG=="pt"?"▶️ Retomar":"▶️ Resume") : (LANG=="pt"?"⏸️ Pausar":"⏸️ Pause");
+
+    // atividade recente
+    const acts = [...(d.trades||[])].reverse().slice(0,12);
+    const aEl = document.getElementById("cActivity");
+    if (aEl) aEl.innerHTML = acts.length ? acts.map(x=>{
+      const tag = x.type=="open" ? `<span class="pill pill--up" style="font-size:10px">${LANG=="pt"?"COMPRA":"BUY"}</span>` : `<span class="pill" style="font-size:10px">${LANG=="pt"?"VENDA":"SELL"}</span>`;
+      const det = x.type=="open" ? usd(x.amount_usd) : (x.pnl_pct!=null?`<span class="${x.pnl_pct>=0?'pos':'neg'}">${x.pnl_pct>=0?'+':''}${Number(x.pnl_pct).toFixed(1)}%</span>`:"");
+      return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-soft)">${tag}<b>${x.symbol}</b><span class="mono" style="margin-left:auto">${det}</span><span class="mut" style="font-size:10px;font-family:var(--font-mono)">${LANG=="pt"?"sim · sem tx":"sim · no tx"}</span></div>`;
+    }).join("") : `<span class="mut">${LANG=="pt"?"nenhuma ação ainda":"no actions yet"}</span>`;
+
+    // pré-preenche o formulário com a config atual (uma vez)
+    if (!formInit) {
+      formInit = true;
+      const f=document.getElementById("cfgFocus"); if(f&&s.token_focus) f.value=s.token_focus;
+      const seg=(id,val)=>document.querySelectorAll("#"+id+" button").forEach(b=>b.classList.toggle("on", Number(b.dataset.v)===Number(val)));
+      seg("cfgStop", s.stop_loss_pct); seg("cfgTp", s.take_profit_pct);
+    }
+  }
+  let formInit = false;
+  const posList = document.getElementById("posList");
+
+  // segmented controls
+  document.querySelectorAll(".seg").forEach(seg=>seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    seg.querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
+  }));
+  const segVal = id => { const el=document.querySelector(`#${id} button.on`); return el?el.dataset.v:null; };
+
+  async function action(name, body, confirmMsg){
+    if (confirmMsg && !confirm(confirmMsg)) return;
+    msg("cMsg", "…");
+    try {
+      const r = await (await fetch("/api/console/"+name,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})).json();
+      msg("cMsg", r.detail || (r.ok?T.ok:T.fail), r.ok?"var(--up)":"var(--down)");
+      setTimeout(refresh, 1500);
+    } catch(e){ msg("cMsg", T.fail, "var(--down)"); }
+  }
+
+  document.getElementById("btnSave").onclick = () => action("configure", {
+    token_focus: document.getElementById("cfgFocus").value, stop_loss_pct: Number(segVal("cfgStop")), take_profit_pct: Number(segVal("cfgTp")),
+  });
+  document.getElementById("btnPause").onclick = () => action("pause", {});
+  document.getElementById("btnWithdraw").onclick = () => action("withdraw", {}, T.confirmWithdraw);
+  document.getElementById("btnPanic").onclick = () => action("panic", {}, T.confirmPanic);
+  document.getElementById("btnBuy").onclick = () => action("buy", {symbol: document.getElementById("buySym").value});
+
+  refresh(); setInterval(refresh, 6000);
+}
+</script>
+{% endblock %}
