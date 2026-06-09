@@ -57,7 +57,11 @@ def _resp(request, template, active, extra=None):  # noqa: ANN001
 
 
 async def home(request):  # noqa: ANN001
-    return _resp(request, "foundation.html", "/")
+    return _resp(request, "landing.html", "/")
+
+
+async def style(request):  # noqa: ANN001
+    return _resp(request, "foundation.html", "/style")
 
 
 def make_soon(path):  # noqa: ANN001
@@ -66,7 +70,7 @@ def make_soon(path):  # noqa: ANN001
     return handler
 
 
-routes = [Route("/", home)]
+routes = [Route("/", home), Route("/style", style)]
 for p in SOON:
     routes.append(Route(p, make_soon(p)))
 routes.append(Mount("/static", StaticFiles(directory=str(WEB / "static")), name="static"))

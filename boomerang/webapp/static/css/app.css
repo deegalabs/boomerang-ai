@@ -123,7 +123,7 @@ body::after { /* fine grain overlay */
 
 /* ----- Typography -------------------------------------------------------- */
 h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 700; line-height: 1.08; letter-spacing: -.015em; color: #fff; }
-.display { font-size: clamp(2.9rem, 7.6vw, 6rem); font-weight: 800; line-height: 1.02; letter-spacing: -.02em; }
+.display { font-size: clamp(2.7rem, 6.4vw, 5.4rem); font-weight: 800; line-height: 1.03; letter-spacing: -.02em; }
 h2 { font-size: clamp(2rem, 3.8vw, 3.1rem); line-height: 1.06; }
 h3 { font-size: 1.4rem; letter-spacing: -.01em; }
 .lead { font-size: clamp(1.08rem, 1.7vw, 1.32rem); color: var(--muted); max-width: 60ch; }
@@ -270,6 +270,9 @@ h3 { font-size: 1.4rem; letter-spacing: -.01em; }
 
 /* ----- Hero kinetic boomerang ------------------------------------------- */
 .split { display: grid; grid-template-columns: 1.08fr .92fr; gap: 48px; align-items: center; }
+/* Hero: container mais largo + coluna de texto maior (título respira em menos linhas) */
+.hero { max-width: 1300px; grid-template-columns: 1.42fr .88fr; gap: 40px; }
+.hero .lead { max-width: 52ch; }
 .hero-stage { position: relative; display: grid; place-items: center; min-height: 400px; }
 .hero-glow {
   position: absolute; width: 400px; height: 400px; border-radius: 50%;
@@ -302,6 +305,37 @@ h3 { font-size: 1.4rem; letter-spacing: -.01em; }
   .hero-card { position: static; left: 0; margin-top: 18px; width: 100%; }
   .hero-stats { gap: 22px; flex-wrap: wrap; }
 }
+
+/* ----- Landing sections -------------------------------------------------- */
+.sec-head { max-width: 760px; }
+.sec-head h2 { margin: 14px 0 16px; }
+.narrate .lead { font-size: clamp(1.15rem, 2.1vw, 1.55rem); color: var(--text); line-height: 1.45; max-width: 24ch; }
+.narrate .body { color: var(--muted); max-width: 56ch; font-size: 1.06rem; }
+.center { text-align: center; }
+.center .eyebrow { justify-content: center; }
+.center .lead, .center .body { margin-inline: auto; }
+
+.shield { display: flex; flex-direction: column; gap: 10px; padding: 28px; }
+.shield .num { font-family: var(--font-display); font-weight: 800; font-size: 2.4rem; line-height: 1; }
+.shield .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; color: var(--gold); text-transform: uppercase; }
+.shield .body { color: var(--muted); margin-top: 2px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+
+.spon { padding: 32px 28px; position: relative; overflow: hidden; text-align: center; transition: transform .22s var(--ease), border-color .22s; }
+.spon::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--accent, var(--gold)); }
+.spon:hover { transform: translateY(-5px); border-color: var(--accent, var(--gold)); }
+.spon-logo { width: 44px; height: 44px; display: block; margin: 0 auto 20px; filter: drop-shadow(0 6px 18px color-mix(in srgb, var(--accent, #ffffff) 45%, transparent)); }
+.spon .body { margin-inline: auto; max-width: 30ch; }
+.spon .name { font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; }
+.spon .role { color: var(--accent, var(--gold)); font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; margin-top: 10px; display: block; }
+.spon .body { color: var(--muted); margin-top: 8px; }
+
+.proof-row { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 22px; }
+.proof-row .kv { flex: 1 1 240px; }
+.proof-row .k { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.proof-row .val { font-family: var(--font-mono); font-size: .88rem; color: var(--text); margin-top: 5px; word-break: break-all; }
+.proof-row .val a { color: var(--info); }
 
 /* ----- Footer ------------------------------------------------------------ */
 .foot { border-top: 1px solid var(--line-soft); padding-block: 40px; margin-top: 40px; color: var(--faint); font-size: .85rem; }
