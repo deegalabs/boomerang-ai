@@ -56,24 +56,37 @@ def pause(addr: str) -> tuple[bool, str]:
     return True, ("Agente pausado (simulação)." if a["paused"] else "Agente retomado (simulação).")
 
 
-def buy(addr: str, sym: str) -> tuple[bool, str]:
+def buy(addr: str, sym: str, amount: float = TRADE_SIZE) -> tuple[bool, str]:
     a = _agent(addr)
     sym = (sym or "").upper()
     if sym not in PRICES:
         return False, "Moeda inválida."
     if a["paused"]:
         return False, "Agente pausado."
-    if a["cash"] < TRADE_SIZE:
-        return False, "Saldo simulado insuficiente."
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        amount = TRADE_SIZE
+    if amount < 1:
+        return False, "Valor mínimo de compra: $1."
+    if a["cash"] < amount:
+        return False, f"Saldo simulado insuficiente (você tem ${a['cash']:.2f})."
     price = _price(sym)
-    a["cash"] -= TRADE_SIZE
-    a["positions"].append({
-        "symbol": sym, "entry_price": price, "amount_usd": TRADE_SIZE,
-        "qty": TRADE_SIZE / price, "stop_loss_price": price * (1 - a["config"]["stop"] / 100.0),
-        "opened_at": _now(),
-    })
-    a["trades"].append({"type": "open", "symbol": sym, "amount_usd": TRADE_SIZE, "ts": _now()})
-    return True, f"Compra simulada de {sym}."
+    a["cash"] -= amount
+    qty = amount / price
+    pos = next((p for p in a["positions"] if p["symbol"] == sym), None)
+    if pos:  # já tem essa moeda: soma à posição (preço médio)
+        pos["amount_usd"] += amount
+        pos["qty"] += qty
+        pos["entry_price"] = pos["amount_usd"] / pos["qty"]
+        pos["stop_loss_price"] = pos["entry_price"] * (1 - a["config"]["stop"] / 100.0)
+    else:
+        a["positions"].append({
+            "symbol": sym, "entry_price": price, "amount_usd": amount, "qty": qty,
+            "stop_loss_price": price * (1 - a["config"]["stop"] / 100.0), "opened_at": _now(),
+        })
+    a["trades"].append({"type": "open", "symbol": sym, "amount_usd": amount, "ts": _now()})
+    return True, f"Compra simulada de ${amount:.0f} em {sym}."
 
 
 def sell(addr: str, sym: str) -> tuple[bool, str]:
@@ -118,7 +131,8 @@ def snapshot(addr: str) -> dict:
         cur = _price(p["symbol"])
         val = p["qty"] * cur
         pos_val += val
-        positions.append({**p, "current_price": cur})
+        pnl = (cur - p["entry_price"]) / p["entry_price"] * 100.0 if p["entry_price"] else 0.0
+        positions.append({**p, "current_price": cur, "value_usd": val, "pnl_pct": pnl})
         holdings.append({"symbol": p["symbol"], "kind": "token", "value_usd": val})
     equity = a["cash"] + pos_val
     holdings.insert(0, {"symbol": "USDC", "kind": "stable", "value_usd": a["cash"]})

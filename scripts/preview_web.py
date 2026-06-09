@@ -155,7 +155,7 @@ async def console_action(request):  # noqa: ANN001 — ações no agente SIMULAD
         ok, msg = demo.configure(addr, body.get("token_focus", "ALL"),
                                  body.get("stop_loss_pct", 4), body.get("take_profit_pct", 10))
     elif name == "buy":
-        ok, msg = demo.buy(addr, body.get("symbol", ""))
+        ok, msg = demo.buy(addr, body.get("symbol", ""), body.get("amount", 10))
     elif name == "sell":
         ok, msg = demo.sell(addr, body.get("symbol", ""))
     elif name == "pause":
