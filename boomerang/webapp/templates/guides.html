@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}{{ guides_title }} · Boomerang AI{% endblock %}
+{% block content %}
+<div class="wrap section" style="max-width:900px">
+  {% include "guides/content_" + lang + ".html" %}
+</div>
+{% endblock %}

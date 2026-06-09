@@ -51,6 +51,27 @@
   stage.addEventListener("mouseleave", () => { wing.style.transform = ""; });
 })();
 
+// Scrollspy do índice da documentação (destaca a seção visível).
+(function () {
+  const links = document.querySelectorAll(".docs-side a");
+  if (!links.length) return;
+  const byId = {};
+  links.forEach((a) => { byId[a.getAttribute("href").slice(1)] = a; });
+  const sections = [...links]
+    .map((a) => document.querySelector(a.getAttribute("href")))
+    .filter(Boolean);
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        links.forEach((l) => l.classList.remove("active"));
+        const a = byId[e.target.id];
+        if (a) a.classList.add("active");
+      }
+    });
+  }, { rootMargin: "-15% 0px -75% 0px" });
+  sections.forEach((s) => obs.observe(s));
+})();
+
 // Stub: conexão de carteira (Sign-In with Ethereum) — implementado na Fase 4.
 window.boomerangConnect = async function () {
   alert("Conexão de carteira (Sign-In with Ethereum) chega na Fase 4 — Console privado.");

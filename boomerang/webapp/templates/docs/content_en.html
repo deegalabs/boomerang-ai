@@ -1,0 +1,196 @@
+<!-- ============ WHAT IT IS ============ -->
+<section id="overview">
+  <span class="kicker">Documentation</span>
+  <h2>What Boomerang AI is</h2>
+  <p>Boomerang AI is an <strong>autonomous trading agent</strong>. Instead of you watching charts all day, it does that for you: it observes the market, decides with artificial intelligence, and executes trades on its own on the <strong>BNB Chain</strong> (Binance's network), following rules you set.</p>
+  <p>The name "boomerang" comes from the core idea: capital is <strong>thrown</strong> into a trade and <strong>always returns to your wallet</strong> with the result. You are always in control and the money never leaves your reach.</p>
+  <div class="callout callout--info"><span class="ico">💡</span><p>In one sentence: it turns <strong>spikes of market attention</strong> into disciplined trades, automatically, around the clock.</p></div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section id="how">
+  <span class="kicker">Concept</span>
+  <h2>How it works</h2>
+  <p>When a coin goes viral, people rush first to sites like <strong>CoinMarketCap</strong> to research it. That interest shows up there before the money actually reaches the chain. There is a small <strong>window of opportunity</strong> in that gap, and that is where the agent acts.</p>
+  <p>Every decision passes through <strong>three checks in sequence</strong> (we call them "the three shields"). If any one fails, the trade does not happen.</p>
+
+  <h3>1. The analytical shield (the eyes)</h3>
+  <p>The agent reads attention and momentum signals on CoinMarketCap. An AI weighs those numbers and only approves a buy if confidence clears a threshold you adjust. Never on impulse.</p>
+
+  <h3>2. The on-chain shield (the reality check)</h3>
+  <p>Before spending anything, the agent simulates the trade on the chain itself: it checks whether there is <strong>real liquidity</strong> to buy and, above all, to <strong>sell later</strong>. It rejects coins with hidden taxes or abnormal prices. The golden rule: <strong>if it cannot exit cleanly, it does not enter</strong>.</p>
+
+  <h3>3. The execution shield (the hands and the vault)</h3>
+  <p>Once approved, the agent signs and sends the transaction using the <strong>Trust Wallet Agent Kit</strong>. Signing happens locally, on your machine: the key that moves the money <strong>never leaves it</strong>. This is called self-custody.</p>
+
+  <div class="callout callout--ok"><span class="ico">🪃</span><p>The cycle in short: <strong>signal, checks, trade, and the capital returns to you</strong>. Like a boomerang.</p></div>
+</section>
+
+<!-- ============ SECURITY ============ -->
+<section id="security">
+  <span class="kicker">Trust</span>
+  <h2>Security and privacy</h2>
+  <p>The money is yours, the rules are yours, and the key is yours. These are the principles:</p>
+  <ul>
+    <li><strong>Self-custody.</strong> The private key (the "master password" that moves funds) is stored locally and never appears in the browser, the site, or the code.</li>
+    <li><strong>Isolation.</strong> The part that "thinks" (reads the market) has no access to the key; the part that "holds" the money is not exposed to the internet.</li>
+    <li><strong>Manipulation-proof.</strong> The AI only receives <strong>structured numbers</strong>, never loose text someone could use to trick it.</li>
+    <li><strong>Owner lock.</strong> Only you command the agent, confirmed by your wallet signature.</li>
+    <li><strong>Withdrawal lock.</strong> Funds can only be sent back to <strong>your</strong> personal wallet, never to an unknown address.</li>
+  </ul>
+
+  <h3>And when it becomes a product, with many users?</h3>
+  <p>Today this is a prototype with a single wallet (the demo one). In a real product with many users and larger amounts, the planned architecture is <strong>non-custodial</strong>: each user keeps ownership of their own money, the agent only gets <strong>permission to trade</strong> (never to withdraw elsewhere), and each person sees <strong>only their own wallet</strong>, protected by wallet login. There will never be a model where the operator holds everyone's keys.</p>
+  <div class="callout callout--warn"><span class="ico">⚠️</span><p>A wallet address is public by nature (anyone can see it on the chain) and is not a risk. What must never leak is the <strong>private key / recovery phrase</strong>. Keep it offline and never type it into websites.</p></div>
+</section>
+
+<!-- ============ INSTALLATION ============ -->
+<section id="install">
+  <span class="kicker">Hands on</span>
+  <h2>Installation</h2>
+  <p>The steps below take you from zero to a ready-to-run agent. You do not need to be a programmer: just follow them in order.</p>
+
+  <div class="step"><div class="n">1</div><div class="st-body">
+    <p><strong>Install the prerequisites.</strong> Download from each official site and install with default options:</p>
+    <ul>
+      <li><strong>Python</strong> 3.12 or newer, at <a href="https://python.org/downloads" target="_blank" rel="noopener">python.org/downloads</a>. The agent's engine. <em>On Windows, tick the "Add Python to PATH" box during install</em> (easy to forget, and it causes headaches later).</li>
+      <li><strong>Node.js</strong> LTS version, at <a href="https://nodejs.org" target="_blank" rel="noopener">nodejs.org</a>. Required for Trust Wallet.</li>
+      <li><strong>Git</strong>, at <a href="https://git-scm.com" target="_blank" rel="noopener">git-scm.com</a>. Used to download the project (or grab the ZIP, in step 2).</li>
+    </ul>
+    <p>After installing, open a <strong>new terminal</strong> (called "PowerShell" on Windows, "Terminal" on Mac) and check everything responds:</p>
+    <div class="codeblock"><code>python --version
+node --version</code></div>
+    <div class="callout callout--info"><span class="ico">💡</span><p>Always open a <strong>new</strong> terminal after installing something. Otherwise it may not "see" the program you just installed.</p></div>
+  </div></div>
+
+  <div class="step"><div class="n">2</div><div class="st-body">
+    <p><strong>Get the project</strong> and enter the folder:</p>
+    <div class="codeblock"><code>git clone https://github.com/deegalabs/boomerang-ai
+cd boomerang-ai</code></div>
+    <p>No Git? On the project's GitHub page, click <strong>Code</strong> then <strong>Download ZIP</strong>, extract it, and open the folder in the terminal.</p>
+  </div></div>
+
+  <div class="step"><div class="n">3</div><div class="st-body">
+    <p><strong>Install the dependencies</strong> in an isolated environment (so nothing messes with the rest of your computer):</p>
+    <div class="codeblock"><code>python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# macOS / Linux:
+source .venv/bin/activate
+
+pip install -r requirements.txt</code></div>
+  </div></div>
+
+  <div class="step"><div class="n">4</div><div class="st-body">
+    <p><strong>Get the access keys.</strong> The agent talks to four services. Create an account in each and save the keys (they are free to start):</p>
+    <ul>
+      <li><strong>Telegram.</strong> Message <code>@BotFather</code>, use <code>/newbot</code> and save the bot <em>token</em>. Also get your ID from <code>@userinfobot</code> (this is the lock that lets only you command it).</li>
+      <li><strong>Claude (Anthropic).</strong> At <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>, create an API key. It is the agent's "brain".</li>
+      <li><strong>CoinMarketCap.</strong> At <a href="https://coinmarketcap.com/api" target="_blank" rel="noopener">coinmarketcap.com/api</a>, get your API key. The "eyes".</li>
+      <li><strong>Trust Wallet (TWAK).</strong> At <a href="https://portal.trustwallet.com" target="_blank" rel="noopener">portal.trustwallet.com</a>, create an app and copy the <em>Access ID</em> and <em>HMAC Secret</em> (the secret is shown only once). The "hands".</li>
+    </ul>
+    <div class="callout callout--warn"><span class="ico">🔒</span><p>Never share these keys or put them in screenshots. They go only in your <code>.env</code> file (explained next), which is never uploaded anywhere.</p></div>
+  </div></div>
+
+  <div class="step"><div class="n">5</div><div class="st-body">
+    <p><strong>Install the Trust Wallet tool (TWAK).</strong> With Node.js already installed, install the TWAK CLI following the instructions at <a href="https://portal.trustwallet.com" target="_blank" rel="noopener">portal.trustwallet.com</a>. To confirm it worked, run:</p>
+    <div class="codeblock"><code>twak --version</code></div>
+    <p>If a version number shows up, you are ready to create the wallet.</p>
+  </div></div>
+</section>
+
+<!-- ============ WALLET ============ -->
+<section id="wallet">
+  <span class="kicker">The heart</span>
+  <h2>The agent wallet</h2>
+  <p>The agent needs its own wallet on the BNB Chain, with a little money to trade. You create this wallet in seconds and keep full control of it.</p>
+
+  <div class="step"><div class="n">1</div><div class="st-body">
+    <p><strong>Create the wallet</strong> (choose a strong password and keep it):</p>
+    <div class="codeblock"><code>twak wallet create --password "YOUR_STRONG_PASSWORD"</code></div>
+    <p>Use <strong>exactly the same password</strong> in every command below and in the <code>.env</code> file. If they do not match, the agent cannot open the wallet.</p>
+    <div class="callout callout--warn"><span class="ico">📝</span><p>Write down the <strong>recovery phrase (seed)</strong> shown and keep it <strong>offline</strong>, somewhere safe. With it you can always recover access, even if you lose the computer. Never type it into websites.</p></div>
+  </div></div>
+
+  <div class="step"><div class="n">2</div><div class="st-body">
+    <p><strong>See the address</strong> of the agent wallet on the BNB Chain:</p>
+    <div class="codeblock"><code>twak wallet address --chain bsc</code></div>
+  </div></div>
+
+  <div class="step"><div class="n">3</div><div class="st-body">
+    <p><strong>Add a little money.</strong> From your personal Trust Wallet app (or any wallet), send to the address above, over the <strong>BNB Smart Chain (BEP-20)</strong> network:</p>
+    <ul>
+      <li>A <strong>small test bankroll</strong> in <strong>USDC</strong> (suggestion: 10 to 20 dollars to start).</li>
+      <li>A little <strong>BNB</strong> to pay network fees (around 2 dollars is plenty; each trade costs cents).</li>
+    </ul>
+    <div class="callout callout--warn"><span class="ico">⚠️</span><p><strong>Double-check</strong> two things before sending: that the <strong>network is BNB Smart Chain (BEP-20)</strong> and that the <strong>address is correct</strong>. Sending on the wrong network or to the wrong address can make you <strong>lose the money</strong>, with no way back. That is why you start small.</p></div>
+  </div></div>
+
+  <div class="step"><div class="n">4</div><div class="st-body">
+    <p><strong>Check the balance</strong> to make sure it arrived:</p>
+    <div class="codeblock"><code>twak wallet portfolio --chains bsc --password "YOUR_STRONG_PASSWORD"</code></div>
+  </div></div>
+
+  <div class="callout callout--ok"><span class="ico">✅</span><p>Done. You keep full control: by importing the recovery phrase into the Trust Wallet app, you can withdraw manually at any time.</p></div>
+</section>
+
+<!-- ============ CONFIGURE & RUN ============ -->
+<section id="configure">
+  <span class="kicker">Almost there</span>
+  <h2>Configure and run</h2>
+
+  <div class="step"><div class="n">1</div><div class="st-body">
+    <p><strong>Set up the config file.</strong> Copy the template and fill it with your keys:</p>
+    <div class="codeblock"><code># Windows:
+copy .env.example .env
+# macOS / Linux:
+cp .env.example .env</code></div>
+    <p>Open <code>.env</code> with a plain text editor (Notepad on Windows works fine) and fill each line in the format <code>NAME=value</code>: the wallet password, the Telegram, Claude, CoinMarketCap and Trust Wallet keys, and the address of <strong>your personal wallet</strong> (where withdrawals return). Paste each value right after the <code>=</code>, with no spaces or quotes.</p>
+  </div></div>
+
+  <div class="step"><div class="n">2</div><div class="st-body">
+    <p><strong>Start the agent:</strong></p>
+    <div class="codeblock"><code>python run_agent.py</code></div>
+    <p>It starts up, connects to Telegram and is ready. (To just test without real money, use <code>python run_agent.py --paper</code>, which simulates trades.)</p>
+  </div></div>
+
+  <div class="step"><div class="n">3</div><div class="st-body">
+    <p><strong>Configure via Telegram.</strong> In your bot, send <code>/start</code> and use the three-step wizard:</p>
+    <ul>
+      <li><strong>Focus token.</strong> Which coin (or all liquid ones) the agent should focus on.</li>
+      <li><strong>Stop-loss.</strong> How much you accept losing per trade before selling (2%, 4% or 5%).</li>
+      <li><strong>Take-profit.</strong> When to realize the gain (+5%, +10%, +15% or "let it run").</li>
+    </ul>
+    <p>Confirm with <strong>Activate</strong> and that is it: the agent starts trading and notifies you on every action.</p>
+  </div></div>
+
+  <div class="callout callout--info"><span class="ico">📊</span><p>At any time, send <code>/status</code> to see equity, positions and live profit, or <code>/dashboard</code> to open the visual panel. In an emergency, <code>/panic</code> liquidates everything and halts the agent.</p></div>
+</section>
+
+<!-- ============ RISK ============ -->
+<section id="risk">
+  <span class="kicker">Discipline</span>
+  <h2>Risk management</h2>
+  <p>The agent is built to <strong>protect capital</strong>. The safeguards work in layers, all automatic:</p>
+  <ul>
+    <li><strong>Per-trade stop-loss.</strong> Cuts a small loss before it grows.</li>
+    <li><strong>Trailing stop.</strong> When a trade rises, it protects part of the gain already made.</li>
+    <li><strong>Take-profit.</strong> Realizes the gain when it hits the target you set.</li>
+    <li><strong>Global circuit breaker.</strong> If the whole account loses beyond a limit, it sells everything and stops, avoiding a large loss.</li>
+  </ul>
+  <p>The philosophy is simple: <strong>small positions, contained losses, survival first</strong>.</p>
+  <div class="callout callout--warn"><span class="ico">⚠️</span><p>Trading crypto involves risk. No tool guarantees profit. Only use what you are willing to risk. This is not financial advice.</p></div>
+</section>
+
+<!-- ============ ROADMAP ============ -->
+<section id="roadmap">
+  <span class="kicker">The future</span>
+  <h2>Roadmap</h2>
+  <ul>
+    <li><strong>Non-custodial multi-user.</strong> Each person with their own wallet and private panel, keeping ownership of their funds.</li>
+    <li><strong>Automatic boomerang return.</strong> On hitting the target, return the capital to the personal wallet and pause ("goal met, rest" mode).</li>
+    <li><strong>More coins and more networks.</strong> Expand the universe as liquidity allows.</li>
+    <li><strong>Public proof panel.</strong> Real-time tracking, verifiable on-chain by anyone.</li>
+  </ul>
+  <p>This project was built for the <strong>BNB Hack (Track 1)</strong>, bringing together CoinMarketCap, Trust Wallet and BNB Chain.</p>
+</section>

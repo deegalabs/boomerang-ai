@@ -1,0 +1,196 @@
+<!-- ============ O QUE É ============ -->
+<section id="overview">
+  <span class="kicker">Documentação</span>
+  <h2>O que é o Boomerang AI</h2>
+  <p>O Boomerang AI é um <strong>agente de trading autônomo</strong>. Em vez de você ficar olhando gráficos o dia todo, ele faz isso por você: observa o mercado, decide com inteligência artificial e executa as operações sozinho na <strong>BNB Chain</strong> (a rede da Binance), seguindo regras que você define.</p>
+  <p>O nome "boomerang" vem da ideia central: o capital é <strong>lançado</strong> numa operação e <strong>sempre volta para a sua carteira</strong>, com o resultado da operação. Você está sempre no controle e o dinheiro nunca sai do seu alcance.</p>
+  <div class="callout callout--info"><span class="ico">💡</span><p>Em uma frase: ele transforma <strong>picos de atenção do mercado</strong> em operações disciplinadas, automaticamente, 24 horas por dia.</p></div>
+</section>
+
+<!-- ============ COMO FUNCIONA ============ -->
+<section id="how">
+  <span class="kicker">Conceito</span>
+  <h2>Como funciona</h2>
+  <p>Quando uma moeda "viraliza", as pessoas correm primeiro para sites como a <strong>CoinMarketCap</strong> para pesquisar. Esse interesse aparece ali antes do dinheiro chegar de fato à blockchain. Existe uma pequena <strong>janela de oportunidade</strong> nesse intervalo, e é nela que o agente atua.</p>
+  <p>Toda decisão passa por <strong>três verificações em sequência</strong> (chamamos de "os três escudos"). Se qualquer uma reprovar, a operação não acontece.</p>
+
+  <h3>1. O escudo analítico (os olhos)</h3>
+  <p>O agente lê os sinais de atenção e de força (momentum) na CoinMarketCap. Uma inteligência artificial avalia esses números e só aprova uma compra se a confiança passar de um limite que você ajusta. Nunca por impulso.</p>
+
+  <h3>2. O escudo on-chain (a checagem de realidade)</h3>
+  <p>Antes de gastar qualquer valor, o agente simula a operação na própria blockchain: confere se existe <strong>liquidez de verdade</strong> para comprar e, principalmente, para <strong>vender depois</strong>. Ele rejeita moedas com taxas escondidas ou preços fora do normal. A regra de ouro: <strong>se não dá para sair limpo, não entra</strong>.</p>
+
+  <h3>3. O escudo de execução (as mãos e o cofre)</h3>
+  <p>Aprovado, o agente assina e envia a transação usando o <strong>Trust Wallet Agent Kit</strong>. A assinatura acontece localmente, na sua máquina: a chave que move o dinheiro <strong>nunca sai dali</strong>. Isso se chama autocustódia.</p>
+
+  <div class="callout callout--ok"><span class="ico">🪃</span><p>Resumo do ciclo: <strong>sinal, checagem, operação, e o capital volta para você</strong>. Como um boomerang.</p></div>
+</section>
+
+<!-- ============ SEGURANÇA ============ -->
+<section id="security">
+  <span class="kicker">Confiança</span>
+  <h2>Segurança e privacidade</h2>
+  <p>O dinheiro é seu, as regras são suas, e a chave é sua. Esses são os princípios:</p>
+  <ul>
+    <li><strong>Autocustódia.</strong> A chave privada (a "senha mestra" que move os fundos) fica guardada localmente e nunca aparece no navegador, no site ou no código.</li>
+    <li><strong>Isolamento.</strong> A parte que "pensa" (lê o mercado) não tem acesso à chave; a parte que "guarda" o dinheiro não fica exposta à internet.</li>
+    <li><strong>Proteção contra manipulação.</strong> A inteligência artificial só recebe <strong>números organizados</strong>, nunca texto solto que alguém poderia usar para enganá-la.</li>
+    <li><strong>Trava de dono.</strong> Só você comanda o agente, confirmado pela assinatura da sua carteira.</li>
+    <li><strong>Saque travado.</strong> O resgate dos fundos só vai para a <strong>sua</strong> carteira pessoal, nunca para um endereço desconhecido.</li>
+  </ul>
+
+  <h3>E quando virar produto, com vários usuários?</h3>
+  <p>Hoje isto é um protótipo com uma única carteira (a de demonstração). Em um produto real com muitos usuários e valores maiores, a arquitetura prevista é <strong>não-custodial</strong>: cada usuário mantém a posse do próprio dinheiro, o agente recebe apenas <strong>permissão para operar</strong> (nunca para sacar para fora), e cada pessoa vê <strong>somente a própria carteira</strong>, protegida por login com a carteira. Nunca existirá um modelo em que o operador guarda a chave de todos.</p>
+  <div class="callout callout--warn"><span class="ico">⚠️</span><p>O endereço de uma carteira é público por natureza (qualquer um vê na blockchain) e não representa risco. O que jamais pode vazar é a <strong>chave privada / frase de recuperação</strong>. Guarde-a offline e nunca a digite em sites.</p></div>
+</section>
+
+<!-- ============ INSTALAÇÃO ============ -->
+<section id="install">
+  <span class="kicker">Mão na massa</span>
+  <h2>Instalação</h2>
+  <p>O passo a passo abaixo leva você do zero até o agente pronto para rodar. Não precisa ser programador: é só seguir na ordem.</p>
+
+  <div class="step"><div class="n">1</div><div class="st-body">
+    <p><strong>Instale os pré-requisitos.</strong> Baixe de cada site oficial e instale com as opções padrão:</p>
+    <ul>
+      <li><strong>Python</strong> 3.12 ou mais nova, em <a href="https://python.org/downloads" target="_blank" rel="noopener">python.org/downloads</a>. É o motor do agente. <em>No Windows, marque a caixinha "Add Python to PATH" durante a instalação</em> (é fácil de esquecer e dá dor de cabeça depois).</li>
+      <li><strong>Node.js</strong> versão LTS, em <a href="https://nodejs.org" target="_blank" rel="noopener">nodejs.org</a>. Necessário para o Trust Wallet.</li>
+      <li><strong>Git</strong>, em <a href="https://git-scm.com" target="_blank" rel="noopener">git-scm.com</a>. Serve para baixar o projeto (ou baixe o ZIP, no passo 2).</li>
+    </ul>
+    <p>Depois de instalar, abra um <strong>terminal novo</strong> (no Windows chama "PowerShell"; no Mac, "Terminal") e confira que tudo respondeu:</p>
+    <div class="codeblock"><code>python --version
+node --version</code></div>
+    <div class="callout callout--info"><span class="ico">💡</span><p>Abra sempre um terminal <strong>novo</strong> depois de instalar algo. Senão ele pode não "enxergar" o programa recém-instalado.</p></div>
+  </div></div>
+
+  <div class="step"><div class="n">2</div><div class="st-body">
+    <p><strong>Baixe o projeto</strong> e entre na pasta:</p>
+    <div class="codeblock"><code>git clone https://github.com/deegalabs/boomerang-ai
+cd boomerang-ai</code></div>
+    <p>Não tem Git? Na página do projeto no GitHub, clique em <strong>Code</strong> e depois <strong>Download ZIP</strong>, extraia, e abra a pasta no terminal.</p>
+  </div></div>
+
+  <div class="step"><div class="n">3</div><div class="st-body">
+    <p><strong>Instale as dependências</strong> em um ambiente isolado (assim nada bagunça o resto do seu computador):</p>
+    <div class="codeblock"><code>python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# macOS / Linux:
+source .venv/bin/activate
+
+pip install -r requirements.txt</code></div>
+  </div></div>
+
+  <div class="step"><div class="n">4</div><div class="st-body">
+    <p><strong>Pegue as chaves de acesso.</strong> O agente conversa com quatro serviços. Crie uma conta em cada um e guarde as chaves (são gratuitas para começar):</p>
+    <ul>
+      <li><strong>Telegram.</strong> Fale com o <code>@BotFather</code>, use <code>/newbot</code> e guarde o <em>token</em> do bot. Pegue também o seu ID com o <code>@userinfobot</code> (é a trava que deixa só você comandar).</li>
+      <li><strong>Claude (Anthropic).</strong> Em <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>, crie uma chave de API. É o "cérebro" do agente.</li>
+      <li><strong>CoinMarketCap.</strong> Em <a href="https://coinmarketcap.com/api" target="_blank" rel="noopener">coinmarketcap.com/api</a>, pegue sua chave de API. São os "olhos".</li>
+      <li><strong>Trust Wallet (TWAK).</strong> Em <a href="https://portal.trustwallet.com" target="_blank" rel="noopener">portal.trustwallet.com</a>, crie um app e copie o <em>Access ID</em> e o <em>HMAC Secret</em> (o secret aparece uma única vez). São as "mãos".</li>
+    </ul>
+    <div class="callout callout--warn"><span class="ico">🔒</span><p>Nunca compartilhe essas chaves nem as coloque em prints. Elas vão só no seu arquivo <code>.env</code> (explicado adiante), que nunca é enviado para lugar nenhum.</p></div>
+  </div></div>
+
+  <div class="step"><div class="n">5</div><div class="st-body">
+    <p><strong>Instale a ferramenta do Trust Wallet (TWAK).</strong> Com o Node.js já instalado, instale a CLI do TWAK seguindo as instruções do <a href="https://portal.trustwallet.com" target="_blank" rel="noopener">portal.trustwallet.com</a>. Para confirmar que deu certo, rode:</p>
+    <div class="codeblock"><code>twak --version</code></div>
+    <p>Se aparecer um número de versão, está pronto para criar a carteira.</p>
+  </div></div>
+</section>
+
+<!-- ============ CARTEIRA ============ -->
+<section id="wallet">
+  <span class="kicker">O coração</span>
+  <h2>A carteira do agente</h2>
+  <p>O agente precisa de uma carteira própria na BNB Chain, com um pouco de dinheiro para operar. Você cria essa carteira em segundos e mantém o controle total dela.</p>
+
+  <div class="step"><div class="n">1</div><div class="st-body">
+    <p><strong>Crie a carteira</strong> (escolha uma senha forte e guarde-a):</p>
+    <div class="codeblock"><code>twak wallet create --password "SUA_SENHA_FORTE"</code></div>
+    <p>Use <strong>exatamente a mesma senha</strong> em todos os comandos a seguir e no arquivo <code>.env</code>. Se elas não baterem, o agente não consegue abrir a carteira.</p>
+    <div class="callout callout--warn"><span class="ico">📝</span><p>Anote a <strong>frase de recuperação (seed)</strong> que aparecer e guarde-a <strong>offline</strong>, em local seguro. Com ela você sempre recupera o acesso, mesmo que perca o computador. Nunca a digite em sites.</p></div>
+  </div></div>
+
+  <div class="step"><div class="n">2</div><div class="st-body">
+    <p><strong>Veja o endereço</strong> da carteira do agente na BNB Chain:</p>
+    <div class="codeblock"><code>twak wallet address --chain bsc</code></div>
+  </div></div>
+
+  <div class="step"><div class="n">3</div><div class="st-body">
+    <p><strong>Coloque um pouco de dinheiro.</strong> Do seu app pessoal da Trust Wallet (ou qualquer carteira), envie para o endereço acima, pela rede <strong>BNB Smart Chain (BEP-20)</strong>:</p>
+    <ul>
+      <li>Uma <strong>banca pequena de teste</strong> em <strong>USDC</strong> (sugestão: 10 a 20 dólares para começar).</li>
+      <li>Um pouquinho de <strong>BNB</strong> para pagar as taxas de rede (uns 2 dólares já bastam; cada operação custa centavos).</li>
+    </ul>
+    <div class="callout callout--warn"><span class="ico">⚠️</span><p>Confira <strong>duas vezes</strong> duas coisas antes de enviar: que a <strong>rede é BNB Smart Chain (BEP-20)</strong> e que o <strong>endereço está correto</strong>. Enviar pela rede errada ou para o endereço errado pode fazer você <strong>perder o dinheiro</strong>, sem volta. Por isso comece com pouco.</p></div>
+  </div></div>
+
+  <div class="step"><div class="n">4</div><div class="st-body">
+    <p><strong>Confira o saldo</strong> para ter certeza de que chegou:</p>
+    <div class="codeblock"><code>twak wallet portfolio --chains bsc --password "SUA_SENHA_FORTE"</code></div>
+  </div></div>
+
+  <div class="callout callout--ok"><span class="ico">✅</span><p>Pronto. Você mantém o controle total: importando a frase de recuperação no app da Trust Wallet, pode sacar manualmente a qualquer momento.</p></div>
+</section>
+
+<!-- ============ CONFIGURAR E OPERAR ============ -->
+<section id="configure">
+  <span class="kicker">Quase lá</span>
+  <h2>Configurar e operar</h2>
+
+  <div class="step"><div class="n">1</div><div class="st-body">
+    <p><strong>Monte o arquivo de configuração.</strong> Copie o modelo e preencha com as suas chaves:</p>
+    <div class="codeblock"><code># Windows:
+copy .env.example .env
+# macOS / Linux:
+cp .env.example .env</code></div>
+    <p>Abra o <code>.env</code> com um editor de texto simples (o Bloco de Notas no Windows já serve) e preencha cada linha no formato <code>NOME=valor</code>: a senha da carteira, as chaves do Telegram, Claude, CoinMarketCap e Trust Wallet, e o endereço da <strong>sua carteira pessoal</strong> (para onde os saques voltam). Cole cada valor logo depois do <code>=</code>, sem espaços nem aspas.</p>
+  </div></div>
+
+  <div class="step"><div class="n">2</div><div class="st-body">
+    <p><strong>Ligue o agente:</strong></p>
+    <div class="codeblock"><code>python run_agent.py</code></div>
+    <p>Ele inicia, conecta ao Telegram e fica pronto. (Para apenas testar sem dinheiro real, use <code>python run_agent.py --paper</code>, que simula as operações.)</p>
+  </div></div>
+
+  <div class="step"><div class="n">3</div><div class="st-body">
+    <p><strong>Configure pelo Telegram.</strong> No seu bot, mande <code>/start</code> e use o assistente em três passos:</p>
+    <ul>
+      <li><strong>Moeda-foco.</strong> Em qual moeda (ou em todas as líquidas) o agente deve focar.</li>
+      <li><strong>Stop-loss.</strong> Quanto você aceita perder por operação antes de vender (2%, 4% ou 5%).</li>
+      <li><strong>Lucro-alvo.</strong> Quando realizar o ganho (+5%, +10%, +15% ou "deixar correr").</li>
+    </ul>
+    <p>Confirme em <strong>Ativar</strong> e pronto: o agente começa a operar e te avisa a cada ação.</p>
+  </div></div>
+
+  <div class="callout callout--info"><span class="ico">📊</span><p>A qualquer momento, mande <code>/status</code> para ver patrimônio, posições e lucro ao vivo, ou <code>/dashboard</code> para abrir o painel visual. Em emergência, <code>/panic</code> liquida tudo e trava o agente.</p></div>
+</section>
+
+<!-- ============ RISCO ============ -->
+<section id="risk">
+  <span class="kicker">Disciplina</span>
+  <h2>Gestão de risco</h2>
+  <p>O agente foi feito para <strong>proteger o capital</strong>. As travas funcionam em camadas, todas automáticas:</p>
+  <ul>
+    <li><strong>Stop-loss por operação.</strong> Corta uma perda pequena antes que cresça.</li>
+    <li><strong>Trailing (acompanhamento).</strong> Quando o trade sobe, ele protege parte do ganho já conquistado.</li>
+    <li><strong>Lucro-alvo.</strong> Realiza o ganho quando atinge a meta que você definiu.</li>
+    <li><strong>Disjuntor global.</strong> Se o conjunto perder além de um limite, ele vende tudo e para, evitando um prejuízo grande.</li>
+  </ul>
+  <p>A filosofia é simples: <strong>posições pequenas, perdas contidas, sobrevivência em primeiro lugar</strong>.</p>
+  <div class="callout callout--warn"><span class="ico">⚠️</span><p>Operar criptomoedas envolve risco. Nenhuma ferramenta garante lucro. Use apenas valores que você está disposto a arriscar. Isto não é recomendação financeira.</p></div>
+</section>
+
+<!-- ============ ROADMAP ============ -->
+<section id="roadmap">
+  <span class="kicker">O futuro</span>
+  <h2>Roadmap</h2>
+  <ul>
+    <li><strong>Multiusuário não-custodial.</strong> Cada pessoa com a própria carteira e painel privado, mantendo a posse dos fundos.</li>
+    <li><strong>Boomerang return automático.</strong> Ao bater a meta, devolver o capital para a carteira pessoal e pausar (modo "fez o objetivo, descansa").</li>
+    <li><strong>Mais moedas e mais redes.</strong> Ampliar o universo conforme a liquidez permitir.</li>
+    <li><strong>Painel público de prova.</strong> Acompanhamento em tempo real, verificável on-chain por qualquer pessoa.</li>
+  </ul>
+  <p>Este projeto foi construído para o <strong>BNB Hack (Track 1)</strong>, unindo CoinMarketCap, Trust Wallet e BNB Chain.</p>
+</section>

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ docs_title }} · Boomerang AI{% endblock %}
+{% block content %}
+<div class="wrap docs">
+  <aside class="docs-side" id="toc">
+    <div class="lbl">{{ docs_label }}</div>
+    {% for anchor, label in docs %}
+      <a href="#{{ anchor }}">{{ label }}</a>
+    {% endfor %}
+  </aside>
+  <article class="docs-body">
+    {% include "docs/content_" + lang + ".html" %}
+  </article>
+</div>
+{% endblock %}

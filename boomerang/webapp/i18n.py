@@ -162,3 +162,20 @@ def strings(lang: str) -> dict[str, str]:
 
 def nav_items(lang: str) -> list[tuple[str, str]]:
     return [(path, label[lang]) for path, label in NAV]
+
+
+# Índice (sumário) da página de documentação.
+DOCS_NAV = [
+    ("overview",  {"en": "What it is",          "pt": "O que é"}),
+    ("how",       {"en": "How it works",        "pt": "Como funciona"}),
+    ("security",  {"en": "Security & privacy",  "pt": "Segurança e privacidade"}),
+    ("install",   {"en": "Installation",        "pt": "Instalação"}),
+    ("wallet",    {"en": "The agent wallet",    "pt": "A carteira do agente"}),
+    ("configure", {"en": "Configure & run",     "pt": "Configurar e operar"}),
+    ("risk",      {"en": "Risk management",     "pt": "Gestão de risco"}),
+    ("roadmap",   {"en": "Roadmap",             "pt": "Roadmap"}),
+]
+
+
+def docs_nav(lang: str) -> list[tuple[str, str]]:
+    return [(anchor, label[lang]) for anchor, label in DOCS_NAV]

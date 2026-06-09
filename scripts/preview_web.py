@@ -16,19 +16,13 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
-from boomerang.webapp.i18n import nav_items, pick_lang, strings
+from boomerang.webapp.i18n import docs_nav, nav_items, pick_lang, strings
 
 WEB = Path(__file__).resolve().parent.parent / "boomerang" / "webapp"
 templates = Jinja2Templates(directory=str(WEB / "templates"))
 
 # Placeholders bilíngues para rotas que vêm nas próximas fases.
 SOON = {
-    "/docs":   {"phase": {"en": "Phase 2", "pt": "Fase 2"}, "big": {"en": "Documentation", "pt": "Documentação"},
-                "soon": {"en": "Architecture, security model and how it operates — coming next.",
-                          "pt": "Arquitetura, modelo de segurança e como opera — chega em breve."}},
-    "/guides": {"phase": {"en": "Phase 2", "pt": "Fase 2"}, "big": {"en": "Guides", "pt": "Guias"},
-                "soon": {"en": "How to configure the agent and get the best out of it, step by step.",
-                          "pt": "Como configurar o agente e extrair o melhor dele, passo a passo."}},
     "/live":   {"phase": {"en": "Phase 3", "pt": "Fase 3"}, "big": {"en": "Live proof", "pt": "Prova ao vivo"},
                 "soon": {"en": "Public read-only panel: equity, PnL and on-chain trades.",
                           "pt": "Painel público só-leitura: patrimônio, PnL e trades on-chain."}},
@@ -64,13 +58,38 @@ async def style(request):  # noqa: ANN001
     return _resp(request, "foundation.html", "/style")
 
 
+async def docs_page(request):  # noqa: ANN001
+    lang = _lang(request)
+    ctx = {"request": request, "lang": lang, "t": strings(lang),
+           "nav": nav_items(lang), "active": "/docs", "docs": docs_nav(lang),
+           "docs_title": "Documentação" if lang == "pt" else "Documentation",
+           "docs_label": "Nesta página" if lang == "pt" else "On this page"}
+    resp = templates.TemplateResponse(request, "docs.html", ctx)
+    q = request.query_params.get("lang")
+    if q in ("en", "pt"):
+        resp.set_cookie("lang", q, max_age=31536000)
+    return resp
+
+
+async def guides_page(request):  # noqa: ANN001
+    lang = _lang(request)
+    ctx = {"request": request, "lang": lang, "t": strings(lang), "nav": nav_items(lang),
+           "active": "/guides", "guides_title": "Guia" if lang == "pt" else "Guide"}
+    resp = templates.TemplateResponse(request, "guides.html", ctx)
+    q = request.query_params.get("lang")
+    if q in ("en", "pt"):
+        resp.set_cookie("lang", q, max_age=31536000)
+    return resp
+
+
 def make_soon(path):  # noqa: ANN001
     async def handler(request):  # noqa: ANN001
         return _resp(request, "placeholder.html", path, SOON[path])
     return handler
 
 
-routes = [Route("/", home), Route("/style", style)]
+routes = [Route("/", home), Route("/style", style), Route("/docs", docs_page),
+          Route("/guides", guides_page)]
 for p in SOON:
     routes.append(Route(p, make_soon(p)))
 routes.append(Mount("/static", StaticFiles(directory=str(WEB / "static")), name="static"))
