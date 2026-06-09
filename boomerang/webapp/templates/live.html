@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ t.lv_title }} · Boomerang AI{% endblock %}
+{% block content %}
+<div class="wrap section" style="max-width:1000px">
+  <span class="eyebrow">{{ t.lv_title }}</span>
+  <h1 class="display" style="font-size:clamp(2rem,4.4vw,3.1rem);margin:14px 0 10px">
+    {{ t.lv_title }} <span id="lvState" class="pill pill--gold" style="vertical-align:middle;font-size:12px">·</span>
+  </h1>
+  <p class="lead" style="font-size:1.02rem">{{ t.lv_sub }}</p>
+  <div id="lvAddr" class="mono" style="font-size:.8rem;color:var(--faint);margin-top:10px">·</div>
+
+  <div class="grid cols-4" style="margin-top:26px">
+    <div class="card card--glow stat"><span class="card__lbl">{{ t.s_equity }}</span><span class="v mono grad-gold" id="lvEquity">·</span></div>
+    <div class="card stat"><span class="card__lbl">{{ t.s_drawdown }}</span><span class="v mono" id="lvDd">·</span></div>
+    <div class="card stat"><span class="card__lbl">{{ t.lv_peak }}</span><span class="v mono" id="lvPeak">·</span></div>
+    <div class="card stat"><span class="card__lbl">{{ t.lv_positions }}</span><span class="v" id="lvPosN">·</span></div>
+  </div>
+
+  <div class="card" style="margin-top:18px"><span class="card__lbl">{{ t.lv_composition }}</span><div id="lvComp" style="margin-top:12px"><span class="mut">·</span></div></div>
+  <div class="card" style="margin-top:18px"><span class="card__lbl">{{ t.lv_positions }}</span><div id="lvPos" style="margin-top:12px"><span class="mut">{{ t.lv_none }}</span></div></div>
+  <div class="card" style="margin-top:18px"><span class="card__lbl">{{ t.lv_history }}</span><div id="lvHist" style="margin-top:12px"><span class="mut">{{ t.lv_no_trades }}</span></div></div>
+  <p class="mono" id="lvUpd" style="text-align:center;color:var(--faint);font-size:.74rem;margin-top:22px"></p>
+</div>
+
+<script>
+const L = {
+  none: "{{ t.lv_none }}", noTrades: "{{ t.lv_no_trades }}", offline: "{{ t.lv_offline }}",
+  coin: "{{ t.lv_coin }}", value: "{{ t.lv_value }}", share: "{{ t.lv_share }}",
+  amount: "{{ t.lv_amount }}", stop: "{{ t.lv_stop }}", entry: "{{ t.lv_entry }}",
+  type: "{{ t.lv_type }}", buy: "{{ t.lv_buy }}", sell: "{{ t.lv_sell }}", tx: "{{ t.lv_tx }}",
+  token: "{{ t.th_token }}", pnl: "{{ t.th_pnl }}", updated: "{{ t.lv_updated }}",
+};
+const SCAN = "https://bscscan.com";
+const usd = v => v==null ? "·" : "$"+Number(v).toFixed(2);
+const px  = v => { v=Number(v); if(!isFinite(v)) return "·"; return "$"+(v>=1?v.toFixed(4):v>=0.0001?v.toFixed(6):v.toExponential(2)); };
+const qty = v => { v=Number(v); if(!isFinite(v)) return "·"; return v>=1000?v.toLocaleString("en-US",{maximumFractionDigits:2}):v>=1?v.toFixed(4):v.toFixed(6); };
+const short = a => a ? a.slice(0,6)+"…"+a.slice(-4) : "·";
+const KIND = {gas:["BNB (gas)","#F3BA2F"], stable:["stable","#5AA9FF"], token:["token","#34E5A4"]};
+const STATECLR = {IN_POSITION:"pill--up", SCANNING:"pill--gold", PAUSED:"pill", HALTED:"pill--down", IDLE:"pill"};
+
+async function tick(){
+  let d;
+  try { d = await (await fetch("/api/live")).json(); }
+  catch(e){ document.getElementById("lvState").textContent = L.offline; return; }
+  const s = d.state || {}, trades = d.trades || [];
+
+  const st = s.state || "IDLE";
+  const stEl = document.getElementById("lvState");
+  stEl.textContent = st; stEl.className = "pill " + (STATECLR[st]||"pill");
+
+  document.getElementById("lvAddr").innerHTML = s.agent_address
+    ? `<a href="${SCAN}/address/${s.agent_address}" target="_blank" style="color:var(--info)">${s.agent_address} ↗</a>` : "·";
+  document.getElementById("lvEquity").textContent = usd(s.equity_usd);
+  const dd = Number(s.drawdown_pct||0);
+  const ddEl = document.getElementById("lvDd"); ddEl.textContent = dd.toFixed(1)+"%";
+  ddEl.className = "v mono " + (dd>=20?"neg":dd>=10?"":"pos");
+  document.getElementById("lvPeak").textContent = usd(s.peak_equity);
+  const pos = s.positions || [];
+  document.getElementById("lvPosN").textContent = pos.length;
+
+  // Composition
+  const h = s.holdings || [];
+  document.getElementById("lvComp").innerHTML = h.length
+    ? `<table class="tbl"><tr><th>${L.coin}</th><th>${L.value}</th><th>${L.share}</th></tr>`+
+      h.map(x=>{ const k=KIND[x.kind]||["",""]; return `<tr><td><b>${x.symbol}</b> <span class="pill" style="color:${k[1]};font-size:10px">${k[0]}</span></td><td class="mono">${usd(x.value_usd)}</td><td class="mono mut">${(x.pct||0).toFixed(1)}%</td></tr>`; }).join("")+`</table>`
+    : `<span class="mut">·</span>`;
+
+  // Positions
+  document.getElementById("lvPos").innerHTML = pos.length
+    ? `<table class="tbl"><tr><th>${L.token}</th><th>${L.entry}</th><th>${L.amount}</th><th>${L.stop}</th></tr>`+
+      pos.map(p=>`<tr><td><b>${p.symbol}</b></td><td class="mono">${px(p.entry_price)}</td><td class="mono">${usd(p.amount_usd)}</td><td class="mono">${px(p.stop_loss_price)}</td></tr>`).join("")+`</table>`
+    : `<span class="mut">${L.none}</span>`;
+
+  // History
+  const rows = [...trades].reverse().slice(0,30).map(x=>{
+    const tx = x.tx ? `<a href="${SCAN}/tx/${x.tx}" target="_blank" style="color:var(--info)">${L.tx} ↗</a>` : `<span class="mut">·</span>`;
+    const tipo = x.type==="open" ? `<span class="pill pill--up" style="font-size:10px">${L.buy}</span>` : `<span class="pill" style="font-size:10px">${L.sell}</span>`;
+    const pnl = x.pnl_pct!=null ? `<span class="${x.pnl_pct>=0?'pos':'neg'}">${x.pnl_pct>=0?'+':''}${Number(x.pnl_pct).toFixed(2)}%</span>` : "";
+    const val = x.type==="open" ? usd(x.amount_usd) : pnl;
+    return `<tr><td>${tipo}</td><td><b>${x.symbol}</b></td><td class="mono">${val}</td><td>${tx}</td></tr>`;
+  }).join("");
+  document.getElementById("lvHist").innerHTML = rows
+    ? `<table class="tbl"><tr><th>${L.type}</th><th>${L.token}</th><th>${L.value}/${L.pnl}</th><th>${L.tx}</th></tr>${rows}</table>`
+    : `<span class="mut">${L.noTrades}</span>`;
+
+  const t = new Date();
+  document.getElementById("lvUpd").textContent = L.updated + " " + t.toLocaleTimeString();
+}
+tick(); setInterval(tick, 5000);
+</script>
+{% endblock %}

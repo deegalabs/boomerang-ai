@@ -12,10 +12,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import uvicorn
 from starlette.applications import Starlette
+from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
+from boomerang.persistence import load_state, load_trades
 from boomerang.webapp.i18n import docs_nav, nav_items, pick_lang, strings
 
 WEB = Path(__file__).resolve().parent.parent / "boomerang" / "webapp"
@@ -23,9 +25,6 @@ templates = Jinja2Templates(directory=str(WEB / "templates"))
 
 # Placeholders bilíngues para rotas que vêm nas próximas fases.
 SOON = {
-    "/live":   {"phase": {"en": "Phase 3", "pt": "Fase 3"}, "big": {"en": "Live proof", "pt": "Prova ao vivo"},
-                "soon": {"en": "Public read-only panel: equity, PnL and on-chain trades.",
-                          "pt": "Painel público só-leitura: patrimônio, PnL e trades on-chain."}},
     "/console": {"phase": {"en": "Phase 4", "pt": "Fase 4"}, "big": {"en": "Console", "pt": "Console"},
                  "soon": {"en": "Owner control: connect wallet, configure, fund and trade.",
                            "pt": "Controle do dono: conectar carteira, configurar, fundear e operar."}},
@@ -82,6 +81,14 @@ async def guides_page(request):  # noqa: ANN001
     return resp
 
 
+async def live_page(request):  # noqa: ANN001
+    return _resp(request, "live.html", "/live")
+
+
+async def api_live(request):  # noqa: ANN001 — público, só leitura do estado persistido
+    return JSONResponse({"state": load_state() or {}, "trades": load_trades()})
+
+
 def make_soon(path):  # noqa: ANN001
     async def handler(request):  # noqa: ANN001
         return _resp(request, "placeholder.html", path, SOON[path])
@@ -89,7 +96,8 @@ def make_soon(path):  # noqa: ANN001
 
 
 routes = [Route("/", home), Route("/style", style), Route("/docs", docs_page),
-          Route("/guides", guides_page)]
+          Route("/guides", guides_page), Route("/live", live_page),
+          Route("/api/live", api_live)]
 for p in SOON:
     routes.append(Route(p, make_soon(p)))
 routes.append(Mount("/static", StaticFiles(directory=str(WEB / "static")), name="static"))

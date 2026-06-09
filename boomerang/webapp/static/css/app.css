@@ -399,6 +399,9 @@ h3 { font-size: 1.4rem; letter-spacing: -.01em; }
 .tip p { color: var(--muted); margin: 0; font-size: .95rem; }
 @media (max-width: 620px) { .tips { grid-template-columns: 1fr; } }
 
+/* ----- Color utilities --------------------------------------------------- */
+.pos { color: var(--up); } .neg { color: var(--down); } .mut { color: var(--faint); }
+
 /* ----- Footer ------------------------------------------------------------ */
 .foot { border-top: 1px solid var(--line-soft); padding-block: 40px; margin-top: 40px; color: var(--faint); font-size: .85rem; }
 .foot a { color: var(--muted); } .foot a:hover { color: var(--gold); }

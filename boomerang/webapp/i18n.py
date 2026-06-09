@@ -81,6 +81,13 @@ TR: dict[str, dict[str, str]] = {
         "l_spon_tw_r": "The hands and the vault", "l_spon_tw_d": "Execution and custody.",
         "l_spon_bnb_r": "The field", "l_spon_bnb_d": "Liquidity, speed, low cost.",
         "l_cta_title": "Ready to watch the boomerang fly?",
+        # ---- Live panel ----
+        "lv_title": "Live proof", "lv_sub": "Read-only. Verifiable on-chain.",
+        "lv_peak": "Peak", "lv_positions": "Open positions", "lv_composition": "Wallet composition",
+        "lv_history": "Trade history", "lv_none": "none", "lv_no_trades": "no trades yet",
+        "lv_coin": "Coin", "lv_value": "Value", "lv_share": "Share", "lv_amount": "Amount",
+        "lv_stop": "Stop", "lv_type": "Type", "lv_buy": "BUY", "lv_sell": "SELL", "lv_tx": "Tx",
+        "lv_entry": "Entry", "lv_offline": "agent offline or idle", "lv_updated": "updated",
     },
     "pt": {
         "tagline": "Agente de trading autônomo na BNB Chain",
@@ -145,6 +152,13 @@ TR: dict[str, dict[str, str]] = {
         "l_spon_tw_r": "As mãos e o cofre", "l_spon_tw_d": "Execução e custódia.",
         "l_spon_bnb_r": "O campo", "l_spon_bnb_d": "Liquidez, velocidade, baixo custo.",
         "l_cta_title": "Pronto para ver o boomerang voar?",
+        # ---- Painel ao vivo ----
+        "lv_title": "Prova ao vivo", "lv_sub": "Só leitura. Verificável on-chain.",
+        "lv_peak": "Pico", "lv_positions": "Posições abertas", "lv_composition": "Composição da carteira",
+        "lv_history": "Histórico de trades", "lv_none": "nenhuma", "lv_no_trades": "nenhum trade ainda",
+        "lv_coin": "Moeda", "lv_value": "Valor", "lv_share": "Parte", "lv_amount": "Valor",
+        "lv_stop": "Stop", "lv_type": "Tipo", "lv_buy": "COMPRA", "lv_sell": "VENDA", "lv_tx": "Tx",
+        "lv_entry": "Entrada", "lv_offline": "agente desligado ou parado", "lv_updated": "atualizado",
     },
 }
 

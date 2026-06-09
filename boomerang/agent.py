@@ -62,6 +62,7 @@ class BoomerangAgent:
         self.mode: str = config.user.get("mode", "conservative")
         self._tasks: list[asyncio.Task] = []
         self._last_equity: float = 0.0          # patrimônio mais recente (cache p/ dashboard)
+        self._last_holdings: list = []          # composição por moeda (cache p/ painel /live)
         self.agent_address: str | None = None   # endereço da carteira (preenchido no startup)
 
     # ── carregamento de endereços elegíveis ──────────────────────────────────
@@ -94,6 +95,7 @@ class BoomerangAgent:
                 bd = self._validator.wallet_breakdown(addr)
                 total = float(bd.get("total_usd") or 0.0)
                 if total > 0:
+                    self._last_holdings = bd.get("holdings", [])
                     return total
             except Exception as exc:  # noqa: BLE001
                 self._log.warning("Equity on-chain indisponível (%s); usando TWAK.", exc)
@@ -132,6 +134,7 @@ class BoomerangAgent:
                              if self._last_equity else 0.0),
             "last_trade_ts": self._risk.last_trade_ts,
             "agent_address": self.agent_address,
+            "holdings": self._last_holdings,
             "positions": [asdict(p) for p in self.positions],
         }
 

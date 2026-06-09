@@ -6,6 +6,10 @@ secrets/
 wallets/
 *.keystore
 
+# Node / CLI do TWAK (instalado localmente via pnpm)
+node_modules/
+tools/twakcli/
+
 # Python
 __pycache__/
 *.py[cod]
