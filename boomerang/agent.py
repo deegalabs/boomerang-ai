@@ -114,6 +114,31 @@ class BoomerangAgent:
                 return float(h.get("value_usd") or 0.0)
         return 0.0
 
+    async def _reconcile_positions(self) -> None:
+        """Descarta posições que não existem mais on-chain (vendidas por fora do
+        agente, ou que viraram pó). Mantém o estado fiel à carteira: sem isso, uma
+        venda manual deixa 'posições fantasma' que o monitor tenta gerir em vão."""
+        if not self.positions or not self.agent_address:
+            return
+        try:
+            bd = await asyncio.to_thread(self._validator.wallet_breakdown, self.agent_address)
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("Reconciliação pulada (breakdown indisponível): %s", exc)
+            return
+        held = {str(h.get("symbol", "")).upper(): float(h.get("value_usd") or 0.0)
+                for h in bd.get("holdings", [])}
+        kept, dropped = [], []
+        for pos in self.positions:
+            if held.get(pos.symbol.upper(), 0.0) >= 0.15:  # > pó; posição real começa em ~$1
+                kept.append(pos)
+            else:
+                dropped.append(pos.symbol)
+        if dropped:
+            self.positions = kept
+            self._save()
+            self._log.info("Reconciliação: %d posição(oes) descartada(s) (não há mais on-chain): %s",
+                           len(dropped), ", ".join(dropped))
+
     # ── controle (chamado pela interface) ────────────────────────────────────
     def configure(self, *, token_focus: list[str] | None = None,
                   stop_loss_pct: float | None = None, take_profit_pct: float | None = None,
@@ -197,6 +222,8 @@ class BoomerangAgent:
         if self.state == AgentState.HALTED:
             await self._emit(AlertType.ERROR, "Agente travado", "Circuit breaker ativo. Reinicie a sessão.")
             return
+        # Sincroniza com a carteira: descarta posições já vendidas/pó antes de operar.
+        await self._reconcile_positions()
         # Mantém IN_POSITION se já há posição aberta (ex.: retomada após restart).
         self.state = AgentState.IN_POSITION if self.positions else AgentState.SCANNING
         await self._emit(AlertType.STARTED, "Boomerang AI ativo",
