@@ -82,7 +82,7 @@ Two **logical** layers, one **physical** container:
 
 - **Deployment:** a single service on **Railway** runs both the **public site** (uvicorn) and the **agent** (own thread), sharing a volume for state. The encrypted TWAK keystore and secrets are injected as **protected environment variables at runtime** — never in the repository or the image (`.dockerignore`).
 - **Why not Vercel:** the site is server-rendered Python (Starlette + Jinja2) and the agent is a 24/7 process; Vercel is serverless/static and runs neither.
-- See [`DEPLOY.md`](DEPLOY.md) for the full Railway walkthrough.
+- See [`DEPLOY.md`](DEPLOY.md) for the full Railway walkthrough, and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the detailed design.
 
 ---
 
@@ -145,7 +145,7 @@ npm install -g @trustwallet/cli                     # the 'twak' CLI
 twak wallet create --password "<STRONG_PASSWORD>"   # creates the encrypted keystore
 
 # secrets
-copy .env.example .env                              # fill in (see docs/ETAPA_B_SETUP.md)
+copy .env.example .env                              # fill in (see docs/SETUP.md)
 
 # run (paper mode simulates execution, zero risk)
 python run_agent.py --paper

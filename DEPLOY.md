@@ -1,75 +1,75 @@
-# Deploy — Boomerang AI (Fase 5)
+# Deploy — Boomerang AI
 
-> **Caminho recomendado: Railway** (abaixo). A seção VPS/systemd vem depois, como alternativa.
+> **Recommended path: Railway** (below). The VPS/systemd section follows as an alternative.
 
-## Railway (deploy oficial)
+## Railway (official deployment)
 
-Arquitetura real: **um único serviço** na Railway roda o **site público + o agente 24/7** no mesmo container ([`Dockerfile`](Dockerfile) Python 3.12 + Node 20 + TWAK CLI). O entrypoint [`railway_start.py`](railway_start.py) sobe o **site** (uvicorn, thread principal, responde `/healthz` na hora) e o **agente** (thread própria), compartilhando um **volume** (`/app/state`) para o estado, então o `/live` mostra os trades reais. É a **mesma carteira** de trade: o keystore **cifrado** (`~/.twak/wallet.json`) e o estado inicial são materializados no boot a partir de env vars base64 — nada de migrar fundos, nada de chave crua.
+Real architecture: **a single Railway service** runs the **public site + the 24/7 agent** in the same container ([`Dockerfile`](Dockerfile): Python 3.12 + Node 20 + the TWAK CLI). The entrypoint [`railway_start.py`](railway_start.py) starts the **site** (uvicorn, main thread, answers `/healthz` immediately) and the **agent** (own thread), sharing a **volume** (`/app/state`) for state, so `/live` shows real trades. It is the **same trading wallet**: the **encrypted** keystore (`~/.twak/wallet.json`) and the initial state are materialized at boot from base64 env vars — no fund migration, no raw key.
 
-> Por que não Vercel: o site é Python renderizado no servidor (Starlette + Jinja2) e o agente é um processo 24/7. Vercel é serverless/estático e não roda nenhum dos dois. Por isso, tudo na Railway.
+> Why not Vercel: the site is server-rendered Python (Starlette + Jinja2) and the agent is a 24/7 process. Vercel is serverless/static and runs neither. Hence, everything on Railway.
 
 ```bash
 # 1. CLI + login
 npm i -g @railway/cli
 railway login
 
-# 2. projeto + volume de estado (na raiz do repo)
-railway init                          # cria o projeto
-railway volume add -m /app/state      # posições sobrevivem a restart
+# 2. project + state volume (at the repo root)
+railway init                          # create the project
+railway volume add -m /app/state      # positions survive restarts
 
-# 3. variáveis: migra os segredos do .env + o keystore cifrado + o estado,
-#    SEM imprimir valores (gera TWAK_WALLET_JSON_B64 e STATE_SEED_B64 em base64)
+# 3. variables: migrate the .env secrets + the encrypted keystore + state,
+#    WITHOUT printing values (generates TWAK_WALLET_JSON_B64 and STATE_SEED_B64 as base64)
 python scripts/railway_setvars.py
 railway variables --set "SESSION_SECRET=$(python -c 'import secrets;print(secrets.token_hex(32))')"
-railway variables --set "OWNER_WALLET_ADDRESS=0x...sua_carteira_pessoal..."
+railway variables --set "OWNER_WALLET_ADDRESS=0x...your_personal_wallet..."
 
-# 4. build/deploy + URL pública
+# 4. build/deploy + public URL
 railway up --detach
 railway domain
 ```
 
-O [`railway.json`](railway.json) usa o builder Dockerfile, start `python railway_start.py` e healthcheck `/healthz`. O [`.dockerignore`](.dockerignore) garante que `.env`, `identity_wallet/` e `state/` **nunca** entram na imagem — os segredos chegam só como variáveis de ambiente protegidas da Railway, em runtime.
+[`railway.json`](railway.json) uses the Dockerfile builder, start `python railway_start.py`, and healthcheck `/healthz`. [`.dockerignore`](.dockerignore) ensures `.env`, `identity_wallet/`, and `state/` **never** enter the image — secrets arrive only as protected Railway environment variables, at runtime.
 
-**Verificar** (`railway logs -d`): deve aparecer `Equity inicial (on-chain)`, `Estado restaurado`, `Identidade ERC-8004`, `Bot do Telegram em polling` e o `CICLO`. O `/api/live` público mostra `IN_POSITION`/equity/holdings reais.
+**Verify** (`railway logs -d`): you should see `Equity inicial (on-chain)`, `Estado restaurado`, `Identidade ERC-8004`, `Bot do Telegram em polling`, and the `CICLO` lines. The public `/api/live` shows real `IN_POSITION`/equity/holdings.
 
-> **Segurança (cloud):** o keystore cifrado **e** a `WALLET_PASSWORD` vivem na Railway, então a chave é decifrável no provedor. É inerente a qualquer bot hospedado; a banca pequena limita o risco. Os segredos ficam só nas env vars (nunca no repo/imagem). **Rotacione o `TELEGRAM_BOT_TOKEN`** (no @BotFather) se ele já tiver aparecido em log antes do filtro de logging.
+> **Security (cloud):** the encrypted keystore **and** `WALLET_PASSWORD` both live on Railway, so the key is decryptable on the provider. This is inherent to any hosted bot; a small bankroll bounds the risk. Secrets stay only in env vars (never in the repo/image). **Rotate `TELEGRAM_BOT_TOKEN`** (via @BotFather) if it ever appeared in a log before the logging filter was added.
 
-### x402 real
+### Real x402
 
-O `twak` agora roda **dentro do container** (mesma imagem). A rota `/x402` do próprio site injeta o header que o MCP da CMC exige, então o pagamento pay-per-call pode ser liquidado da nuvem ou da máquina local apontando para a URL pública:
+`twak` now runs **inside the container** (same image). The site's own `/x402` route injects the header that CoinMarketCap's MCP requires, so the pay-per-call payment can be settled from the cloud or from a local machine pointing at the public URL:
 
 ```bash
 twak x402 request --method POST \
   --body '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_global_metrics_latest","arguments":{}}}' \
   --max-payment 10000 --prefer-network base --prefer-method eip3009 --yes \
-  https://SEU-APP.up.railway.app/x402
+  https://YOUR-APP.up.railway.app/x402
 ```
 
-Resposta 200 com dados = pagamento liquidado on-chain ($0.01 em USDC na Base). Em operação normal os dados vêm via **REST grátis** (não defina `X402_ENDPOINT`); o x402 real é prova/demo, não custo por ciclo.
+A 200 with data = payment settled on-chain ($0.01 USDC on Base). In normal operation, data comes via **free REST** (do not set `X402_ENDPOINT`); real x402 is a proof/demo, not a per-cycle cost.
 
-> **Não rode o agente local junto** com o da Railway: dois agentes na mesma carteira entram em conflito.
-
----
-
-## VPS / systemd (alternativa)
-
-Como colocar no ar, numa VPS Linux, os três processos do Boomerang AI:
-
-1. **Agente** (`run_agent.py`) — opera 24/7, controlado pelo Telegram.
-2. **Site público** (`boomerang.webapp.site:app`) — landing, docs, guia, prova ao vivo e Console demo.
-3. **Proxy x402** (`boomerang.webapp.x402_proxy`) — dá ao `twak x402` o endpoint público que ele exige (destrava o pagamento real por chamada à CoinMarketCap).
-
-A identidade on-chain ERC-8004 (agentId **131071**) já está registrada na BNB mainnet; nada a fazer aqui além de versionar `boomerang/identity/agent_card.json` (já está).
+> **Do not run a local agent** alongside the Railway one: two agents on the same wallet conflict.
 
 ---
 
-## 1. Pré-requisitos
+## VPS / systemd (alternative)
 
-- VPS Linux (Ubuntu 22.04+), um domínio apontando pro IP (ex.: `boomerang.deegalabs.ai`).
-- Python 3.12, Node 20+ (para o `twak`), `git`, e um reverse proxy com TLS (recomendo **Caddy** pela simplicidade).
-- Portas 80/443 abertas.
+How to run, on a Linux VPS, the three Boomerang AI processes:
 
-## 2. Código, dependências e segredos
+1. **Agent** (`run_agent.py`) — trades 24/7, controlled from Telegram.
+2. **Public site** (`boomerang.webapp.site:app`) — landing, docs, guide, live proof, demo console.
+3. **x402 proxy** (`boomerang.webapp.x402_proxy`) — gives `twak x402` the public endpoint it requires (unlocks real pay-per-call to CoinMarketCap).
+
+The ERC-8004 on-chain identity (agentId **131071**) is already registered on BNB mainnet; nothing to do here beyond versioning `boomerang/identity/agent_card.json` (already done).
+
+---
+
+## 1. Prerequisites
+
+- Linux VPS (Ubuntu 22.04+), a domain pointing to the IP (e.g. `boomerang.deegalabs.ai`).
+- Python 3.12, Node 20+ (for `twak`), `git`, and a TLS reverse proxy (**Caddy** recommended for simplicity).
+- Ports 80/443 open.
+
+## 2. Code, dependencies, and secrets
 
 ```bash
 git clone https://github.com/deegalabs/boomerang-ai.git
@@ -77,13 +77,13 @@ cd boomerang-ai
 python3.12 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 
-# TWAK CLI (autocustódia + x402). Instala local, como na máquina de dev:
-corepack pnpm add @trustwallet/cli   # gera ./node_modules/.bin/twak
+# TWAK CLI (self-custody + x402). Install locally, as on the dev machine:
+corepack pnpm add @trustwallet/cli   # produces ./node_modules/.bin/twak
 
-cp .env.example .env   # depois preencha (NUNCA versione .env)
+cp .env.example .env   # then fill it in (NEVER version .env)
 ```
 
-No `.env` (valores reais, fora do git):
+In `.env` (real values, outside git):
 
 ```ini
 ANTHROPIC_API_KEY=...
@@ -95,16 +95,16 @@ TWAK_HMAC_SECRET=...
 WALLET_PASSWORD=...
 OWNER_WALLET_ADDRESS=0x779126dd2937974118d67568d1bc5b69b84f059c
 TWAK_BIN=/srv/boomerang-ai/node_modules/.bin/twak
-# Senha do keystore da identidade ERC-8004 (cai na WALLET_PASSWORD se ausente):
+# ERC-8004 identity keystore password (falls back to WALLET_PASSWORD if absent):
 # BNB_IDENTITY_PASSWORD=...
-# Endpoint x402 público (ver passo 5) — destrava o pagamento real via twak:
+# Public x402 endpoint (see step 5) — unlocks real payment via twak:
 # X402_ENDPOINT=https://boomerang.deegalabs.ai/x402
-DASHBOARD_TOKEN=...        # opcional, dashboard só-leitura do agente (porta 8080)
+DASHBOARD_TOKEN=...        # optional, read-only agent dashboard (port 8080)
 ```
 
-> A carteira de identidade (`identity_wallet/`) e o `.env` são git-ignorados. Se for migrar a identidade da máquina de dev, copie a pasta `identity_wallet/` por canal seguro (ela contém a chave). Caso contrário, rode `python scripts/register_identity.py` na VPS para gerar uma nova.
+> The identity wallet (`identity_wallet/`) and `.env` are git-ignored. To migrate the identity from the dev machine, copy the `identity_wallet/` folder over a secure channel (it contains the key). Otherwise, run `python scripts/register_identity.py` on the VPS to generate a fresh one.
 
-## 3. Site público (systemd)
+## 3. Public site (systemd)
 
 `/etc/systemd/system/boomerang-site.service`:
 
@@ -123,7 +123,7 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
-## 4. Agente (systemd)
+## 4. Agent (systemd)
 
 `/etc/systemd/system/boomerang-agent.service`:
 
@@ -142,9 +142,9 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
-## 5. x402 real (proxy + Caddy)
+## 5. Real x402 (proxy + Caddy)
 
-O `twak x402` recusa endereços privados/loopback — precisa de um endpoint **público com TLS**. O proxy roda em loopback e o Caddy expõe `/x402` publicamente, injetando nada (o proxy já injeta o header `Accept` do MCP).
+`twak x402` rejects private/loopback addresses — it needs a **public endpoint with TLS**. The proxy runs on loopback and Caddy exposes `/x402` publicly (the proxy injects the MCP `Accept` header).
 
 `/etc/systemd/system/boomerang-x402.service`:
 
@@ -163,56 +163,56 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
-Depois aponte o agente pro endpoint público no `.env`:
+Then point the agent at the public endpoint in `.env`:
 
 ```ini
 X402_ENDPOINT=https://boomerang.deegalabs.ai/x402
 ```
 
-Com isso, o `twak x402 request` paga as chamadas à CMC ($0.01 cada) com o **USDC que já está na carteira de trade** — sem fundo novo, sem ETH, sem expor chave.
+With that, `twak x402 request` pays the CMC calls ($0.01 each) with the **USDC already in the trading wallet** — no new funds, no ETH, no key exposure.
 
-## 6. Caddy (TLS + rotas)
+## 6. Caddy (TLS + routes)
 
 `/etc/caddy/Caddyfile`:
 
 ```
 boomerang.deegalabs.ai {
-    # x402: caminho público que o twak chama -> proxy local -> CMC
+    # x402: public path twak calls -> local proxy -> CMC
     handle_path /x402* {
         reverse_proxy 127.0.0.1:8402
     }
-    # site público
+    # public site
     reverse_proxy 127.0.0.1:8090
 }
 ```
 
-O Caddy provisiona o certificado Let's Encrypt automaticamente.
+Caddy provisions the Let's Encrypt certificate automatically.
 
-## 7. Subir e verificar
+## 7. Bring up and verify
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now boomerang-x402 boomerang-site boomerang-agent caddy
 
-# saúde do site + identidade
+# site health + identity
 curl -s https://boomerang.deegalabs.ai/healthz
 
-# x402 real (uma chamada paga $0.01 a partir da carteira de trade):
+# real x402 (one paid $0.01 call from the trading wallet):
 . .venv/bin/activate
 twak x402 request --method POST \
-  --body '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_crypto_quotes_latest","arguments":{"symbol":"BNB"}}}' \
+  --body '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_global_metrics_latest","arguments":{}}}' \
   --max-payment 10000 --prefer-network base --prefer-method eip3009 --yes \
   https://boomerang.deegalabs.ai/x402
 ```
 
-Uma resposta 200 com dados = pagamento x402 liquidado on-chain. A partir daí o agente pode usar dados pagos da CMC definindo `X402_ENDPOINT` (senão segue no REST grátis, que é o padrão de custo zero).
+A 200 with data = x402 payment settled on-chain. From there, the agent can use paid CMC data by setting `X402_ENDPOINT` (otherwise it stays on free REST, the zero-cost default).
 
-## Alternativa: x402 pela carteira de identidade (sem twak)
+## Alternative: x402 via the identity wallet (no twak)
 
-O cliente `boomerang/payments/x402_cmc.py` assina o pagamento direto com o BNB AI Agent SDK (não precisa de proxy nem de endereço público). Basta a **carteira de identidade** (`0xd06be7…`) ter USDC na Base. Para uma chamada de prova:
+The `boomerang/payments/x402_cmc.py` client signs the payment directly with the BNB AI Agent SDK (no proxy, no public address needed). It just requires the **identity wallet** (`0xd06be7…`) to hold USDC on Base. For a proof call:
 
 ```bash
-python scripts/x402_pay.py            # paga $0.01 e imprime os dados
+python scripts/x402_pay.py            # pays $0.01 and prints the data
 ```
 
-Útil se preferir fundear a identidade (ex.: saque de corretora, que cobre o gás) em vez de usar o twak na VPS.
+Useful if you prefer to fund the identity wallet (e.g. an exchange withdrawal, which covers gas) instead of using twak on a VPS.
