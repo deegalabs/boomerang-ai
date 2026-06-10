@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 
 from boomerang.config import Config
@@ -94,7 +95,10 @@ class CMCClient:
         self._log = logger or logging.getLogger("boomerang.brain.cmc")
         # O endpoint x402 autentica com a CMC API key e habilita pagamento por chamada.
         # O /mcp padrão usa outro token (retorna 401 com a API key Pro).
-        self._endpoint = config.cmc.get("x402_endpoint") or config.cmc["mcp_endpoint"]
+        # X402_ENDPOINT (env) tem prioridade: na VPS aponta pro proxy público que
+        # injeta o header Accept do MCP, destravando o pagamento real via twak x402.
+        self._endpoint = (os.getenv("X402_ENDPOINT") or config.cmc.get("x402_endpoint")
+                          or config.cmc["mcp_endpoint"])
         # Executor TWAK opcional: paga as tools (402) via `twak x402 request`.
         self._executor = executor
 
