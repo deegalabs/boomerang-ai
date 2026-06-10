@@ -72,7 +72,7 @@ reprovar para o trade ser abortado **antes** de tocar no dinheiro.
    │   → Claude (tool forçada) → {confidence_score, action}                 │
    │   corte determinístico: score < mínimo → HOLD                          │
    └────────────────────────────────────┬──────────────────────────────────┘
-                                         │ BUY (score ≥ 90 no modo conservador)
+                                         │ BUY (score ≥ 70 no modo conservador)
    ┌─────────────────────────────────────▼─────────────────────────────────┐
    │ 2️⃣ FILTRO 2 — Validação on-chain (bnb_validation.py)                   │
    │   whitelist dos 149 · getAmountsOut (slippage) · round-trip (taxa      │
@@ -126,7 +126,7 @@ para cada posição:
 |--------------------------------------------|--------------------------------------|
 | whitelist dos 149 tokens                   | foco de tokens (subconjunto líquido) |
 | circuit breaker de drawdown (23%/DQ 30%)   | stop-loss (2% / 4% / 5%)             |
-| teto de slippage (0.5%)                    | modo (conservador ≥90 / agressivo ≥80)|
+| teto de slippage (0.5%)                    | modo (conservador ≥70 / agressivo ≥60)|
 | bloqueio de destino (anti-drenagem)        | (banca por trade = % fixo do equity) |
 | mínimo de trades / heartbeat               |                                      |
 
