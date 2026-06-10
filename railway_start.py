@@ -40,18 +40,30 @@ def _bootstrap() -> None:
 
 
 def _run_agent() -> None:
+    import sys
+    import traceback
+    print(">>> [agent-thread] iniciando", flush=True)
     try:
         from run_agent import main as agent_main
+        print(">>> [agent-thread] run_agent importado; rodando main()", flush=True)
         asyncio.run(agent_main())
-    except Exception:  # noqa: BLE001
-        logging.getLogger("railway_start").exception("agente caiu (thread)")
+        print(">>> [agent-thread] main() retornou (inesperado)", flush=True)
+    except BaseException as exc:  # noqa: BLE001
+        print(f">>> [agent-thread] CAIU: {exc!r}", flush=True)
+        traceback.print_exc()
+        sys.stdout.flush()
 
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
+    for noisy in ("httpx", "httpcore", "telegram", "telegram.ext", "urllib3"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)  # não vazar token na URL
+    print(">>> [launcher] bootstrap (wallet/state)", flush=True)
     _bootstrap()
+    print(">>> [launcher] iniciando thread do agente", flush=True)
     # Agente numa thread isolada (event loop próprio).
     threading.Thread(target=_run_agent, name="boomerang-agent", daemon=True).start()
+    print(">>> [launcher] subindo site (uvicorn)", flush=True)
     # Site público na thread principal — responde /healthz imediatamente.
     import uvicorn
     from boomerang.webapp.site import app
