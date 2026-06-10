@@ -12,12 +12,11 @@
         {{ "Experimente o painel de controle" if lang=="pt" else "Try the control panel" }}
       </h1>
       <p class="lead" style="font-size:1.05rem">
-        {{ "Ganhe um agente de demonstração só seu. Configure, opere e pause à vontade — tudo SIMULADO, sem dinheiro real e sem transação. Conecte a carteira (você só assina uma mensagem, sem gás) ou entre direto como convidado." if lang=="pt"
-           else "Get your own demo agent. Configure, trade and pause freely — all SIMULATED, no real money and no transaction. Connect your wallet (you only sign a message, no gas) or just enter as a guest." }}
+        {{ "Ganhe um agente de demonstração só seu. Configure, opere e pause à vontade — tudo SIMULADO, sem dinheiro real e sem transação. É só entrar e testar, sem precisar de carteira." if lang=="pt"
+           else "Get your own demo agent. Configure, trade and pause freely — all SIMULATED, no real money and no transaction. Just enter and try it, no wallet needed." }}
       </p>
-      <div style="margin-top:28px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-        <button class="btn btn--gold" id="btnConnect">🦊 {{ t.connect }}</button>
-        <button class="btn btn--ghost" id="btnGuest">{{ "Entrar sem carteira" if lang=="pt" else "Enter without a wallet" }}</button>
+      <div style="margin-top:28px">
+        <button class="btn btn--gold" id="btnGuest">{{ "Entrar na demo" if lang=="pt" else "Enter the demo" }}</button>
       </div>
       <p class="mono" id="loginMsg" style="margin-top:14px;font-size:.82rem;color:var(--faint)"></p>
     </div>

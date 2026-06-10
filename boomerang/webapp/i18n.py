@@ -19,7 +19,7 @@ NAV = [
 TR: dict[str, dict[str, str]] = {
     "en": {
         "tagline": "Autonomous trading agent on BNB Chain",
-        "connect": "Connect Wallet",
+        "connect": "Try the demo",
         "console": "Console",
         "foot_rights": "Built for BNB Hack · Track 1 · CoinMarketCap × Trust Wallet × BNB Chain",
         "foot_note": "Self-custodial. On-chain verifiable. Not financial advice.",
@@ -95,7 +95,7 @@ TR: dict[str, dict[str, str]] = {
     },
     "pt": {
         "tagline": "Agente de trading autônomo na BNB Chain",
-        "connect": "Conectar Carteira",
+        "connect": "Testar a demo",
         "console": "Console",
         "foot_rights": "Feito para o BNB Hack · Track 1 · CoinMarketCap × Trust Wallet × BNB Chain",
         "foot_note": "Autocustódia. Verificável on-chain. Não é recomendação financeira.",
