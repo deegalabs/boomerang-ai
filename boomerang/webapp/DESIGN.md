@@ -1,69 +1,72 @@
 # Boomerang AI — Design System
 
-> Direção estética: **"Terminal financeiro de luxo + movimento cinético de boomerang"**.
-> Fundo de espaço profundo com atmosfera, **dourado da BNB** como acento afiado,
-> tipografia de caráter e dados em monoespaçada. Tema **dark**.
+> Aesthetic direction: **"luxury financial terminal + kinetic boomerang motion".**
+> Deep-space background with atmosphere, **BNB gold** as a sharp accent, characterful
+> typography, and monospaced data. **Dark** theme.
 
-## Princípios
-1. **Clareza** acima de tudo — o leigo entende em segundos.
-2. **Confiança visível** — prova on-chain, números reais, segurança explicada.
-3. **Revelação progressiva** — simples por padrão, avançado sob demanda.
-4. **Segurança no controle** — ações que mexem em dinheiro pedem confirmação; chave nunca no browser.
-5. **Beleza com propósito** — atmosfera (mesh + grão), motion intencional, nada de enfeite vazio.
-6. **Bilíngue** EN/PT desde o esqueleto.
+## Principles
+1. **Clarity** above all — a layperson understands in seconds.
+2. **Visible trust** — on-chain proof, real numbers, security explained.
+3. **Progressive disclosure** — simple by default, advanced on demand.
+4. **Safety in control** — money-moving actions require confirmation; the key never reaches the browser.
+5. **Beauty with purpose** — atmosphere (mesh + grain), intentional motion, no empty decoration.
+6. **Bilingual** EN/PT from the skeleton up.
 
-## Cor (tokens em `static/css/app.css`)
-| Token | Hex | Uso |
+## Color (tokens in `static/css/app.css`)
+| Token | Hex | Use |
 |---|---|---|
-| `--bg` | `#06080F` | Fundo (espaço profundo) |
-| `--surface` | `#131A2A` | Cards/painéis |
-| `--line` | `#232C40` | Bordas |
-| `--gold` | `#F3BA2F` | **Acento principal** (BNB) |
-| `--gold-hi` | `#FBD66B` | Brilho/gradiente do dourado |
-| `--up` | `#34E5A4` | Lucro / positivo |
-| `--down` | `#FF6B6B` | Perda / negativo |
-| `--info` | `#5AA9FF` | Informação |
-| `--text` / `--muted` / `--faint` | `#EAEEF8` / `#93A0B8` / `#5C6880` | Texto |
+| `--bg` | `#06080F` | Background (deep space) |
+| `--surface` | `#131A2A` | Cards/panels |
+| `--line` | `#232C40` | Borders |
+| `--gold` | `#F3BA2F` | **Primary accent** (BNB) |
+| `--gold-hi` | `#FBD66B` | Gold glow/gradient |
+| `--up` | `#34E5A4` | Profit / positive |
+| `--down` | `#FF6B6B` | Loss / negative |
+| `--info` | `#5AA9FF` | Information |
+| `--text` / `--muted` / `--faint` | `#EAEEF8` / `#93A0B8` / `#5C6880` | Text |
 
-Atmosfera: `body::before` = mesh de gradientes radiais (gold + azul + verde) com deriva lenta; `body::after` = grão fino (SVG noise, opacidade 3,5%).
+Atmosphere: `body::before` = radial-gradient mesh (gold + blue + green) with slow drift; `body::after` = fine grain (SVG noise, 3.5% opacity).
 
-## Tipografia
-- **Display** — `Clash Display` (Fontshare): títulos, números de destaque. Caráter geométrico confiante.
-- **Body** — `Hanken Grotesk` (Google): texto corrido, limpo e quente.
-- **Data/Mono** — `JetBrains Mono` (Google): preços, %, hashes, rótulos técnicos (`tnum`).
+## Typography
+- **Display** — `Bricolage Grotesque` (Fontshare): headings, hero numbers. Confident, characterful.
+- **Body** — `Hanken Grotesk` (Google): running text, clean and warm.
+- **Data/Mono** — `JetBrains Mono` (Google): prices, %, hashes, technical labels (`tnum`).
 
-Escala: `.display` (clamp 2.6–5.2rem), `h2`, `h3`, `.lead`, `.eyebrow` (mono, tracking largo, dourado).
+Scale: `.display` (clamp 2.7–5.4rem), `h2`, `h3`, `.lead`, `.eyebrow` (mono, wide tracking, gold).
 
-## Componentes (classes utilitárias)
-- **Botões**: `.btn` + `.btn--gold` (CTA), `.btn--ghost`, `.btn--danger`, `.btn--sm`.
-- **Cards**: `.card`, `.card--glow` (fio dourado no topo), `.card__lbl` (rótulo mono).
-- **Stat tile**: `.stat` + `.v` (valor grande); combine com `.mono` / `.grad-gold`.
-- **Pills**: `.pill` + `.pill--up/--down/--gold`; `.dot` (ponto com glow).
-- **Tabela**: `.tbl` (cabeçalho mono, hover de linha).
-- **Controles**: `.field` + `.input` / `.select`; `.seg` (segmented control, opção `.on`).
-- **Marca**: `partials/mark.html` (boomerang SVG, gradiente dourado, leve inclinação).
+## Components (utility classes)
+- **Buttons**: `.btn` + `.btn--gold` (CTA), `.btn--ghost`, `.btn--danger`, `.btn--sm`.
+- **Cards**: `.card`, `.card--glow` (gold hairline on top), `.card__lbl` (mono label).
+- **Stat tile**: `.stat` + `.v` (large value); combine with `.mono` / `.grad-gold`.
+- **Pills**: `.pill` + `.pill--up/--down/--gold`; `.dot` (glowing dot).
+- **Table**: `.tbl` (mono header, row hover).
+- **Controls**: `.field` + `.input` / `.select`; `.seg` (segmented control, `.on` option).
+- **Brand**: `partials/mark.html` (boomerang SVG, gold gradient, slight tilt).
 
 ## Motion
-- Entrada: `.reveal` + `.d1…d6` (stagger no load).
-- Hero: boomerang gira em arco (`heroSpin`), trilha que "desenha" (`drawTrail`), órbitas (`spin`).
-- Hover: botões/cards sobem (translateY) com glow dourado.
-- Respeita `prefers-reduced-motion`.
+- Entrance: `.reveal` + `.d1…d6` (stagger on load).
+- Hero: the boomerang spins in an arc (`heroSpin`), a trail that "draws" (`drawTrail`), orbits (`spin`).
+- Hover: buttons/cards lift (translateY) with a gold glow.
+- Respects `prefers-reduced-motion`.
 
-## Estrutura de arquivos
+## File structure
 ```
 boomerang/webapp/
-  static/css/app.css      ← design system (tokens, componentes, motion)
-  static/js/app.js        ← interações leves (nav scroll, idioma, stub connect)
-  static/img/favicon.svg
+  site.py                 ← the production app (factory + `app`); serves all routes
+  static/css/app.css      ← design system (tokens, components, motion)
+  static/js/app.js        ← light interactions (nav scroll, language, wallet connect)
   templates/
-    base.html             ← shell (nav + idioma + rodapé)
-    partials/mark.html     ← marca boomerang
-    foundation.html        ← vitrine do design system (Fase 0)
-    placeholder.html       ← páginas "em breve"
-  i18n.py                 ← traduções EN/PT (server-side)
-scripts/preview_web.py    ← preview local na porta 8090
+    base.html             ← shell (nav + language + footer)
+    partials/mark.html     ← boomerang brand mark
+    landing.html           ← landing page
+    docs/, guides/         ← documentation + step-by-step guide (EN/PT)
+    live.html              ← live on-chain proof (reads /api/live)
+    console.html           ← demo console (simulated agent, wallet sign-in)
+    foundation.html        ← design-system showcase
+  i18n.py                 ← EN/PT translations (server-side)
+scripts/preview_web.py    ← thin local runner (imports site.py) on port 8090
 ```
 
-## Como ver
-`.venv\Scripts\python scripts\preview_web.py` → http://localhost:8090
-(Preview separado; não interfere no agente da porta 8080.)
+## How to view
+- Local dev: `.venv\Scripts\python scripts\preview_web.py` → http://localhost:8090
+- Production: `uvicorn boomerang.webapp.site:app` (the same app, behind TLS).
