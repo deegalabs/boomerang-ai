@@ -101,7 +101,11 @@ async def console_page(request):  # noqa: ANN001
     addr = auth.check_session(request.cookies.get(SESSION_COOKIE))
     ctx = {"request": request, "lang": lang, "t": strings(lang), "nav": nav_items(lang),
            "active": "/console", "authed": bool(addr), "owner_short": _short(addr or ""), "demo": True}
-    return _set_lang_cookie(request, templates.TemplateResponse(request, "console.html", ctx))
+    resp = _set_lang_cookie(request, templates.TemplateResponse(request, "console.html", ctx))
+    # Nunca cachear: a página depende do cookie de sessão. Sem isso, após o login
+    # o reload pode servir a versão de login em cache e "não entrar".
+    resp.headers["Cache-Control"] = "no-store, must-revalidate"
+    return resp
 
 
 async def auth_nonce(request):  # noqa: ANN001
