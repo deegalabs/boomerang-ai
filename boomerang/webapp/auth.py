@@ -23,7 +23,9 @@ from hashlib import sha256
 from eth_account import Account
 from eth_account.messages import encode_defunct
 
-_SESSION_SECRET = secrets.token_bytes(32)        # por processo
+# SESSION_SECRET (env, hex) mantém sessões válidas entre restarts (Railway reinicia
+# o container); sem ela, gera uma por processo (logins caem a cada deploy).
+_SESSION_SECRET = bytes.fromhex(_env) if (_env := os.getenv("SESSION_SECRET", "")) else secrets.token_bytes(32)
 _SESSION_TTL = 12 * 3600                          # 12h
 _NONCE_TTL = 600                                  # 10 min
 _nonces: dict[str, float] = {}                    # nonce -> expira_em

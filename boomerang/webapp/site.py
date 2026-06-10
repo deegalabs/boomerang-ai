@@ -14,8 +14,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import httpx
 from starlette.applications import Starlette
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
@@ -166,6 +167,29 @@ async def healthz(request):  # noqa: ANN001 — checagem de saúde p/ o reverse 
     return JSONResponse({"ok": True, "identity": identity.summary().get("registered", False)})
 
 
+# ── proxy x402 embutido ──────────────────────────────────────────────────────
+# Dá ao `twak x402` (que roda local, onde está a carteira de trade) um endpoint
+# PÚBLICO (a URL da Railway) que injeta o header Accept do MCP da CMC. Assim o
+# pagamento real liquida sem mover carteira nem subir VPS.
+_X402_TARGET = os.getenv("X402_TARGET", "https://mcp.coinmarketcap.com/x402/mcp")
+_X402_FWD = ("payment-signature", "x-payment", "x-payment-signature", "mcp-protocol-version")
+
+
+async def x402_proxy(request):  # noqa: ANN001
+    body = await request.body()
+    fwd = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+    for k, v in request.headers.items():
+        if k.lower() in _X402_FWD:
+            fwd[k] = v
+    try:
+        async with httpx.AsyncClient(timeout=40) as cx:
+            r = await cx.request(request.method, _X402_TARGET, content=body, headers=fwd)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"error": f"proxy upstream: {exc}"}, status_code=502)
+    out = {k: v for k, v in r.headers.items() if k.lower() in ("payment-required", "content-type")}
+    return Response(r.content, status_code=r.status_code, headers=out)
+
+
 def make_soon(path):  # noqa: ANN001
     async def handler(request):  # noqa: ANN001
         return _resp(request, "placeholder.html", path, SOON[path])
@@ -183,6 +207,8 @@ def create_app() -> Starlette:
         Route("/api/console/state", console_state),
         Route("/api/console/{name}", console_action, methods=["POST"]),
         Route("/healthz", healthz),
+        Route("/x402", x402_proxy, methods=["GET", "POST"]),
+        Route("/x402/{path:path}", x402_proxy, methods=["GET", "POST"]),
     ]
     for p in SOON:
         routes.append(Route(p, make_soon(p)))

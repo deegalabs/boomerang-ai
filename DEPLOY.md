@@ -1,5 +1,54 @@
 # Deploy — Boomerang AI (Fase 5)
 
+> **Caminho recomendado: Railway** (abaixo). A seção VPS/systemd vem depois, como alternativa.
+
+## Railway (recomendado)
+
+Arquitetura: o **site público** (com a rota `/x402` embutida) roda na Railway e ganha uma URL pública HTTPS. O **agente fica local** — a carteira de trade vive no keychain do TWAK e não pode ser exportada. O `twak` local liquida o x402 chamando a URL pública da Railway (`/x402`), que injeta o header que o MCP da CMC exige. Sem mover carteira, sem fundo novo.
+
+> Por que não Vercel: o site é Python renderizado no servidor (Starlette + Jinja2), não um frontend estático/Next. Vercel é serverless/estático e não roda nem o site server-side nem processos 24/7. Por isso, tudo na Railway.
+
+```bash
+# 1. CLI
+npm i -g @railway/cli
+railway login                     # abre o navegador
+
+# 2. projeto (na raiz do repo)
+railway init                      # cria o projeto
+railway up                        # faz o build/deploy (Nixpacks lê requirements.txt + railway.json)
+
+# 3. variáveis do SITE (mínimas — o site NÃO precisa dos segredos do agente)
+railway variables --set "SESSION_SECRET=$(python -c 'import secrets;print(secrets.token_hex(32))')"
+railway variables --set "OWNER_WALLET_ADDRESS=0x779126dd2937974118d67568d1bc5b69b84f059c"
+
+# 4. pegue a URL pública gerada (ex.: https://boomerang-ai-production.up.railway.app)
+railway domain
+```
+
+O `railway.json` já define o start (`uvicorn boomerang.webapp.site:app`) e o healthcheck (`/healthz`). O cartão de identidade ERC-8004 é versionado, então `/live` já mostra a prova on-chain assim que sobe.
+
+### Liquidar o x402 real (twak local → Railway)
+
+Com a URL pública no ar, rode o twak **na máquina onde está a carteira de trade**:
+
+```bash
+$URL=https://SEU-APP.up.railway.app
+twak x402 request --method POST \
+  --body '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_crypto_quotes_latest","arguments":{"symbol":"BNB"}}}' \
+  --max-payment 10000 --prefer-network base --prefer-method eip3009 --yes \
+  "$URL/x402"
+```
+
+Resposta 200 com dados = pagamento x402 liquidado on-chain, pago com o USDC que já está na carteira de trade. Para o agente usar dados pagos, defina no `.env` local: `X402_ENDPOINT=https://SEU-APP.up.railway.app/x402` (senão segue no REST grátis).
+
+### Agente na Railway (opcional, depois)
+
+Para o `/live` mostrar trades reais no site público, o agente precisa rodar junto (volume compartilhado p/ o estado) **ou** empurrar o snapshot pro site. A carteira do TWAK precisaria ser migrada (keychain → keystore em volume), o que exige cuidado. Por ora o agente roda local; dá pra adicionar um endpoint de ingestão de estado depois.
+
+---
+
+## VPS / systemd (alternativa)
+
 Como colocar no ar, numa VPS Linux, os três processos do Boomerang AI:
 
 1. **Agente** (`run_agent.py`) — opera 24/7, controlado pelo Telegram.
