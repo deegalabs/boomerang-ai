@@ -102,6 +102,18 @@ class BoomerangAgent:
                 self._log.warning("Equity on-chain indisponível (%s); usando TWAK.", exc)
         return self._executor.portfolio_usd(self._password)
 
+    def _stable_usd(self) -> float:
+        """Saldo da stable de trade (base_stable, ex.: USDC) em USD — o quanto o
+        agente REALMENTE pode gastar numa compra. Diferente da equity total (que
+        inclui posições abertas e gás). Lido do breakdown on-chain mais recente
+        (_last_holdings, atualizado por _equity_usd). Evita tentar comprar mais
+        stable do que existe (causa de swap revertido por saldo insuficiente)."""
+        base = str(self._cfg.dev_safety.get("base_stable_symbol", "USDC")).upper()
+        for h in self._last_holdings:
+            if str(h.get("symbol", "")).upper() == base:
+                return float(h.get("value_usd") or 0.0)
+        return 0.0
+
     # ── controle (chamado pela interface) ────────────────────────────────────
     def configure(self, *, token_focus: list[str] | None = None,
                   stop_loss_pct: float | None = None, take_profit_pct: float | None = None,
@@ -298,12 +310,13 @@ class BoomerangAgent:
             await self._emit(AlertType.ERROR, "Compra manual falhou", str(exc))
             return
         self._risk.update_equity(equity)
-        gate = self._risk.can_open_position(current_equity_usd=equity, available_stable_usd=equity,
+        stable = self._stable_usd()  # USDC real disponível (não a equity total)
+        gate = self._risk.can_open_position(current_equity_usd=equity, available_stable_usd=stable,
                                             open_positions=len(self.positions), now_ts=now)
         if not gate.allowed:
             await self._emit(AlertType.ERROR, "Compra manual bloqueada", gate.detail)
             return
-        size = self._risk.position_size_usd(equity, equity)
+        size = self._risk.position_size_usd(equity, stable)
         val = await asyncio.to_thread(
             self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size)
         if not val.ok:
@@ -343,6 +356,7 @@ class BoomerangAgent:
 
         self._risk.update_equity(equity)
         self._last_equity = equity  # cache p/ dashboard
+        stable = self._stable_usd()  # USDC real disponível p/ comprar (não a equity total)
         if self._risk.circuit_breaker_tripped(equity):
             await self.panic(f"Drawdown {self._risk.current_drawdown_pct(equity):.1f}% atingiu o gatilho.")
             return
@@ -370,7 +384,7 @@ class BoomerangAgent:
             if not addr:
                 continue
             gate = self._risk.can_open_position(
-                current_equity_usd=equity, available_stable_usd=equity,
+                current_equity_usd=equity, available_stable_usd=stable,
                 open_positions=len(self.positions), now_ts=now,
             )
             if not gate.allowed:
@@ -384,7 +398,7 @@ class BoomerangAgent:
             if not verdict.is_buy:
                 continue
 
-            size = self._risk.position_size_usd(equity, equity)
+            size = self._risk.position_size_usd(equity, stable)
             val = await asyncio.to_thread(
                 self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size,
                 cmc_price_usd=quotes[symbol].get("price_usd"),  # ativa checagem de oráculo
