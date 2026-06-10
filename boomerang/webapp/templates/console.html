@@ -12,13 +12,14 @@
         {{ "Experimente o painel de controle" if lang=="pt" else "Try the control panel" }}
       </h1>
       <p class="lead" style="font-size:1.05rem">
-        {{ "Conecte a sua carteira e ganhe um agente de demonstração só seu. Configure, opere e pause à vontade — tudo SIMULADO, sem dinheiro real e sem transação. Você só assina uma mensagem (sem gás) para entrar." if lang=="pt"
-           else "Connect your wallet and get your own demo agent. Configure, trade and pause freely — all SIMULATED, no real money and no transaction. You only sign a message (no gas) to enter." }}
+        {{ "Ganhe um agente de demonstração só seu. Configure, opere e pause à vontade — tudo SIMULADO, sem dinheiro real e sem transação. Conecte a carteira (você só assina uma mensagem, sem gás) ou entre direto como convidado." if lang=="pt"
+           else "Get your own demo agent. Configure, trade and pause freely — all SIMULATED, no real money and no transaction. Connect your wallet (you only sign a message, no gas) or just enter as a guest." }}
       </p>
-      <div style="margin-top:28px">
+      <div style="margin-top:28px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
         <button class="btn btn--gold" id="btnConnect">🦊 {{ t.connect }}</button>
-        <p class="mono" id="loginMsg" style="margin-top:14px;font-size:.82rem;color:var(--faint)"></p>
+        <button class="btn btn--ghost" id="btnGuest">{{ "Entrar sem carteira" if lang=="pt" else "Enter without a wallet" }}</button>
       </div>
+      <p class="mono" id="loginMsg" style="margin-top:14px;font-size:.82rem;color:var(--faint)"></p>
     </div>
     <div class="hero-stage"><div class="hero-glow"></div><div class="orbit"></div>
       <span style="font-size:120px;display:inline-flex">{% include "partials/mark.html" %}</span>
@@ -137,6 +138,16 @@ if (btnConnect) btnConnect.onclick = async () => {
     const signature = await window.ethereum.request({ method:"personal_sign", params:[r.message, addr] });
     const v = await (await fetch("/api/auth/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address:addr,message:r.message,signature})})).json();
     if (v.ok) { location.reload(); } else { msg("loginMsg", T.notOwner, "var(--down)"); }
+  } catch (e) { msg("loginMsg", (e.message||T.fail), "var(--down)"); }
+};
+
+// Entrar como convidado (sem carteira) — a demo é 100% simulada
+const btnGuest = document.getElementById("btnGuest");
+if (btnGuest) btnGuest.onclick = async () => {
+  try {
+    msg("loginMsg", T.connecting, "var(--faint)");
+    const v = await (await fetch("/api/auth/guest", {method:"POST"})).json();
+    if (v.ok) { location.reload(); } else { msg("loginMsg", T.fail, "var(--down)"); }
   } catch (e) { msg("loginMsg", (e.message||T.fail), "var(--down)"); }
 };
 

@@ -12,6 +12,7 @@ Telegram (dono) / pela carteira dona.
 from __future__ import annotations
 
 import os
+import secrets
 from pathlib import Path
 
 import httpx
@@ -122,6 +123,14 @@ async def auth_verify(request):  # noqa: ANN001 — DEMO: qualquer carteira (cad
     return resp
 
 
+async def auth_guest(request):  # noqa: ANN001 — DEMO: entra sem carteira (cada convidado = agente simulado próprio)
+    addr = "0x" + secrets.token_hex(20)  # carteira-convidado aleatória, só para a sessão demo
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(SESSION_COOKIE, auth.make_session(addr),
+                    httponly=True, samesite="lax", max_age=43200, path="/")
+    return resp
+
+
 async def auth_logout(request):  # noqa: ANN001
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(SESSION_COOKIE, path="/")
@@ -203,6 +212,7 @@ def create_app() -> Starlette:
         Route("/api/live", api_live), Route("/console", console_page),
         Route("/api/auth/nonce", auth_nonce, methods=["POST"]),
         Route("/api/auth/verify", auth_verify, methods=["POST"]),
+        Route("/api/auth/guest", auth_guest, methods=["POST"]),
         Route("/api/auth/logout", auth_logout, methods=["POST"]),
         Route("/api/console/state", console_state),
         Route("/api/console/{name}", console_action, methods=["POST"]),

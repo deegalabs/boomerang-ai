@@ -72,7 +72,5 @@
   sections.forEach((s) => obs.observe(s));
 })();
 
-// Stub: conexão de carteira (Sign-In with Ethereum) — implementado na Fase 4.
-window.boomerangConnect = async function () {
-  alert("Conexão de carteira (Sign-In with Ethereum) chega na Fase 4 — Console privado.");
-};
+// The nav "Connect Wallet" is a link to /console, where the real login lives
+// (wallet via SIWE, or guest mode without a wallet). Nothing to do here.
