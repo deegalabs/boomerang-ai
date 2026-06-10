@@ -1,0 +1,22 @@
+# Segredos e dados que NUNCA devem entrar na imagem (chegam via env var em runtime).
+.env
+.env.*
+identity_wallet/
+state/
+tools/
+~/.twak/
+
+# Pesados / desnecessários no build.
+.venv/
+venv/
+node_modules/
+.git/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+logs/
+*.log
+.idea/
+.vscode/
