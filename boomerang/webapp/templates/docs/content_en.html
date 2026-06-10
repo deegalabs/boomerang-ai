@@ -164,6 +164,18 @@ cp .env.example .env</code></div>
     <p>Confirm with <strong>Activate</strong> and that is it: the agent starts trading and notifies you on every action.</p>
   </div></div>
 
+  <div class="step"><div class="n">4</div><div class="st-body">
+    <p><strong>Keep it running 24/7 (in the cloud).</strong> So the agent works without keeping your computer on, host it on <a href="https://railway.com" target="_blank" rel="noopener">Railway</a> (that is where the official instance runs). In four steps:</p>
+    <ul>
+      <li>Create the Railway account, install the CLI and log in: <code>npm i -g @railway/cli</code> then <code>railway login</code>.</li>
+      <li>In the project folder: <code>railway init</code> and create a volume for the state: <code>railway volume add -m /app/state</code>.</li>
+      <li>Send your secrets and the (encrypted) wallet to Railway <strong>without exposing values</strong>: <code>python scripts/railway_setvars.py</code>. Also set <code>SESSION_SECRET</code> and <code>OWNER_WALLET_ADDRESS</code>.</li>
+      <li>Publish and get the link: <code>railway up</code> and <code>railway domain</code>.</li>
+    </ul>
+    <p>Done: the bot and the site stay up around the clock. The full walkthrough (what each command does) is in the project's <code>DEPLOY.md</code>.</p>
+    <div class="callout callout--warn"><span class="ico">🔒</span><p>When hosted, the key (encrypted) and the password live as protected variables on the provider, not on your PC. This is how any 24/7 bot works, so start with a small bankroll. And do not run the agent from your PC alongside the cloud one: two agents on the same wallet conflict.</p></div>
+  </div></div>
+
   <div class="callout callout--info"><span class="ico">📊</span><p>At any time, send <code>/status</code> to see equity, positions and live profit, or <code>/dashboard</code> to open the visual panel. In an emergency, <code>/panic</code> liquidates everything and halts the agent.</p></div>
 </section>
 

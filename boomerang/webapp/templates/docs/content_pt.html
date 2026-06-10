@@ -164,6 +164,18 @@ cp .env.example .env</code></div>
     <p>Confirme em <strong>Ativar</strong> e pronto: o agente começa a operar e te avisa a cada ação.</p>
   </div></div>
 
+  <div class="step"><div class="n">4</div><div class="st-body">
+    <p><strong>Deixe rodando 24/7 (na nuvem).</strong> Para o agente trabalhar sem deixar seu computador ligado, hospede-o na <a href="https://railway.com" target="_blank" rel="noopener">Railway</a> (é onde a instância oficial roda). Em quatro passos:</p>
+    <ul>
+      <li>Crie a conta na Railway, instale a CLI e entre: <code>npm i -g @railway/cli</code> e depois <code>railway login</code>.</li>
+      <li>Na pasta do projeto: <code>railway init</code> e crie um volume para o estado: <code>railway volume add -m /app/state</code>.</li>
+      <li>Envie seus segredos e a carteira (cifrada) para a Railway <strong>sem expor valores</strong>: <code>python scripts/railway_setvars.py</code>. Defina também <code>SESSION_SECRET</code> e <code>OWNER_WALLET_ADDRESS</code>.</li>
+      <li>Publique e pegue o link: <code>railway up</code> e <code>railway domain</code>.</li>
+    </ul>
+    <p>Pronto: o bot e o site ficam no ar o tempo todo. O passo a passo completo (com o que cada comando faz) está no arquivo <code>DEPLOY.md</code> do projeto.</p>
+    <div class="callout callout--warn"><span class="ico">🔒</span><p>Ao hospedar, a chave (cifrada) e a senha ficam guardadas como variáveis protegidas no provedor, não no seu PC. É assim que qualquer bot 24/7 funciona; por isso comece com uma banca pequena. E não rode o agente do seu PC junto com o da nuvem: dois agentes na mesma carteira entram em conflito.</p></div>
+  </div></div>
+
   <div class="callout callout--info"><span class="ico">📊</span><p>A qualquer momento, mande <code>/status</code> para ver patrimônio, posições e lucro ao vivo, ou <code>/dashboard</code> para abrir o painel visual. Em emergência, <code>/panic</code> liquida tudo e trava o agente.</p></div>
 </section>
 
