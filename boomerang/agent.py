@@ -116,27 +116,32 @@ class BoomerangAgent:
 
     async def _reconcile_positions(self) -> None:
         """Descarta posições que não existem mais on-chain (vendidas por fora do
-        agente, ou que viraram pó). Mantém o estado fiel à carteira: sem isso, uma
-        venda manual deixa 'posições fantasma' que o monitor tenta gerir em vão."""
+        agente, ou que viraram pó). Compara o SALDO REAL do token (não o valor em
+        USD, que pode vir com preço-lixo de token de liquidez fina) com a quantidade
+        registrada. Sem isso, uma venda manual deixa 'posições fantasma'."""
         if not self.positions or not self.agent_address:
             return
-        try:
-            bd = await asyncio.to_thread(self._validator.wallet_breakdown, self.agent_address)
-        except Exception as exc:  # noqa: BLE001
-            self._log.warning("Reconciliação pulada (breakdown indisponível): %s", exc)
-            return
-        held = {str(h.get("symbol", "")).upper(): float(h.get("value_usd") or 0.0)
-                for h in bd.get("holdings", [])}
+
+        def _onchain_qty(pos: Position) -> float:
+            raw = self._validator._token_balance(pos.token_address, self.agent_address)
+            return raw / (10 ** self._validator._decimals(pos.token_address))
+
         kept, dropped = [], []
         for pos in self.positions:
-            if held.get(pos.symbol.upper(), 0.0) >= 0.15:  # > pó; posição real começa em ~$1
+            try:
+                onchain = await asyncio.to_thread(_onchain_qty, pos)
+            except Exception as exc:  # noqa: BLE001
+                self._log.warning("Reconciliação: não checou %s (%s); mantendo.", pos.symbol, exc)
+                kept.append(pos)
+                continue
+            if pos.qty > 0 and onchain >= pos.qty * 0.20:  # ainda há o grosso da posição
                 kept.append(pos)
             else:
                 dropped.append(pos.symbol)
         if dropped:
             self.positions = kept
             self._save()
-            self._log.info("Reconciliação: %d posição(oes) descartada(s) (não há mais on-chain): %s",
+            self._log.info("Reconciliação: descartei %d posição(oes) sem saldo on-chain: %s",
                            len(dropped), ", ".join(dropped))
 
     # ── controle (chamado pela interface) ────────────────────────────────────

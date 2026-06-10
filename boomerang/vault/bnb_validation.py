@@ -218,7 +218,14 @@ class BNBValidator:
         if tokens_raw <= 0:
             raise ValueError(f"Sem rota de preço (V2/V3) para {token}.")
         tokens = tokens_raw / (10 ** self._decimals(token))
-        return 1.0 / tokens if tokens > 0 else 0.0
+        price = 1.0 / tokens if tokens > 0 else 0.0
+        # Sanidade: a sonda direta V2/V3 dá preço-lixo em token de liquidez fina
+        # (ex.: ATOM saiu $5927; em alguns nós, milhões), inflando equity e risco.
+        # Nenhum token elegível passa de ~$2k (ETH). Acima de $5k = sonda quebrada:
+        # trata como SEM preço (o wallet_breakdown ignora; não entra na equity).
+        if price <= 0 or price > 5000:
+            raise ValueError(f"Preço on-chain implausível para {token}: ${price:.2f}")
+        return price
 
     def _token_balance(self, token_address: str, holder: str) -> int:
         erc20 = self.w3.eth.contract(address=Web3.to_checksum_address(token_address), abi=_ERC20_ABI)
