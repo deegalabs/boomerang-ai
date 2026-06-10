@@ -2,48 +2,52 @@
 
 > **Caminho recomendado: Railway** (abaixo). A seção VPS/systemd vem depois, como alternativa.
 
-## Railway (recomendado)
+## Railway (deploy oficial)
 
-Arquitetura: o **site público** (com a rota `/x402` embutida) roda na Railway e ganha uma URL pública HTTPS. O **agente fica local** — a carteira de trade vive no keychain do TWAK e não pode ser exportada. O `twak` local liquida o x402 chamando a URL pública da Railway (`/x402`), que injeta o header que o MCP da CMC exige. Sem mover carteira, sem fundo novo.
+Arquitetura real: **um único serviço** na Railway roda o **site público + o agente 24/7** no mesmo container ([`Dockerfile`](Dockerfile) Python 3.12 + Node 20 + TWAK CLI). O entrypoint [`railway_start.py`](railway_start.py) sobe o **site** (uvicorn, thread principal, responde `/healthz` na hora) e o **agente** (thread própria), compartilhando um **volume** (`/app/state`) para o estado, então o `/live` mostra os trades reais. É a **mesma carteira** de trade: o keystore **cifrado** (`~/.twak/wallet.json`) e o estado inicial são materializados no boot a partir de env vars base64 — nada de migrar fundos, nada de chave crua.
 
-> Por que não Vercel: o site é Python renderizado no servidor (Starlette + Jinja2), não um frontend estático/Next. Vercel é serverless/estático e não roda nem o site server-side nem processos 24/7. Por isso, tudo na Railway.
+> Por que não Vercel: o site é Python renderizado no servidor (Starlette + Jinja2) e o agente é um processo 24/7. Vercel é serverless/estático e não roda nenhum dos dois. Por isso, tudo na Railway.
 
 ```bash
-# 1. CLI
+# 1. CLI + login
 npm i -g @railway/cli
-railway login                     # abre o navegador
+railway login
 
-# 2. projeto (na raiz do repo)
-railway init                      # cria o projeto
-railway up                        # faz o build/deploy (Nixpacks lê requirements.txt + railway.json)
+# 2. projeto + volume de estado (na raiz do repo)
+railway init                          # cria o projeto
+railway volume add -m /app/state      # posições sobrevivem a restart
 
-# 3. variáveis do SITE (mínimas — o site NÃO precisa dos segredos do agente)
+# 3. variáveis: migra os segredos do .env + o keystore cifrado + o estado,
+#    SEM imprimir valores (gera TWAK_WALLET_JSON_B64 e STATE_SEED_B64 em base64)
+python scripts/railway_setvars.py
 railway variables --set "SESSION_SECRET=$(python -c 'import secrets;print(secrets.token_hex(32))')"
-railway variables --set "OWNER_WALLET_ADDRESS=0x779126dd2937974118d67568d1bc5b69b84f059c"
+railway variables --set "OWNER_WALLET_ADDRESS=0x...sua_carteira_pessoal..."
 
-# 4. pegue a URL pública gerada (ex.: https://boomerang-ai-production.up.railway.app)
+# 4. build/deploy + URL pública
+railway up --detach
 railway domain
 ```
 
-O `railway.json` já define o start (`uvicorn boomerang.webapp.site:app`) e o healthcheck (`/healthz`). O cartão de identidade ERC-8004 é versionado, então `/live` já mostra a prova on-chain assim que sobe.
+O [`railway.json`](railway.json) usa o builder Dockerfile, start `python railway_start.py` e healthcheck `/healthz`. O [`.dockerignore`](.dockerignore) garante que `.env`, `identity_wallet/` e `state/` **nunca** entram na imagem — os segredos chegam só como variáveis de ambiente protegidas da Railway, em runtime.
 
-### Liquidar o x402 real (twak local → Railway)
+**Verificar** (`railway logs -d`): deve aparecer `Equity inicial (on-chain)`, `Estado restaurado`, `Identidade ERC-8004`, `Bot do Telegram em polling` e o `CICLO`. O `/api/live` público mostra `IN_POSITION`/equity/holdings reais.
 
-Com a URL pública no ar, rode o twak **na máquina onde está a carteira de trade**:
+> **Segurança (cloud):** o keystore cifrado **e** a `WALLET_PASSWORD` vivem na Railway, então a chave é decifrável no provedor. É inerente a qualquer bot hospedado; a banca pequena limita o risco. Os segredos ficam só nas env vars (nunca no repo/imagem). **Rotacione o `TELEGRAM_BOT_TOKEN`** (no @BotFather) se ele já tiver aparecido em log antes do filtro de logging.
+
+### x402 real
+
+O `twak` agora roda **dentro do container** (mesma imagem). A rota `/x402` do próprio site injeta o header que o MCP da CMC exige, então o pagamento pay-per-call pode ser liquidado da nuvem ou da máquina local apontando para a URL pública:
 
 ```bash
-$URL=https://SEU-APP.up.railway.app
 twak x402 request --method POST \
-  --body '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_crypto_quotes_latest","arguments":{"symbol":"BNB"}}}' \
+  --body '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_global_metrics_latest","arguments":{}}}' \
   --max-payment 10000 --prefer-network base --prefer-method eip3009 --yes \
-  "$URL/x402"
+  https://SEU-APP.up.railway.app/x402
 ```
 
-Resposta 200 com dados = pagamento x402 liquidado on-chain, pago com o USDC que já está na carteira de trade. Para o agente usar dados pagos, defina no `.env` local: `X402_ENDPOINT=https://SEU-APP.up.railway.app/x402` (senão segue no REST grátis).
+Resposta 200 com dados = pagamento liquidado on-chain ($0.01 em USDC na Base). Em operação normal os dados vêm via **REST grátis** (não defina `X402_ENDPOINT`); o x402 real é prova/demo, não custo por ciclo.
 
-### Agente na Railway (opcional, depois)
-
-Para o `/live` mostrar trades reais no site público, o agente precisa rodar junto (volume compartilhado p/ o estado) **ou** empurrar o snapshot pro site. A carteira do TWAK precisaria ser migrada (keychain → keystore em volume), o que exige cuidado. Por ora o agente roda local; dá pra adicionar um endpoint de ingestão de estado depois.
+> **Não rode o agente local junto** com o da Railway: dois agentes na mesma carteira entram em conflito.
 
 ---
 

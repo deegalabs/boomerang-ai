@@ -21,7 +21,7 @@
   <p>Before spending anything, the agent simulates the trade on the chain itself: it checks whether there is <strong>real liquidity</strong> to buy and, above all, to <strong>sell later</strong>. It rejects coins with hidden taxes or abnormal prices. The golden rule: <strong>if it cannot exit cleanly, it does not enter</strong>.</p>
 
   <h3>3. The execution shield (the hands and the vault)</h3>
-  <p>Once approved, the agent signs and sends the transaction using the <strong>Trust Wallet Agent Kit</strong>. Signing happens locally, on your machine: the key that moves the money <strong>never leaves it</strong>. This is called self-custody.</p>
+  <p>Once approved, the agent signs and sends the transaction using the <strong>Trust Wallet Agent Kit</strong>. The agent itself signs, with the key that moves the money kept <strong>encrypted</strong> in the agent's own environment. It <strong>never appears</strong> in the browser, the site, or the code. This is called self-custody.</p>
 
   <div class="callout callout--ok"><span class="ico">🪃</span><p>The cycle in short: <strong>signal, checks, trade, and the capital returns to you</strong>. Like a boomerang.</p></div>
 </section>
@@ -32,7 +32,7 @@
   <h2>Security and privacy</h2>
   <p>The money is yours, the rules are yours, and the key is yours. These are the principles:</p>
   <ul>
-    <li><strong>Self-custody.</strong> The private key (the "master password" that moves funds) is stored locally and never appears in the browser, the site, or the code.</li>
+    <li><strong>Self-custody.</strong> The wallet belongs to the agent itself (it is not held on an exchange). The private key (the "master password" that moves funds) is stored <strong>encrypted</strong> and never appears in the browser, the site, or the code.</li>
     <li><strong>Isolation.</strong> The part that "thinks" (reads the market) has no access to the key; the part that "holds" the money is not exposed to the internet.</li>
     <li><strong>Manipulation-proof.</strong> The AI only receives <strong>structured numbers</strong>, never loose text someone could use to trick it.</li>
     <li><strong>Owner lock.</strong> Only you command the agent, confirmed by your wallet signature.</li>
@@ -89,7 +89,7 @@ pip install -r requirements.txt</code></div>
       <li><strong>CoinMarketCap.</strong> At <a href="https://coinmarketcap.com/api" target="_blank" rel="noopener">coinmarketcap.com/api</a>, get your API key. The "eyes".</li>
       <li><strong>Trust Wallet (TWAK).</strong> At <a href="https://portal.trustwallet.com" target="_blank" rel="noopener">portal.trustwallet.com</a>, create an app and copy the <em>Access ID</em> and <em>HMAC Secret</em> (the secret is shown only once). The "hands".</li>
     </ul>
-    <div class="callout callout--warn"><span class="ico">🔒</span><p>Never share these keys or put them in screenshots. They go only in your <code>.env</code> file (explained next), which is never uploaded anywhere.</p></div>
+    <div class="callout callout--warn"><span class="ico">🔒</span><p>Never share these keys or put them in screenshots. They live in your <code>.env</code> file (explained next), which is <strong>never committed</strong> (it does not go to Git or the site). When you host the agent, you set them as protected environment variables on the provider.</p></div>
   </div></div>
 
   <div class="step"><div class="n">5</div><div class="st-body">
@@ -151,7 +151,7 @@ cp .env.example .env</code></div>
   <div class="step"><div class="n">2</div><div class="st-body">
     <p><strong>Start the agent:</strong></p>
     <div class="codeblock"><code>python run_agent.py</code></div>
-    <p>It starts up, connects to Telegram and is ready. (To just test without real money, use <code>python run_agent.py --paper</code>, which simulates trades.)</p>
+    <p>It starts up, connects to Telegram and is ready. (To just test without real money, use <code>python run_agent.py --paper</code>, which simulates trades.) To run <strong>24/7 without keeping your computer on</strong>, the agent runs hosted in the cloud; the official instance runs on Railway, with the key kept encrypted in the agent's environment.</p>
   </div></div>
 
   <div class="step"><div class="n">3</div><div class="st-body">

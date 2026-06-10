@@ -53,11 +53,14 @@ Ele guia: (a) credenciais, (b) wiring, (c) criar carteira. Se preferir manual:
 
 ## 5. Criar e fundear a carteira do agente (15 min) 💰
 
-1. Crie a carteira local (autocustódia — a chave fica no seu keychain):
+1. Crie a carteira do agente (autocustódia — a seed fica num keystore **cifrado** do twak,
+   protegido pela senha):
    ```bash
    twak wallet create --password "UMA_SENHA_FORTE"
    ```
    → Guarde a senha em `WALLET_PASSWORD`. **Anote a seed** em local seguro (offline).
+   No deploy hospedado, esse keystore cifrado vai pro provedor como variável de ambiente
+   (ver `DEPLOY.md`); a senha também. A chave nunca aparece no site/navegador/código.
 2. Veja o endereço do agente na BSC:
    ```bash
    twak wallet address --chain bsc

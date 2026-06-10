@@ -21,7 +21,7 @@
   <p>Antes de gastar qualquer valor, o agente simula a operação na própria blockchain: confere se existe <strong>liquidez de verdade</strong> para comprar e, principalmente, para <strong>vender depois</strong>. Ele rejeita moedas com taxas escondidas ou preços fora do normal. A regra de ouro: <strong>se não dá para sair limpo, não entra</strong>.</p>
 
   <h3>3. O escudo de execução (as mãos e o cofre)</h3>
-  <p>Aprovado, o agente assina e envia a transação usando o <strong>Trust Wallet Agent Kit</strong>. A assinatura acontece localmente, na sua máquina: a chave que move o dinheiro <strong>nunca sai dali</strong>. Isso se chama autocustódia.</p>
+  <p>Aprovado, o agente assina e envia a transação usando o <strong>Trust Wallet Agent Kit</strong>. A assinatura é feita pelo próprio agente, com a chave que move o dinheiro guardada <strong>cifrada</strong> no ambiente do agente. Ela <strong>nunca aparece</strong> no navegador, no site nem no código. Isso se chama autocustódia.</p>
 
   <div class="callout callout--ok"><span class="ico">🪃</span><p>Resumo do ciclo: <strong>sinal, checagem, operação, e o capital volta para você</strong>. Como um boomerang.</p></div>
 </section>
@@ -32,7 +32,7 @@
   <h2>Segurança e privacidade</h2>
   <p>O dinheiro é seu, as regras são suas, e a chave é sua. Esses são os princípios:</p>
   <ul>
-    <li><strong>Autocustódia.</strong> A chave privada (a "senha mestra" que move os fundos) fica guardada localmente e nunca aparece no navegador, no site ou no código.</li>
+    <li><strong>Autocustódia.</strong> A carteira é do próprio agente (não fica numa corretora). A chave privada (a "senha mestra" que move os fundos) fica guardada <strong>cifrada</strong> e nunca aparece no navegador, no site ou no código.</li>
     <li><strong>Isolamento.</strong> A parte que "pensa" (lê o mercado) não tem acesso à chave; a parte que "guarda" o dinheiro não fica exposta à internet.</li>
     <li><strong>Proteção contra manipulação.</strong> A inteligência artificial só recebe <strong>números organizados</strong>, nunca texto solto que alguém poderia usar para enganá-la.</li>
     <li><strong>Trava de dono.</strong> Só você comanda o agente, confirmado pela assinatura da sua carteira.</li>
@@ -89,7 +89,7 @@ pip install -r requirements.txt</code></div>
       <li><strong>CoinMarketCap.</strong> Em <a href="https://coinmarketcap.com/api" target="_blank" rel="noopener">coinmarketcap.com/api</a>, pegue sua chave de API. São os "olhos".</li>
       <li><strong>Trust Wallet (TWAK).</strong> Em <a href="https://portal.trustwallet.com" target="_blank" rel="noopener">portal.trustwallet.com</a>, crie um app e copie o <em>Access ID</em> e o <em>HMAC Secret</em> (o secret aparece uma única vez). São as "mãos".</li>
     </ul>
-    <div class="callout callout--warn"><span class="ico">🔒</span><p>Nunca compartilhe essas chaves nem as coloque em prints. Elas vão só no seu arquivo <code>.env</code> (explicado adiante), que nunca é enviado para lugar nenhum.</p></div>
+    <div class="callout callout--warn"><span class="ico">🔒</span><p>Nunca compartilhe essas chaves nem as coloque em prints. Elas ficam no seu arquivo <code>.env</code> (explicado adiante), que <strong>nunca é versionado</strong> (não vai pro Git nem pro site). Ao hospedar o agente, você as configura como variáveis de ambiente protegidas no provedor.</p></div>
   </div></div>
 
   <div class="step"><div class="n">5</div><div class="st-body">
@@ -151,7 +151,7 @@ cp .env.example .env</code></div>
   <div class="step"><div class="n">2</div><div class="st-body">
     <p><strong>Ligue o agente:</strong></p>
     <div class="codeblock"><code>python run_agent.py</code></div>
-    <p>Ele inicia, conecta ao Telegram e fica pronto. (Para apenas testar sem dinheiro real, use <code>python run_agent.py --paper</code>, que simula as operações.)</p>
+    <p>Ele inicia, conecta ao Telegram e fica pronto. (Para apenas testar sem dinheiro real, use <code>python run_agent.py --paper</code>, que simula as operações.) Para operar <strong>24/7 sem deixar seu computador ligado</strong>, o agente roda hospedado na nuvem; a instância oficial roda na Railway, com a chave guardada cifrada no ambiente do agente.</p>
   </div></div>
 
   <div class="step"><div class="n">3</div><div class="st-body">

@@ -38,10 +38,17 @@ Documento mapeado nos arquivos reais do projeto.
      (MCP + x402)        (PancakeSwap)         Agent Kit (twak)
 ```
 
-**Princípio de isolamento:** o bot (que fala com a internet) **nunca** acessa a
-chave. Ele só envia *intenções de controle* e recebe *alertas*. A chave vive no
-keychain do `twak`, no lado do agente. (v1: barramento em processo; a costura
-permite virar IPC real entre processos na fase de endurecimento.)
+**Princípio de isolamento:** o bot/site (que fala com a internet) **nunca** acessa
+a chave. Ele só envia *intenções de controle* e recebe *alertas*. A chave vive no
+**keystore cifrado** do `twak`, no lado do agente. (v1: barramento em processo, um
+único container no deploy; a costura permite virar IPC real entre processos na fase
+de endurecimento.)
+
+> **Onde roda (deploy):** a instância oficial roda na **Railway**, agente + site num
+> único container. O keystore cifrado e a senha vivem como variáveis de ambiente
+> protegidas do provedor (não no repositório nem na imagem). A assinatura acontece no
+> ambiente do agente, nunca no navegador/site. Continua **autocustódia** (carteira
+> própria do agente, saque travado no dono), mas a chave não fica "na sua máquina".
 
 ---
 
@@ -74,7 +81,7 @@ reprovar para o trade ser abortado **antes** de tocar no dinheiro.
                                           │ aprovado (min_out calculado)
    ┌──────────────────────────────────────▼────────────────────────────────┐
    │ 3️⃣ FILTRO 3 — Execução (twak_executor.py)                              │
-   │   sob mutex: twak swap USDT→token (assinatura LOCAL) → abre posição    │
+   │   sob mutex: twak swap USDT→token (assinatura no cofre) → abre posição │
    │   com stop-loss inicial. Emite alerta TRADE_OPENED.                    │
    └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -137,7 +144,8 @@ para cada posição:
 | Taxa oculta / honeypot          | round-trip retention (bnb_validation)              |
 | Oráculo atrasado ("faca caindo")| divergência CMC×pool (bnb_validation)              |
 | Loop infinito / spam de gás     | mutex + cooldown (risk_engine)                     |
-| Roubo de chave                  | chave no keychain do twak; bot sem acesso          |
+| Roubo de chave                  | chave no keystore cifrado do twak; bot/site sem acesso |
+| Exposição no host (cloud)       | segredos como env vars protegidas; nunca no repo/imagem; banca pequena limita o risco |
 | Drawdown catastrófico / DQ      | circuit breaker determinístico (risk_engine)       |
 
 ---
@@ -147,7 +155,7 @@ para cada posição:
 - **CoinMarketCap (Agent Hub):** Filtro 1 consome dados via MCP + paga via x402
   → concorre ao "Best Use of Agent Hub".
 - **Trust Wallet (TWAK):** única camada de execução, múltiplas superfícies
-  (assinatura + modo autônomo + x402), autocustódia local → mira a rubrica do
+  (assinatura + modo autônomo + x402), autocustódia → mira a rubrica do
   "Best Use of TWAK" (ver memory/boomerang-ai-twak-rubrica).
 - **BNB AI Agent SDK:** identidade on-chain do agente (ERC-8004) → "Best Use of BNB SDK".
 - **Track 1 (PnL):** os guardrails determinísticos maximizam retorno sem estourar
