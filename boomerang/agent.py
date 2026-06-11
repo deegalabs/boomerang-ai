@@ -675,23 +675,37 @@ class BoomerangAgent:
         return False
 
     async def _sell(self, pos: Position, *, reason: str, exit_price: float | None = None) -> None:
+        def _do_sell():
+            return self._executor.sell_all(
+                token=pos.token_address, amount=pos.qty, password=self._password)
         with self._risk.trade_lock:
-            res = await asyncio.to_thread(
-                self._executor.sell_all, token=pos.token_address, amount=pos.qty, password=self._password,
-            )
+            res = await asyncio.to_thread(_do_sell)
+        # 1ª venda de um token exige approval (token→router); o swap pode reverter antes
+        # dela minerar. Re-tenta UMA vez após ~20s (igual à compra). Sleep fora do lock.
+        if not res.ok and res.error and any(
+                k in res.error.lower() for k in ("allowance", "approval was sent")):
+            self._log.info("Approval de venda enviado p/ %s; aguardando ~20s e re-tentando.", pos.symbol)
+            await asyncio.sleep(20)
+            with self._risk.trade_lock:
+                res = await asyncio.to_thread(_do_sell)
+        if not res.ok:
+            # NÃO remove a posição: o token segue na carteira → continua gerenciado e
+            # vendível (evita virar holding órfão sem stop). Só avisa a falha.
+            self._log.warning("Venda de %s falhou: %s (posição mantida).", pos.symbol, res.error)
+            await self._emit(AlertType.ERROR, f"Venda falhou: {pos.symbol}",
+                             (res.error or "") + " — posição mantida; tente de novo.")
+            return
         if pos in self.positions:
             self.positions.remove(pos)
         self._risk.record_trade(time.time())
-        self._log.info("TRADE FECHADO | %s motivo=%s | tx=%s", pos.symbol, reason,
-                       res.tx_hash if res.ok else f"FALHA: {res.error}")
+        self._log.info("TRADE FECHADO | %s motivo=%s | tx=%s", pos.symbol, reason, res.tx_hash)
         pnl_pct = ((exit_price - pos.entry_price) / pos.entry_price * 100.0) if exit_price else None
         append_trade({"type": "close", "symbol": pos.symbol, "reason": reason,
-                      "pnl_pct": pnl_pct, "tx": res.tx_hash if res.ok else None, "ts": time.time()})
+                      "pnl_pct": pnl_pct, "tx": res.tx_hash, "ts": time.time()})
         await self._emit(AlertType.TRADE_CLOSED, f"Posição encerrada: {pos.symbol}",
                          "", reason=reason, pnl_pct=pnl_pct,
                          entry=pos.entry_price, exit=exit_price, amount_usd=pos.amount_usd,
-                         tx=res.tx_hash if res.ok else None,
-                         error=None if res.ok else res.error)
+                         tx=res.tx_hash)
         self._save()
         await self._publish_reputation()  # SKILL: atualiza reputação on-chain (best-effort)
 
