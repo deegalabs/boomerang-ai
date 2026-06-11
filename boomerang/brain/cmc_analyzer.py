@@ -340,13 +340,21 @@ class AttentionAnalyzer:
         """Conveniência: global + por-token juntos (uso avulso)."""
         return {**await self.gather_global(), **await self.gather_token(symbol)}
 
+    def _effective_cut(self, metrics: dict | None) -> int:
+        """Corte de confiança ADAPTATIVO ao regime de mercado. Momentum/tendência
+        forte abaixa a barra (deixa entrar quando há sinal claro); mercado fraco
+        mantém a barra alta (evita operar ruído). Determinístico e explicável;
+        nunca abaixo de 50 (não opera puro ruído). Resolve o '70 fixo nunca bate'."""
+        base = self._cfg.min_confidence_score
+        bonus = min(int(momentum_prescore(metrics) * 0.18), 15)  # tendência forte: -até 15 pts
+        return max(base - bonus, 50)
+
     async def evaluate(self, symbol: str, raw_metrics: dict | None = None) -> Verdict:
         metrics = raw_metrics if raw_metrics is not None else await self.gather_metrics(symbol)
         clean = sanitize_metrics(metrics) or {}
-        verdict = await self._ask_llm(symbol, clean)
-        return verdict
+        return await self._ask_llm(symbol, clean, self._effective_cut(metrics))
 
-    async def _ask_llm(self, symbol: str, clean_metrics: dict) -> Verdict:
+    async def _ask_llm(self, symbol: str, clean_metrics: dict, cut: int) -> Verdict:
         from anthropic import AsyncAnthropic
 
         client = AsyncAnthropic(api_key=self._cfg.secrets.anthropic_api_key)
@@ -363,16 +371,16 @@ class AttentionAnalyzer:
             tool_choice={"type": "tool", "name": "submit_verdict"},
             messages=[{"role": "user", "content": user}],
         )
-        return self._parse_verdict(symbol, msg)
+        return self._parse_verdict(symbol, msg, cut)
 
-    def _parse_verdict(self, symbol: str, msg) -> Verdict:  # noqa: ANN001
+    def _parse_verdict(self, symbol: str, msg, cut: int) -> Verdict:  # noqa: ANN001
         for block in msg.content:
             if getattr(block, "type", None) == "tool_use" and block.name == "submit_verdict":
                 data = block.input
                 score = int(data.get("confidence_score", 0))
                 # AÇÃO DETERMINÍSTICA: derivada do score pelo código, não pela
                 # palavra do LLM (que pode ser inconsistente). score é o sinal;
-                # o limiar é política nossa.
-                action = Action.BUY if score >= self._cfg.min_confidence_score else Action.HOLD
+                # o limiar (`cut`) é política nossa, ADAPTATIVA ao regime de mercado.
+                action = Action.BUY if score >= cut else Action.HOLD
                 return Verdict(symbol, score, action, str(data.get("rationale", "")))
         return Verdict(symbol, 0, Action.HOLD, "Sem veredito estruturado do LLM.")

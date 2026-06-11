@@ -151,6 +151,9 @@ class TelegramInterface:
             await self._step_profit(q)
         elif data.startswith("tp_"):
             self._agent.configure(take_profit_pct=float(data.split("_")[1]))
+            await self._step_size(q)
+        elif data.startswith("size_"):
+            self._agent.configure(position_size_pct=float(data.split("_")[1]))
             await self._step_summary(q)
         elif data == "activate":
             await self._agent.start()
@@ -175,7 +178,7 @@ class TelegramInterface:
         if line:
             rows.append(line)
         await q.edit_message_text(
-            "⚙️ *Configuração — Passo 1 de 3*\nEm qual moeda devo focar a análise?",
+            "⚙️ *Configuração — Passo 1 de 4*\nEm qual moeda devo focar a análise?",
             reply_markup=InlineKeyboardMarkup(rows), parse_mode=ParseMode.MARKDOWN)
 
     async def _step_risk(self, q) -> None:  # noqa: ANN001
@@ -187,7 +190,7 @@ class TelegramInterface:
         ])
         foco = ", ".join(self._agent.token_focus)
         await q.edit_message_text(
-            f"⚙️ *Configuração — Passo 2 de 3*\nFoco: *{foco}*\n\n"
+            f"⚙️ *Configuração — Passo 2 de 4*\nFoco: *{foco}*\n\n"
             "🛑 Qual o *Stop-Loss* (quanto aceita perder por operação antes de vender)?",
             reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
@@ -200,10 +203,24 @@ class TelegramInterface:
             [InlineKeyboardButton("↩️ Voltar", callback_data="cfg")],
         ])
         await q.edit_message_text(
-            f"⚙️ *Configuração — Passo 3 de 3*\nStop-Loss: *{self._agent.stop_loss_pct:.0f}%*\n\n"
+            f"⚙️ *Configuração — Passo 3 de 4*\nStop-Loss: *{self._agent.stop_loss_pct:.0f}%*\n\n"
             "🎯 Qual o *lucro-alvo* (quando o ganho chegar nesse nível, eu vendo e realizo)?\n\n"
             "_\"Deixar correr\" = sem teto fixo; eu seguro com o trailing pra capturar "
             "altas maiores, protegendo o lucro já feito._",
+            reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+    async def _step_size(self, q) -> None:  # noqa: ANN001
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("💵 10%", callback_data="size_10"),
+             InlineKeyboardButton("💵 25%", callback_data="size_25"),
+             InlineKeyboardButton("💪 50%", callback_data="size_50")],
+            [InlineKeyboardButton("↩️ Voltar", callback_data="cfg")],
+        ])
+        await q.edit_message_text(
+            f"⚙️ *Configuração — Passo 4 de 4*\nLucro-alvo definido.\n\n"
+            "📊 Qual o *tamanho de cada trade* (quanto da sua banca eu aposto por operação)?\n\n"
+            "_Banca pequena pede tamanho maior: trades de 5% somem no gás. "
+            "Mesmo apostando mais, o disjuntor de drawdown continua te protegendo._",
             reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
     async def _step_summary(self, q) -> None:  # noqa: ANN001
@@ -219,8 +236,8 @@ class TelegramInterface:
             f"🎯 Foco: *{', '.join(a.token_focus)}*\n"
             f"🛑 Stop-Loss: *{a.stop_loss_pct:.0f}%*\n"
             f"🎯 Lucro-alvo: *{alvo}*\n"
-            f"🧠 Modo: *{a.mode}* (compra se score ≥ {corte})\n"
-            f"📊 Tamanho/trade: *{self._cfg.position_size_pct}%* da banca\n\n"
+            f"🧠 Modo: *{a.mode}* (compra se score ≥ {corte}, *adaptativo* ao mercado)\n"
+            f"📊 Tamanho/trade: *{a.position_size_pct:.0f}%* da banca\n\n"
             "Confirme para eu começar a operar:",
             reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 

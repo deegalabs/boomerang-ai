@@ -60,6 +60,7 @@ class BoomerangAgent:
         self.token_focus: list[str] = list(config.user.get("token_focus", []))
         self.stop_loss_pct: float = config.user_stop_loss_pct
         self.take_profit_pct: float = config.user_take_profit_pct
+        self.position_size_pct: float = config.user_position_size_pct
         self.mode: str = config.user.get("mode", "conservative")
         self._tasks: list[asyncio.Task] = []
         self._last_equity: float = 0.0          # patrimônio mais recente (cache p/ dashboard)
@@ -147,7 +148,7 @@ class BoomerangAgent:
     # ── controle (chamado pela interface) ────────────────────────────────────
     def configure(self, *, token_focus: list[str] | None = None,
                   stop_loss_pct: float | None = None, take_profit_pct: float | None = None,
-                  mode: str | None = None) -> None:
+                  position_size_pct: float | None = None, mode: str | None = None) -> None:
         # Propaga para cfg.user (fonte única lida pelo analyzer e pelo motor de risco).
         if token_focus is not None:
             self.token_focus = [t.upper() for t in token_focus]
@@ -158,6 +159,9 @@ class BoomerangAgent:
         if take_profit_pct is not None:
             self.take_profit_pct = float(take_profit_pct)
             self._cfg.user["take_profit_pct"] = self.take_profit_pct
+        if position_size_pct is not None:
+            self.position_size_pct = float(position_size_pct)
+            self._cfg.user["position_size_pct"] = self.position_size_pct
         if mode is not None:
             self.mode = mode
             self._cfg.user["mode"] = mode
@@ -170,6 +174,7 @@ class BoomerangAgent:
             "token_focus": self.token_focus,
             "stop_loss_pct": self.stop_loss_pct,
             "take_profit_pct": self.take_profit_pct,
+            "position_size_pct": self.position_size_pct,
             "mode": self.mode,
             "peak_equity": self._risk.peak_equity,
             "equity_usd": self._last_equity,
@@ -200,10 +205,12 @@ class BoomerangAgent:
         self.token_focus = data.get("token_focus", self.token_focus)
         self.stop_loss_pct = data.get("stop_loss_pct", self.stop_loss_pct)
         self.take_profit_pct = data.get("take_profit_pct", self.take_profit_pct)
+        self.position_size_pct = data.get("position_size_pct", self.position_size_pct)
         self.mode = data.get("mode", self.mode)
         self._cfg.user["token_focus"] = self.token_focus
         self._cfg.user["stop_loss_pct"] = self.stop_loss_pct
         self._cfg.user["take_profit_pct"] = self.take_profit_pct
+        self._cfg.user["position_size_pct"] = self.position_size_pct
         self._cfg.user["mode"] = self.mode
         self._risk.restore_state(data.get("peak_equity", 0.0), data.get("last_trade_ts", 0.0))
         self.positions = [Position(**p) for p in data.get("positions", [])]
@@ -232,7 +239,8 @@ class BoomerangAgent:
         # Mantém IN_POSITION se já há posição aberta (ex.: retomada após restart).
         self.state = AgentState.IN_POSITION if self.positions else AgentState.SCANNING
         await self._emit(AlertType.STARTED, "Boomerang AI ativo",
-                         f"Foco: {', '.join(self.token_focus)} | stop {self.stop_loss_pct}% | modo {self.mode}")
+                         f"Foco: {', '.join(self.token_focus)} | tamanho {self.position_size_pct:.0f}% | "
+                         f"stop {self.stop_loss_pct}% | modo {self.mode}")
         self._start_loops()
 
     async def pause(self) -> None:
@@ -321,6 +329,7 @@ class BoomerangAgent:
             "token_focus": self.token_focus,
             "stop_loss_pct": self.stop_loss_pct,
             "take_profit_pct": self.take_profit_pct,
+            "position_size_pct": self.position_size_pct,
         }
 
     # ── compra manual (validação / override do dono) ─────────────────────────

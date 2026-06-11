@@ -73,7 +73,15 @@ class Config:
     # ── Atalhos de leitura usados em todo o projeto ──────────────────────────
     @property
     def position_size_pct(self) -> float:
-        return float(self.dev_safety["position_size_pct"])
+        """Tamanho por trade (% da banca). O USUÁRIO escolhe (camada user, via
+        Telegram); na ausência, cai no default seguro do dev_safety. Sempre limitado
+        por max_position_pct e pelo stable disponível, no motor de risco."""
+        user_pct = self.user.get("position_size_pct")
+        return float(user_pct) if user_pct is not None else float(self.dev_safety["position_size_pct"])
+
+    @property
+    def user_position_size_pct(self) -> float:
+        return self.position_size_pct
 
     @property
     def max_position_pct(self) -> float:
