@@ -161,6 +161,14 @@ class BoomerangAgent:
                 self._log.warning("Reconciliação: não checou %s (%s); mantendo.", pos.symbol, exc)
                 kept.append(pos)
                 continue
+            # Poeira (valor on-chain desprezível, resto de venda) → destrava o tracking.
+            try:
+                price = await asyncio.to_thread(self._validator.onchain_price_usd, pos.token_address)
+                if onchain * price < 0.20:
+                    dropped.append(pos.symbol)
+                    continue
+            except Exception:  # noqa: BLE001
+                pass
             if pos.qty > 0 and onchain >= pos.qty * 0.20:  # ainda há o grosso da posição
                 kept.append(pos)
             else:
@@ -504,6 +512,7 @@ class BoomerangAgent:
 
         self._risk.update_equity(equity)
         self._last_equity = equity  # cache p/ dashboard
+        await self._reconcile_positions()  # sincroniza tracking↔on-chain (limpa poeira de teste)
         stable = self._stable_usd()  # USDC real disponível p/ comprar (não a equity total)
         if self._risk.circuit_breaker_tripped(equity):
             await self.panic(f"Drawdown {self._risk.current_drawdown_pct(equity):.1f}% atingiu o gatilho.")
