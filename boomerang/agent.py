@@ -315,7 +315,8 @@ class BoomerangAgent:
 
     async def start(self) -> None:
         if self.state == AgentState.HALTED:
-            await self._emit(AlertType.ERROR, "Agente travado", "Circuit breaker ativo. Reinicie a sessão.")
+            await self._emit(AlertType.ERROR, "Agente travado",
+                             "Circuit breaker ativo (panic/saque). Use */reiniciar* para destravar e voltar a operar.")
             return
         # Sincroniza com a carteira: descarta posições já vendidas/pó antes de operar.
         await self._reconcile_positions()
@@ -336,6 +337,25 @@ class BoomerangAgent:
             self.state = AgentState.SCANNING
             await self._emit(AlertType.STARTED, "Agente retomado")
             self._start_loops()
+
+    async def restart_session(self) -> None:
+        """Destrava após HALTED (panic/saque/disjuntor) e volta a operar. Limpa o circuit
+        breaker, rebaseia o pico no patrimônio atual (fresh start) e reconcilia a carteira.
+        Uso consciente do dono via /reiniciar."""
+        self._risk.clear_halt()
+        try:
+            eq = await asyncio.to_thread(self._equity_usd)
+            if eq > 0:
+                self._risk.restore_state(eq, self._risk.last_trade_ts)  # rebaseia o pico
+                self._last_equity = eq
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("Reinício: equity indisponível (%s).", exc)
+        await self._reconcile_positions()
+        self.state = AgentState.IN_POSITION if self.positions else AgentState.SCANNING
+        self._save()
+        await self._emit(AlertType.STARTED, "🔄 Sessão reiniciada",
+                         "Travamento limpo, pico rebaseado. Operando novamente.")
+        self._start_loops()
 
     async def stop(self) -> None:
         self._cancel_loops()

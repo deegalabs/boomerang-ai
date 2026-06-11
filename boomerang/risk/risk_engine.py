@@ -89,8 +89,12 @@ class RiskEngine:
         return self._halted
 
     def halt(self) -> None:
-        """Marca o agente como travado (após liquidação flash). Irreversível na sessão."""
+        """Marca o agente como travado (após liquidação flash)."""
         self._halted = True
+
+    def clear_halt(self) -> None:
+        """Destrava (reinício consciente do dono via /reiniciar). Limpa o circuit breaker."""
+        self._halted = False
 
     # ── Dimensionamento de posição ───────────────────────────────────────────
     def position_size_usd(self, current_equity_usd: float, available_stable_usd: float,

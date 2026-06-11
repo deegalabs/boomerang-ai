@@ -443,6 +443,12 @@ class TelegramInterface:
             await self._agent.start()
         await self._agent.force_buy(symbol, size_pct=size_pct)
 
+    async def cmd_reiniciar(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_master(update):
+            return
+        await update.message.reply_text("🔄 Destravando e reiniciando a sessão...")
+        await self._agent.restart_session()
+
     async def cmd_registrar(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._is_master(update):
             return
@@ -494,6 +500,7 @@ class TelegramInterface:
         "• /buy SÍMBOLO [%] — compra manual (ex.: `/buy CAKE` ou `/buy FLOKI 100` p/ all-in)\n"
         "• /pausar (ou /parar, /stop) — pausa o agente (retoma com /start)\n"
         "• /panic — vende tudo *e trava* o agente (emergência)\n"
+        "• /reiniciar — *destrava* após /panic ou saque e volta a operar\n"
         "• /dashboard — link do painel só-leitura\n"
         "• /registrar — registra a carteira na competição (rodar 1x antes de 22/jun)\n"
         "• /competicao — status do registro na competição\n"
@@ -522,6 +529,7 @@ class TelegramInterface:
         app.add_handler(CommandHandler("status", self.cmd_status))
         app.add_handler(CommandHandler("panic", self.cmd_panic))
         app.add_handler(CommandHandler(["pausar", "parar", "stop"], self.cmd_pause))
+        app.add_handler(CommandHandler(["reiniciar", "restart", "destravar"], self.cmd_reiniciar))
         app.add_handler(CommandHandler("buy", self.cmd_buy))
         app.add_handler(CommandHandler("dashboard", self.cmd_dashboard))
         app.add_handler(CommandHandler(["registrar", "register"], self.cmd_registrar))
