@@ -570,6 +570,7 @@ class BoomerangAgent:
             current_equity_usd=equity, available_stable_usd=stable,
             open_positions=len(self.positions), now_ts=now,
         )
+        gate_note = "" if gate.allowed else f" · Gate BLOQUEOU: {gate.detail}"
         if gate.allowed:
             best_score = -1
             for symbol in ranked[:TOP_K]:
@@ -613,7 +614,7 @@ class BoomerangAgent:
         melhor = f" · Melhor avaliado: {top_eval}" if top_eval else ""
         radar = f" · Radar: +{len(movers)} movers" if movers else ""
         detail = (f"Analisei {len(prescores)} tokens (momentum){radar}. Top: {top_str}. "
-                  f"Candidatos p/ IA: {len(candidates)} · Claude: {claude_calls} chamada(s).{melhor} Sem entrada.")
+                  f"Candidatos p/ IA: {len(candidates)} · Claude: {claude_calls} chamada(s).{melhor}{gate_note} Sem entrada.")
         self._log.info("CICLO | %s", detail)  # visibilidade no log do servidor
         await self._emit(AlertType.SCAN, "Ciclo concluído", detail)
         self._save()
