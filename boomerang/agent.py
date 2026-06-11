@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -206,6 +207,13 @@ class BoomerangAgent:
         except ValueError:
             pass
         self.token_focus = data.get("token_focus", self.token_focus)
+        # Reset cirúrgico de foco (BOOMERANG_RESET_FOCUS=1): ignora um foco salvo que
+        # tenha virado 1 moeda em testes e restaura a cesta curada — sem mexer no
+        # stop/lucro/tamanho. Útil p/ destravar o autônomo sem reconfigurar tudo no bot.
+        if os.getenv("BOOMERANG_RESET_FOCUS", "").strip() in ("1", "true", "True") and self._default_focus:
+            self.token_focus = list(self._default_focus)
+            self._log.info("Foco resetado para a cesta recomendada (%d moedas) via BOOMERANG_RESET_FOCUS.",
+                           len(self.token_focus))
         self.stop_loss_pct = data.get("stop_loss_pct", self.stop_loss_pct)
         self.take_profit_pct = data.get("take_profit_pct", self.take_profit_pct)
         self.position_size_pct = data.get("position_size_pct", self.position_size_pct)
