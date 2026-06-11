@@ -66,6 +66,12 @@ class TwakExecutor:
             # alguns comandos podem emitir banner antes do JSON — pega o último bloco {...}/[...]
             data = json.loads(out[out.index("{") :]) if "{" in out else {"error": out}
         if isinstance(data, dict) and data.get("error"):
+            # Log do payload de erro COMPLETO (todos os campos: reason/route/amountOut/
+            # minOut/decoded) — o str(error) sozinho costuma vir truncado ("0x...").
+            try:
+                self._log.warning("twak erro bruto: %s", json.dumps(data)[:800])
+            except Exception:  # noqa: BLE001
+                pass
             raise TwakError(str(data["error"]), data.get("errorCode"))
         return data
 
