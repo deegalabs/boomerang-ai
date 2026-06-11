@@ -504,10 +504,20 @@ class BoomerangAgent:
         self._save()
 
     async def _open(self, symbol: str, addr: str, size_usd: float, rationale: str, now: float) -> None:
+        def _do_buy():
+            return self._executor.buy(to_token=addr, amount_usd=size_usd, password=self._password)
         with self._risk.trade_lock:
-            res = await asyncio.to_thread(
-                self._executor.buy, to_token=addr, amount_usd=size_usd, password=self._password,
-            )
+            res = await asyncio.to_thread(_do_buy)
+        # 1ª compra de um token novo exige approval do gasto. O twak envia a aprovacao,
+        # mas o swap pode reverter ANTES dela minerar ("Approval was sent... Check allowance
+        # before retrying"). Detecta isso e re-tenta UMA vez apos a aprovacao confirmar
+        # (~20s, blocos BSC ~3s). O sleep fica FORA do lock p/ nao travar o monitor de stops.
+        if not res.ok and res.error and any(
+                k in res.error.lower() for k in ("allowance", "approval was sent")):
+            self._log.info("Approval enviado p/ %s; aguardando ~20s p/ minerar e re-tentando swap.", symbol)
+            await asyncio.sleep(20)
+            with self._risk.trade_lock:
+                res = await asyncio.to_thread(_do_buy)
         if not res.ok:
             await self._emit(AlertType.ERROR, f"Compra falhou: {symbol}", res.error)
             return

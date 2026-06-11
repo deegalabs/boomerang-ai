@@ -17,7 +17,7 @@
     "min_confidence_score_conservative": 58,
     "prefilter_min_vol_change_pct": 3.0,
     "max_slippage_pct": 0.5,
-    "oracle_divergence_max_pct": 1.5,
+    "oracle_divergence_max_pct": 2.5,
     "trailing_stop_trigger_pct": 5.0,
     "max_concurrent_positions": 3,
     "trade_cooldown_seconds": 900,
