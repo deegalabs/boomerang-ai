@@ -480,6 +480,15 @@ class BoomerangAgent:
                 n += 1
         return n
 
+    async def register_competition(self) -> dict:
+        """Registra a carteira do agente na competição (twak compete register). On-chain,
+        roda UMA vez antes da semana ao vivo. Trades só contam após o registro."""
+        return await asyncio.to_thread(self._executor.register_competition, self._password)
+
+    async def competition_status(self) -> dict:
+        """Consulta o status do registro na competição (twak compete status)."""
+        return await asyncio.to_thread(self._executor.competition_status, self._password)
+
     # ── loops ────────────────────────────────────────────────────────────────
     async def _scan_loop(self) -> None:
         interval = int(self._cfg.loop["scan_interval_seconds"])

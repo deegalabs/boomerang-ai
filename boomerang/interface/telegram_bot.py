@@ -443,6 +443,36 @@ class TelegramInterface:
             await self._agent.start()
         await self._agent.force_buy(symbol, size_pct=size_pct)
 
+    async def cmd_registrar(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_master(update):
+            return
+        await update.message.reply_text(
+            "🏁 Registrando a carteira do agente na competição (on-chain)...")
+        try:
+            res = await self._agent.register_competition()
+            tx = res.get("transactionHash") or res.get("tx") if isinstance(res, dict) else None
+            msg = "✅ *Registro enviado!*" + (f"\n🔗 [BscScan](https://bscscan.com/tx/{tx})" if tx else "")
+            if isinstance(res, dict) and res.get("error"):
+                msg = f"⚠️ Resposta: {res['error']}"
+            await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN,
+                                            disable_web_page_preview=True)
+        except Exception as exc:  # noqa: BLE001
+            await update.message.reply_text(
+                f"❌ Falha no registro: {exc}\n\nVerifique se já está registrado com /competicao.")
+
+    async def cmd_competicao(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_master(update):
+            return
+        await update.message.reply_text("🔎 Consultando status da competição...")
+        try:
+            res = await self._agent.competition_status()
+            import json as _json
+            await update.message.reply_text(
+                f"🏁 *Status da competição:*\n```\n{_json.dumps(res, ensure_ascii=False, indent=2)[:1500]}\n```",
+                parse_mode=ParseMode.MARKDOWN)
+        except Exception as exc:  # noqa: BLE001
+            await update.message.reply_text(f"❌ Não consegui consultar: {exc}")
+
     async def cmd_dashboard(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         import os
         if not self._is_master(update):
@@ -465,6 +495,8 @@ class TelegramInterface:
         "• /pausar (ou /parar, /stop) — pausa o agente (retoma com /start)\n"
         "• /panic — vende tudo *e trava* o agente (emergência)\n"
         "• /dashboard — link do painel só-leitura\n"
+        "• /registrar — registra a carteira na competição (rodar 1x antes de 22/jun)\n"
+        "• /competicao — status do registro na competição\n"
         "• /ajuda — esta lista\n\n"
         "_Para vender sem travar, use os botões 🔴 dentro do /status._"
     )
@@ -492,6 +524,8 @@ class TelegramInterface:
         app.add_handler(CommandHandler(["pausar", "parar", "stop"], self.cmd_pause))
         app.add_handler(CommandHandler("buy", self.cmd_buy))
         app.add_handler(CommandHandler("dashboard", self.cmd_dashboard))
+        app.add_handler(CommandHandler(["registrar", "register"], self.cmd_registrar))
+        app.add_handler(CommandHandler(["competicao", "compete"], self.cmd_competicao))
         app.add_handler(CommandHandler(["ajuda", "help", "comandos"], self.cmd_help))
         app.add_handler(CallbackQueryHandler(self.on_button))
         # fallback: qualquer comando/texto nao reconhecido -> orienta o usuario
