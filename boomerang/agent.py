@@ -84,6 +84,11 @@ class BoomerangAgent:
         return self._token_addr.get(symbol.upper())
 
     async def _emit(self, type_: AlertType, title: str, detail: str = "", **data) -> None:
+        # Visibilidade no log do servidor p/ eventos que explicam por que NÃO operou
+        # ou que exigem atenção (sem isso o motivo só ia ao Telegram — ponto cego).
+        if type_ in (AlertType.REJECTED, AlertType.ERROR, AlertType.DATA_ERROR,
+                     AlertType.CIRCUIT_BREAKER):
+            self._log.info("%s | %s — %s", type_.name, title, detail)
         await self._alerts.emit(Alert(type_, title, detail, data))
 
     # ── medição de patrimônio (equity) ───────────────────────────────────────
@@ -447,7 +452,7 @@ class BoomerangAgent:
 
         opened = False
         claude_calls = 0
-        best: tuple = ()  # (verdict, symbol, addr) do maior score que deu BUY
+        buys: list = []   # [(verdict, symbol, addr)] de TODOS que deram BUY, p/ fallback
         top_eval = ""     # melhor score avaliado no ciclo (p/ visibilidade no log)
         # gate (cooldown/max posições/drawdown/stable) não depende do símbolo: 1 checagem.
         gate = self._risk.can_open_position(
@@ -467,24 +472,25 @@ class BoomerangAgent:
                 if verdict.confidence_score > best_score:
                     best_score = verdict.confidence_score
                     top_eval = f"{symbol} {verdict.confidence_score}{'✓' if verdict.is_buy else ''}"
-                if verdict.is_buy and (not best or verdict.confidence_score > best[0].confidence_score):
-                    best = (verdict, symbol, addr)
+                if verdict.is_buy:
+                    buys.append((verdict, symbol, addr))
                 if verdict.is_buy and verdict.confidence_score >= STRONG:
                     break  # já achamos um setup forte; não precisa avaliar mais
 
-            if best:
-                verdict, symbol, addr = best
+            # Tenta do MELHOR pro pior: se a validação (Filtro 2) barra o top, cai no próximo.
+            for verdict, symbol, addr in sorted(buys, key=lambda b: -b[0].confidence_score):
                 size = self._risk.position_size_usd(equity, stable)
                 val = await asyncio.to_thread(
                     self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size,
                     cmc_price_usd=quotes[symbol].get("price_usd"),  # ativa checagem de oráculo
                 )
-                if val.ok:
-                    await self._open(symbol, addr, size, verdict.rationale, now)
-                    opened = True
-                else:
+                if not val.ok:
                     await self._emit(AlertType.REJECTED, f"Trade barrado: {symbol}",
                                      val.detail, reason=val.reason.value if val.reason else "")
+                    continue  # tenta o próximo melhor BUY
+                await self._open(symbol, addr, size, verdict.rationale, now)
+                opened = True
+                break
 
         if opened:
             return  # TRADE_OPENED já notificou
