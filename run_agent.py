@@ -127,6 +127,25 @@ async def main() -> None:
 
     await iface.start_polling()
 
+    # Sinal de vida: bate a cada 30s INDEPENDENTE do estado de trade. Se o event loop
+    # travar/morrer, para de bater → /healthz devolve 503 → a Railway reinicia o container.
+    from boomerang import liveness
+
+    async def _liveness_loop() -> None:
+        while True:
+            liveness.beat()
+            await asyncio.sleep(30)
+
+    asyncio.create_task(_liveness_loop())
+    liveness.beat()  # 1ª batida já no startup
+
+    # Se isto é um REINÍCIO após queda (supervisor do railway_start), avisa o dono.
+    restarts = int(os.getenv("BOOMERANG_RESTART_COUNT", "0") or "0")
+    if restarts > 0:
+        await alerts.emit(Alert(AlertType.ERROR, "♻️ Agente reiniciado",
+                                f"O agente caiu e se recuperou sozinho (reinício #{restarts}). "
+                                "Operação retomada; estado restaurado do disco."))
+
     # Auto-retoma se estava operando antes do restart (resiliência).
     from boomerang.types import AgentState
     if agent.state in (AgentState.SCANNING, AgentState.IN_POSITION):

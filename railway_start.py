@@ -40,18 +40,29 @@ def _bootstrap() -> None:
 
 
 def _run_agent() -> None:
+    """Roda o agente com SUPERVISÃO: se cair (exceção ou retorno inesperado), espera um
+    backoff e REINICIA. Sem isso, um crash no startup deixava o agente morto até um
+    re-deploy manual (com o site verde, sem ninguém saber). Encerra limpo só no shutdown."""
     import sys
+    import time
     import traceback
-    print(">>> [agent-thread] iniciando", flush=True)
-    try:
-        from run_agent import main as agent_main
-        print(">>> [agent-thread] run_agent importado; rodando main()", flush=True)
-        asyncio.run(agent_main())
-        print(">>> [agent-thread] main() retornou (inesperado)", flush=True)
-    except BaseException as exc:  # noqa: BLE001
-        print(f">>> [agent-thread] CAIU: {exc!r}", flush=True)
-        traceback.print_exc()
-        sys.stdout.flush()
+    attempt = 0
+    while True:
+        attempt += 1
+        os.environ["BOOMERANG_RESTART_COUNT"] = str(attempt - 1)  # 0 no 1º; >0 = reinício
+        try:
+            from run_agent import main as agent_main
+            print(f">>> [agent-thread] iniciando (tentativa {attempt})", flush=True)
+            asyncio.run(agent_main())
+            print(">>> [agent-thread] main() retornou inesperadamente; reiniciando.", flush=True)
+        except (KeyboardInterrupt, SystemExit):
+            print(">>> [agent-thread] encerrando (shutdown).", flush=True)
+            return
+        except Exception as exc:  # noqa: BLE001
+            print(f">>> [agent-thread] CAIU: {exc!r}; reiniciando.", flush=True)
+            traceback.print_exc()
+            sys.stdout.flush()
+        time.sleep(min(60, 5 * attempt))  # backoff: 5s, 10s, ... até 60s
 
 
 async def main() -> None:

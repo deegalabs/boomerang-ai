@@ -177,7 +177,14 @@ async def console_action(request):  # noqa: ANN001 — ações no agente SIMULAD
 
 
 async def healthz(request):  # noqa: ANN001 — checagem de saúde p/ o reverse proxy/uptime
-    return JSONResponse({"ok": True, "identity": identity.summary().get("registered", False)})
+    # Reflete a SAÚDE DO AGENTE: se o sinal de vida ficou velho (> 5min), o agente
+    # travou/morreu → 503 → a Railway reinicia o container. Cobre deadlock (sem exceção).
+    from boomerang.liveness import age_seconds
+    age = age_seconds()
+    if age > 300:
+        return JSONResponse({"ok": False, "agent_stale_s": round(age)}, status_code=503)
+    return JSONResponse({"ok": True, "agent_beat_s": round(age),
+                         "identity": identity.summary().get("registered", False)})
 
 
 # ── proxy x402 embutido ──────────────────────────────────────────────────────
