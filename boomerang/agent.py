@@ -67,6 +67,9 @@ class BoomerangAgent:
         self.position_size_pct: float = config.user_position_size_pct
         self.mode: str = config.user.get("mode", "conservative")
         self._tasks: list[asyncio.Task] = []
+        # tokens cuja EXECUÇÃO falhou (ex.: revert por liquidez): symbol -> expiry ts.
+        # O agente os ignora por um tempo e roteia p/ candidatos tradáveis (auto-aprende).
+        self._exec_cooldown: dict[str, float] = {}
         self._last_equity: float = 0.0          # patrimônio mais recente (cache p/ dashboard)
         self._last_holdings: list = []          # composição por moeda (cache p/ painel /live)
         self.agent_address: str | None = None   # endereço da carteira (preenchido no startup)
@@ -442,7 +445,8 @@ class BoomerangAgent:
         # Pré-score determinístico (de graça) para ranquear e FILTRAR quem vai ao LLM.
         prescores = [(s, momentum_prescore(quotes.get(s))) for s in self.token_focus if quotes.get(s)]
         candidates = [s for s, _ in prescores
-                      if passes_prefilter(quotes.get(s), self._cfg.prefilter_min_vol_change)]
+                      if passes_prefilter(quotes.get(s), self._cfg.prefilter_min_vol_change)
+                      and self._exec_cooldown.get(s, 0.0) <= now]  # pula intradáveis recentes
         # Postura OPORTUNISTA: ordena por momentum e avalia os TOP-K mais promissores,
         # escolhendo o MELHOR veredito (maior score) — não o primeiro qualquer. Assim o
         # agente opera a melhor oportunidade RELATIVA do ciclo, inclusive em mercado calmo.
@@ -477,7 +481,7 @@ class BoomerangAgent:
                 if verdict.is_buy and verdict.confidence_score >= STRONG:
                     break  # já achamos um setup forte; não precisa avaliar mais
 
-            # Tenta do MELHOR pro pior: se a validação (Filtro 2) barra o top, cai no próximo.
+            # Tenta do MELHOR pro pior: se Filtro 2 barra OU a execução reverte, cai no próximo.
             for verdict, symbol, addr in sorted(buys, key=lambda b: -b[0].confidence_score):
                 size = self._risk.position_size_usd(equity, stable)
                 val = await asyncio.to_thread(
@@ -488,9 +492,12 @@ class BoomerangAgent:
                     await self._emit(AlertType.REJECTED, f"Trade barrado: {symbol}",
                                      val.detail, reason=val.reason.value if val.reason else "")
                     continue  # tenta o próximo melhor BUY
-                await self._open(symbol, addr, size, verdict.rationale, now)
-                opened = True
-                break
+                if await self._open(symbol, addr, size, verdict.rationale, now):
+                    opened = True
+                    break
+                # Execução falhou (ex.: revert por liquidez): cooldown e tenta o próximo.
+                self._exec_cooldown[symbol] = now + 7200  # 2h fora do radar
+                self._log.info("%s em cooldown de execução (2h) após falha de swap.", symbol)
 
         if opened:
             return  # TRADE_OPENED já notificou
@@ -503,7 +510,8 @@ class BoomerangAgent:
         await self._emit(AlertType.SCAN, "Ciclo concluído", detail)
         self._save()
 
-    async def _open(self, symbol: str, addr: str, size_usd: float, rationale: str, now: float) -> None:
+    async def _open(self, symbol: str, addr: str, size_usd: float, rationale: str, now: float) -> bool:
+        """Abre a posição (swap real). Retorna True se abriu, False se a execução falhou."""
         def _do_buy():
             return self._executor.buy(to_token=addr, amount_usd=size_usd, password=self._password)
         with self._risk.trade_lock:
@@ -520,7 +528,7 @@ class BoomerangAgent:
                 res = await asyncio.to_thread(_do_buy)
         if not res.ok:
             await self._emit(AlertType.ERROR, f"Compra falhou: {symbol}", res.error)
-            return
+            return False
         entry = res.entry_price or await asyncio.to_thread(self._validator.onchain_price_usd, addr)
         pos = Position(symbol=symbol, token_address=addr, entry_price=entry, amount_usd=size_usd,
                        qty=res.qty or 0.0, stop_loss_price=self._risk.initial_stop_price(entry),
@@ -537,6 +545,7 @@ class BoomerangAgent:
                          stop_pct=self.stop_loss_pct, take_profit_pct=self.take_profit_pct,
                          tx=res.tx_hash)
         self._save()
+        return True
 
     # ── monitor de posições (stop / trailing) ────────────────────────────────
     async def check_positions(self) -> None:

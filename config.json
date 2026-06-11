@@ -2,7 +2,8 @@
   "_comment": "Boomerang AI — regras unificadas. 'user' = ajustável via Telegram. 'dev_safety' e 'hackathon' = imutáveis (leis de segurança e regras do evento).",
 
   "user": {
-    "token_focus": ["ETH", "XRP", "DOGE", "ADA", "LINK", "LTC", "AVAX", "DOT", "UNI", "AAVE", "ATOM", "BCH", "SHIB", "FLOKI", "TWT"],
+    "_token_focus_note": "Apenas tokens com liquidez REAL na PancakeSwap (>~20k em WBNB). Removidos ATOM/BCH/AAVE (Binance-Peg, negociados em CEX, sem pool DEX — swaps revertem).",
+    "token_focus": ["ETH", "XRP", "DOGE", "ADA", "LINK", "LTC", "AVAX", "DOT", "UNI", "SHIB", "FLOKI", "TWT"],
     "stop_loss_pct": 4.0,
     "take_profit_pct": 10.0,
     "position_size_pct": 25.0,
