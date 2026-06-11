@@ -21,7 +21,7 @@ from boomerang.brain.cmc_analyzer import AttentionAnalyzer, momentum_prescore, p
 from boomerang.config import Config
 from boomerang.identity import bnb_agent as identity
 from boomerang.ipc import Alert, AlertBus, AlertType
-from boomerang.persistence import append_trade, load_state, save_state
+from boomerang.persistence import append_trade, load_state, load_trades, save_state
 from boomerang.risk import RiskEngine
 from boomerang.risk.risk_engine import ExitSignal
 from boomerang.types import AgentState, Position
@@ -73,6 +73,8 @@ class BoomerangAgent:
         self._exec_cooldown: dict[str, float] = {}
         # Skill Saída Inteligente: última reavaliação do cérebro por posição (throttle).
         self._exit_checks: dict[str, float] = {}
+        # Skill Reputação on-chain: timestamp da última publicação (throttle ~1x/hora).
+        self._last_rep_publish: float = 0.0
         self._last_equity: float = 0.0          # patrimônio mais recente (cache p/ dashboard)
         self._last_holdings: list = []          # composição por moeda (cache p/ painel /live)
         self.agent_address: str | None = None   # endereço da carteira (preenchido no startup)
@@ -621,6 +623,35 @@ class BoomerangAgent:
                          tx=res.tx_hash if res.ok else None,
                          error=None if res.ok else res.error)
         self._save()
+        await self._publish_reputation()  # SKILL: atualiza reputação on-chain (best-effort)
+
+    async def _publish_reputation(self) -> None:
+        """SKILL Reputação on-chain: publica o histórico (trades/win-rate/PnL) como
+        metadata ERC-8004 verificável. Throttled a ~1x/hora; best-effort (gás/rede)."""
+        now = time.time()
+        if now - self._last_rep_publish < 3600:
+            return
+        closes = [t for t in load_trades() if t.get("type") == "close" and t.get("pnl_pct") is not None]
+        if not closes:
+            return
+        wins = sum(1 for t in closes if t["pnl_pct"] > 0)
+        stats = {
+            "trades": len(closes), "wins": wins,
+            "win_rate": round(wins / len(closes) * 100, 1),
+            "total_pnl_pct": round(sum(t["pnl_pct"] for t in closes), 2),
+            "ts": int(now),
+        }
+        try:
+            res = await asyncio.to_thread(identity.publish_track_record, stats)
+            if res:
+                self._last_rep_publish = now
+                await self._emit(AlertType.STARTED, "🏅 Reputação on-chain atualizada",
+                                 f"{stats['trades']} trades · {stats['win_rate']:.0f}% win · "
+                                 f"PnL acum {stats['total_pnl_pct']:+.2f}%",
+                                 tx=res.get("transactionHash"))
+                self._log.info("Reputação on-chain publicada: %s (tx=%s)", stats, res.get("transactionHash"))
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("Publicação de reputação falhou (ignorado): %s", exc)
 
     # ── heartbeat (mínimo de trades) ─────────────────────────────────────────
     async def _heartbeat(self, now: float) -> None:

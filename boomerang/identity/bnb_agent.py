@@ -151,3 +151,26 @@ def register(
     }
     CARD_FILE.write_text(json.dumps(card, indent=2), encoding="utf-8")
     return card
+
+
+def publish_track_record(stats: dict, *, password: str | None = None) -> dict | None:
+    """SKILL Reputação on-chain: grava o histórico de performance do agente como
+    metadata ERC-8004 verificável (chave 'track_record'). Best-effort — qualquer
+    falha (gás, rede) retorna None e NUNCA interrompe o trading. Chamar com parcimônia
+    (é uma transação): o agente faz isso no máx ~1x/hora."""
+    card = load_card()
+    if not card or not card.get("agent_id"):
+        return None
+    try:
+        from bnbagent import ERC8004Agent, EVMWalletProvider
+
+        pw = password or _password()
+        if not pw:
+            return None
+        wallet = EVMWalletProvider(password=pw, persist=True, wallets_dir=str(IDENTITY_DIR))
+        sdk = ERC8004Agent(wallet_provider=wallet, network=card.get("network", DEFAULT_NETWORK))
+        value = json.dumps(stats, separators=(",", ":"))[:480]
+        result = sdk.set_metadata(agent_id=card["agent_id"], key="track_record", value=value)
+        return result if isinstance(result, dict) and result.get("success") else None
+    except Exception:  # noqa: BLE001 — reputação é showcase; nunca derruba o agente
+        return None
