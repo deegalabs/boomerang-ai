@@ -58,6 +58,9 @@ class BoomerangAgent:
 
         # camada do usuário (ajustável via Telegram)
         self.token_focus: list[str] = list(config.user.get("token_focus", []))
+        # cesta curada original (preservada antes do restore(), p/ o botão "recomendada"
+        # restaurar amplitude se o foco tiver sido reduzido a 1 moeda)
+        self._default_focus: list[str] = list(config.user.get("token_focus", []))
         self.stop_loss_pct: float = config.user_stop_loss_pct
         self.take_profit_pct: float = config.user_take_profit_pct
         self.position_size_pct: float = config.user_position_size_pct

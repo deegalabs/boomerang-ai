@@ -149,6 +149,9 @@ class TelegramInterface:
             await q.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
         elif data == "cfg":
             await self._step_tokens(q)
+        elif data == "tok_basket":
+            self._agent.configure(token_focus=list(self._agent._default_focus))
+            await self._step_risk(q)
         elif data == "tok_all":
             self._agent.configure(token_focus=list(self._agent._token_addr.keys()))
             await self._step_risk(q)
@@ -190,7 +193,11 @@ class TelegramInterface:
 
     # ── passos do assistente de configuração ─────────────────────────────────
     async def _step_tokens(self, q) -> None:  # noqa: ANN001
-        rows = [[InlineKeyboardButton("🌐 Todos os líquidos", callback_data="tok_all")]]
+        n = len(self._agent._default_focus)
+        rows = [
+            [InlineKeyboardButton(f"🧺 Cesta recomendada ({n} líquidas)", callback_data="tok_basket")],
+            [InlineKeyboardButton("🌐 Todas as elegíveis (mais cara)", callback_data="tok_all")],
+        ]
         line = []
         for sym in self._agent._token_addr.keys():  # todas as moedas-foco elegíveis
             line.append(InlineKeyboardButton(sym, callback_data=f"tok_{sym}"))
@@ -199,7 +206,10 @@ class TelegramInterface:
         if line:
             rows.append(line)
         await q.edit_message_text(
-            "⚙️ *Configuração — Passo 1 de 4*\nEm qual moeda devo focar a análise?",
+            "⚙️ *Configuração — Passo 1 de 4*\nEm que o agente deve focar a análise?\n\n"
+            "🧺 *Cesta recomendada* — várias moedas líquidas (melhor p/ o modo autônomo "
+            "ter oportunidades). \n"
+            "🪙 *Uma moeda* — restringe o autônomo a ela só (use se quiser vigiar 1 ativo).",
             reply_markup=InlineKeyboardMarkup(rows), parse_mode=ParseMode.MARKDOWN)
 
     async def _step_risk(self, q) -> None:  # noqa: ANN001
