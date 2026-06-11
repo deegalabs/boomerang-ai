@@ -82,9 +82,13 @@ class BoomerangAgent:
     # ── carregamento de endereços elegíveis ──────────────────────────────────
     def _load_token_map(self) -> dict[str, str]:
         path = ROOT / self._cfg.hackathon["eligible_tokens_file"]
+        # Exclui as stables base (USDC/USDT): elas NÃO são alvos de trade, e contá-las
+        # como "token" duplicaria o saldo na composição (elas já entram como 'stable').
+        bases = {"USDC", "USDT"}
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-            return {sym.upper(): addr for sym, addr in data.get("tokens", {}).items()}
+            return {sym.upper(): addr for sym, addr in data.get("tokens", {}).items()
+                    if sym.upper() not in bases}
         except FileNotFoundError:
             return {}
 
@@ -133,11 +137,16 @@ class BoomerangAgent:
         return 0.0
 
     async def _reconcile_positions(self) -> None:
-        """Descarta posições que não existem mais on-chain (vendidas por fora do
-        agente, ou que viraram pó). Compara o SALDO REAL do token (não o valor em
-        USD, que pode vir com preço-lixo de token de liquidez fina) com a quantidade
-        registrada. Sem isso, uma venda manual deixa 'posições fantasma'."""
-        if not self.positions or not self.agent_address:
+        """Sincroniza o tracking com a carteira REAL on-chain, nos dois sentidos:
+        (1) descarta posições rastreadas que não existem mais on-chain (vendas por fora
+            / pó), comparando o SALDO REAL do token (não o valor em USD, sujeito a
+            preço-lixo de liquidez fina);
+        (2) IMPORTA holdings de tokens elegíveis que estão na carteira mas NÃO são
+            rastreados (sobras de teste/restart) — senão ficam sem stop-loss/gestão."""
+        if not self.agent_address:
+            return
+        if not self.positions:
+            await self._import_orphans()
             return
 
         def _onchain_qty(pos: Position) -> float:
@@ -161,6 +170,44 @@ class BoomerangAgent:
             self._save()
             self._log.info("Reconciliação: descartei %d posição(oes) sem saldo on-chain: %s",
                            len(dropped), ", ".join(dropped))
+        await self._import_orphans()
+
+    async def _import_orphans(self) -> None:
+        """Importa holdings on-chain de tokens elegíveis NÃO rastreados (sobras de
+        teste/restart), passando a gerenciá-los (stop-loss/trailing). Entry = preço
+        atual: a proteção passa a valer a partir de agora."""
+        if not self.agent_address:
+            return
+        try:
+            bd = await asyncio.to_thread(self._validator.wallet_breakdown, self.agent_address)
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("Import de órfãos: breakdown indisponível (%s).", exc)
+            return
+        tracked = {p.symbol.upper() for p in self.positions}
+        now = time.time()
+        imported: list[str] = []
+        for h in bd.get("holdings", []):
+            sym = str(h.get("symbol", "")).upper()
+            if h.get("kind") != "token" or sym in tracked:
+                continue
+            addr = self._addr(sym)
+            entry = float(h.get("price_usd") or 0.0)
+            qty = float(h.get("balance") or 0.0)
+            if not addr or entry <= 0 or qty <= 0 or float(h.get("value_usd") or 0.0) < self._cfg.min_position_usd:
+                continue
+            self.positions.append(Position(
+                symbol=sym, token_address=addr, entry_price=entry,
+                amount_usd=float(h["value_usd"]), qty=qty,
+                stop_loss_price=self._risk.initial_stop_price(entry),
+                opened_at=now, tx_hash="importado"))
+            imported.append(sym)
+        if imported:
+            if self.state == AgentState.SCANNING:
+                self.state = AgentState.IN_POSITION
+            self._save()
+            self._log.info("Importei %d holding(s) órfão(s) p/ gestão: %s", len(imported), ", ".join(imported))
+            await self._emit(AlertType.STARTED, "📥 Posições importadas p/ gestão",
+                             f"Agora monitorando (stop-loss): {', '.join(imported)}")
 
     # ── controle (chamado pela interface) ────────────────────────────────────
     def configure(self, *, token_focus: list[str] | None = None,

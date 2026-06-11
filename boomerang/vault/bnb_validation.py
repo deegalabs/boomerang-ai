@@ -145,7 +145,10 @@ class BNBValidator:
         except FileNotFoundError:
             return {}
         out: dict[str, str] = {}
+        bases = {"USDC", "USDT"}  # stables base entram como 'stable'; não duplicar como 'token'
         for sym, addr in data.get("tokens", {}).items():
+            if sym.upper() in bases:
+                continue
             try:
                 out[sym] = Web3.to_checksum_address(addr)
             except Exception:  # noqa: BLE001
