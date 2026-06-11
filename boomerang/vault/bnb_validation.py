@@ -43,6 +43,23 @@ _ERC20_ABI = json.loads(
     '"outputs":[{"internalType":"uint256","name":"","type":"uint256"}],'
     '"stateMutability":"view","type":"function"}]'
 )
+# PancakeSwap V2 Factory — getPair p/ medir a profundidade (liquidez) do pool token/WBNB.
+_V2_FACTORY = "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73"
+_FACTORY_ABI = json.loads(
+    '[{"inputs":[{"internalType":"address","name":"","type":"address"},'
+    '{"internalType":"address","name":"","type":"address"}],"name":"getPair",'
+    '"outputs":[{"internalType":"address","name":"","type":"address"}],'
+    '"stateMutability":"view","type":"function"}]'
+)
+_PAIR_ABI = json.loads(
+    '[{"inputs":[],"name":"getReserves","outputs":['
+    '{"internalType":"uint112","name":"_reserve0","type":"uint112"},'
+    '{"internalType":"uint112","name":"_reserve1","type":"uint112"},'
+    '{"internalType":"uint32","name":"_blockTimestampLast","type":"uint32"}],'
+    '"stateMutability":"view","type":"function"},'
+    '{"inputs":[],"name":"token0","outputs":[{"internalType":"address","name":"","type":"address"}],'
+    '"stateMutability":"view","type":"function"}]'
+)
 # PancakeSwap V3 — QuoterV2 (preço/liquidez na V3, que o roteador V2 não enxerga).
 _V3_QUOTER = "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997"
 _V3_FEE_TIERS = (500, 2500, 100, 10000)  # ordem por probabilidade de ter pool
@@ -84,6 +101,9 @@ class BNBValidator:
         )
         self._v3_quoter = self.w3.eth.contract(
             address=Web3.to_checksum_address(_V3_QUOTER), abi=_V3_QUOTER_ABI,
+        )
+        self._factory = self.w3.eth.contract(
+            address=Web3.to_checksum_address(_V2_FACTORY), abi=_FACTORY_ABI,
         )
         self._executor = None  # cotador de agregador (TWAK); injetado via set_quoter()
         self._usdt = Web3.to_checksum_address(config.network["usdt_bsc_address"])
@@ -227,6 +247,27 @@ class BNBValidator:
             raise ValueError(f"Preço on-chain implausível para {token}: ${price:.2f}")
         return price
 
+    def wbnb_pool_liquidity_usd(self, token_address: str) -> float:
+        """SKILL Tamanho por liquidez: profundidade do pool token/WBNB (V2) em USD.
+
+        Lê as reservas do par na PancakeSwap V2 e converte o lado WBNB em USD. É a
+        medida direta de quão fundo/seguro é o mercado on-chain do token. Retorna 0.0
+        se não há par (ou em erro) — o chamador trata como ilíquido."""
+        try:
+            token = Web3.to_checksum_address(token_address)
+            pair = self._factory.functions.getPair(token, self._wbnb).call()
+            if int(pair, 16) == 0:
+                return 0.0
+            c = self.w3.eth.contract(address=Web3.to_checksum_address(pair), abi=_PAIR_ABI)
+            r0, r1, _ = c.functions.getReserves().call()
+            token0 = Web3.to_checksum_address(c.functions.token0().call())
+            wbnb_reserve = (r0 if token0 == self._wbnb else r1) / 1e18
+            bnb_price = self._price_via([self._wbnb, self._usdt])  # USDT por 1 BNB
+            return wbnb_reserve * bnb_price
+        except Exception as exc:  # noqa: BLE001
+            self._log.debug("Liquidez do pool indisponível p/ %s: %s", token_address, exc)
+            return 0.0
+
     def _token_balance(self, token_address: str, holder: str) -> int:
         erc20 = self.w3.eth.contract(address=Web3.to_checksum_address(token_address), abi=_ERC20_ABI)
         return int(erc20.functions.balanceOf(Web3.to_checksum_address(holder)).call())
@@ -326,6 +367,18 @@ class BNBValidator:
         cmc_price_usd: float | None = None,
     ) -> ValidationResult:
         """Valida comprando e revendendo via cotação do TWAK (round-trip real)."""
+        # SKILL Tamanho por liquidez: o pool é fundo o suficiente? Protege contra
+        # mercados rasos/manipuláveis e contra um trade grande demais p/ o pool.
+        liq = self.wbnb_pool_liquidity_usd(token)
+        min_liq = self._cfg.min_pool_liquidity_usd
+        if liq < min_liq:
+            return ValidationResult(False, symbol, token, reason=RejectReason.NO_LIQUIDITY,
+                                    detail=f"Pool raso (~${liq:,.0f} < mínimo ${min_liq:,.0f}).")
+        cap = liq * self._cfg.max_pool_share_pct / 100.0
+        if amount_usd > cap:
+            return ValidationResult(False, symbol, token, reason=RejectReason.HIGH_SLIPPAGE,
+                                    detail=f"Trade ${amount_usd:.2f} > {self._cfg.max_pool_share_pct:.0f}% "
+                                           f"do pool (~${liq:,.0f}); reduza o tamanho.")
         base = self._cfg.dev_safety["base_stable_symbol"]  # ex.: USDC
         try:
             buy = self._executor.quote(base, token, amount_usd, self._cfg.max_slippage_pct)

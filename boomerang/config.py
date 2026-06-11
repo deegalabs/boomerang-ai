@@ -96,6 +96,17 @@ class Config:
         return float(self.dev_safety["max_slippage_pct"])
 
     @property
+    def min_pool_liquidity_usd(self) -> float:
+        """Profundidade mínima do pool (em USD, lado WBNB) p/ operar — protege contra
+        pools rasos/manipuláveis mesmo dentro da whitelist."""
+        return float(self.dev_safety.get("min_pool_liquidity_usd", 15000.0))
+
+    @property
+    def max_pool_share_pct(self) -> float:
+        """Fração máxima do pool que um trade pode representar (limita impacto de preço)."""
+        return float(self.dev_safety.get("max_pool_share_pct", 1.0))
+
+    @property
     def oracle_divergence_max_pct(self) -> float:
         return float(self.dev_safety["oracle_divergence_max_pct"])
 

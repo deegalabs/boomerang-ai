@@ -62,6 +62,7 @@ class BoomerangAgent:
         # cesta curada original (preservada antes do restore(), p/ o botão "recomendada"
         # restaurar amplitude se o foco tiver sido reduzido a 1 moeda)
         self._default_focus: list[str] = list(config.user.get("token_focus", []))
+        self._default_size: float = config.user_position_size_pct  # tamanho default p/ reset
         self.stop_loss_pct: float = config.user_stop_loss_pct
         self.take_profit_pct: float = config.user_take_profit_pct
         self.position_size_pct: float = config.user_position_size_pct
@@ -217,13 +218,15 @@ class BoomerangAgent:
         except ValueError:
             pass
         self.token_focus = data.get("token_focus", self.token_focus)
-        # Reset cirúrgico de foco (BOOMERANG_RESET_FOCUS=1): ignora um foco salvo que
-        # tenha virado 1 moeda em testes e restaura a cesta curada — sem mexer no
-        # stop/lucro/tamanho. Útil p/ destravar o autônomo sem reconfigurar tudo no bot.
+        # Reset cirúrgico (BOOMERANG_RESET_FOCUS=1): ignora foco/tamanho salvos de testes
+        # e restaura os defaults do config (cesta líquida + 25%) — sem mexer no stop/lucro.
+        # Destrava o autônomo sem reconfigurar tudo no bot.
         if os.getenv("BOOMERANG_RESET_FOCUS", "").strip() in ("1", "true", "True") and self._default_focus:
             self.token_focus = list(self._default_focus)
-            self._log.info("Foco resetado para a cesta recomendada (%d moedas) via BOOMERANG_RESET_FOCUS.",
-                           len(self.token_focus))
+            self.position_size_pct = self._default_size  # também volta ao tamanho default (25%)
+            data["position_size_pct"] = self._default_size  # não deixa o restore sobrescrever abaixo
+            self._log.info("Reset: foco→cesta (%d moedas), tamanho→%.0f%% via BOOMERANG_RESET_FOCUS.",
+                           len(self.token_focus), self.position_size_pct)
         self.stop_loss_pct = data.get("stop_loss_pct", self.stop_loss_pct)
         self.take_profit_pct = data.get("take_profit_pct", self.take_profit_pct)
         self.position_size_pct = data.get("position_size_pct", self.position_size_pct)
