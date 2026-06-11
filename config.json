@@ -15,7 +15,7 @@
     "min_confidence_score": 65,
     "min_confidence_score_aggressive": 60,
     "min_confidence_score_conservative": 70,
-    "prefilter_min_vol_change_pct": 10.0,
+    "prefilter_min_vol_change_pct": 3.0,
     "max_slippage_pct": 0.5,
     "oracle_divergence_max_pct": 1.5,
     "trailing_stop_trigger_pct": 5.0,

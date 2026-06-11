@@ -333,11 +333,16 @@ class BoomerangAgent:
         }
 
     # ── compra manual (validação / override do dono) ─────────────────────────
-    async def force_buy(self, symbol: str) -> None:
+    async def force_buy(self, symbol: str, size_pct: float | None = None) -> None:
         """Compra forçada de um token pelo MESMO caminho real (validação + TWAK).
 
         Ignora o veredito do LLM, mas respeita whitelist, slippage, risco e
         position sizing. A posição passa a ser monitorada (stop/trailing) normalmente.
+
+        size_pct (modo manual): tamanho explícito em % da banca (até 100% = all-in),
+        escolhido pelo dono e confirmado no Telegram. Sem o teto automático
+        (max_position_pct); o disjuntor de drawdown e o stable disponível seguem valendo.
+        Se None, usa o tamanho automático configurado.
         """
         symbol = symbol.upper()
         addr = self._addr(symbol)
@@ -357,13 +362,18 @@ class BoomerangAgent:
         if not gate.allowed:
             await self._emit(AlertType.ERROR, "Compra manual bloqueada", gate.detail)
             return
-        size = self._risk.position_size_usd(equity, stable)
+        size = self._risk.position_size_usd(equity, stable, override_pct=size_pct)
+        if size <= 0:
+            await self._emit(AlertType.ERROR, "Compra manual bloqueada",
+                             f"USDC insuficiente (disponível ${stable:.2f}, mínimo ${self._cfg.min_position_usd:.2f}).")
+            return
         val = await asyncio.to_thread(
             self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size)
         if not val.ok:
             await self._emit(AlertType.REJECTED, f"Compra manual barrada: {symbol}", val.detail)
             return
-        await self._open(symbol, addr, size, "compra manual (validação)", now)
+        tag = f"compra manual {size_pct:.0f}%" if size_pct is not None else "compra manual"
+        await self._open(symbol, addr, size, f"{tag} (validação)", now)
 
     # ── loops ────────────────────────────────────────────────────────────────
     async def _scan_loop(self) -> None:

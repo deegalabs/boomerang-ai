@@ -110,23 +110,31 @@ class TelegramInterface:
             self._log.error("Falha ao enviar alerta: %s", exc)
 
     # ── handlers ─────────────────────────────────────────────────────────────
-    async def cmd_start(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
-        if not self._is_master(update):
-            return
+    def _home_menu(self) -> tuple[str, InlineKeyboardMarkup]:
         text = (
             "🪃 *Boomerang AI*\n\n"
-            "Agente de trading autônomo na BNB Chain. Toda ação passa pelo "
+            "Agente de trading na BNB Chain. Toda ação passa pelo "
             "*Protocolo dos 3 Escudos*:\n"
             "🧠 Analítico (CoinMarketCap) · 🛡️ Rede (BNB Chain) · 💼 Patrimonial (Trust Wallet)\n\n"
+            "🤖 *Automático* — a IA decide sozinha quando entrar e sair.\n"
+            "🎮 *Manual* — você escolhe a moeda e o tamanho; eu executo o swap real "
+            "com todos os escudos de segurança (a IA não te barra).\n\n"
             "Use o menu abaixo:"
         )
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⚙️ Configurar", callback_data="cfg"),
-             InlineKeyboardButton("▶️ Ativar", callback_data="activate")],
-            [InlineKeyboardButton("📊 Status", callback_data="status"),
-             InlineKeyboardButton("⏸️ Pausar", callback_data="pause")],
-            [InlineKeyboardButton("🚨 Sacar Tudo e Parar", callback_data="withdraw")],
+            [InlineKeyboardButton("🤖 Modo Automático", callback_data="cfg"),
+             InlineKeyboardButton("🎮 Modo Manual", callback_data="manual")],
+            [InlineKeyboardButton("▶️ Ativar (auto)", callback_data="activate"),
+             InlineKeyboardButton("📊 Status", callback_data="status")],
+            [InlineKeyboardButton("⏸️ Pausar", callback_data="pause"),
+             InlineKeyboardButton("🚨 Sacar Tudo e Parar", callback_data="withdraw")],
         ])
+        return text, kb
+
+    async def cmd_start(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_master(update):
+            return
+        text, kb = self._home_menu()
         await update.message.reply_text(text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
     async def on_button(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -136,7 +144,10 @@ class TelegramInterface:
         await q.answer()
         data = q.data or ""
 
-        if data == "cfg":
+        if data == "back_home":
+            text, kb = self._home_menu()
+            await q.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+        elif data == "cfg":
             await self._step_tokens(q)
         elif data == "tok_all":
             self._agent.configure(token_focus=list(self._agent._token_addr.keys()))
@@ -155,6 +166,16 @@ class TelegramInterface:
         elif data.startswith("size_"):
             self._agent.configure(position_size_pct=float(data.split("_")[1]))
             await self._step_summary(q)
+        elif data == "manual":
+            await self._manual_pick_coin(q)
+        elif data.startswith("mbuy_"):
+            await self._manual_pick_size(q, data.split("_", 1)[1])
+        elif data.startswith("msz_"):
+            _, sym, pct = data.split("_")
+            await self._manual_confirm(q, sym, float(pct))
+        elif data.startswith("mgo_"):
+            _, sym, pct = data.split("_")
+            await self._manual_execute(q, sym, float(pct))
         elif data == "activate":
             await self._agent.start()
             await q.edit_message_text("▶️ Agente ativado. Você receberá alertas a cada ciclo.")
@@ -241,6 +262,67 @@ class TelegramInterface:
             "Confirme para eu começar a operar:",
             reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
+    # ── modo manual: você escolhe a moeda e o tamanho ────────────────────────
+    async def _manual_pick_coin(self, q) -> None:  # noqa: ANN001
+        rows, line = [], []
+        for sym in self._agent.token_focus:  # set curado e líquido que você configurou
+            line.append(InlineKeyboardButton(sym, callback_data=f"mbuy_{sym}"))
+            if len(line) == 4:
+                rows.append(line); line = []
+        if line:
+            rows.append(line)
+        rows.append([InlineKeyboardButton("↩️ Voltar", callback_data="back_home")])
+        await q.edit_message_text(
+            "🎮 *Modo Manual — Passo 1 de 2*\n\n"
+            "Qual moeda você quer *comprar agora*?\n\n"
+            "_Aqui é você quem decide — a IA não precisa aprovar. Os escudos de "
+            "segurança (whitelist, anti-honeypot/taxa, slippage, anti-drain e o "
+            "disjuntor de drawdown) continuam ativos._",
+            reply_markup=InlineKeyboardMarkup(rows), parse_mode=ParseMode.MARKDOWN)
+
+    async def _manual_pick_size(self, q, sym: str) -> None:  # noqa: ANN001
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("💵 10%", callback_data=f"msz_{sym}_10"),
+             InlineKeyboardButton("💵 25%", callback_data=f"msz_{sym}_25"),
+             InlineKeyboardButton("💪 50%", callback_data=f"msz_{sym}_50")],
+            [InlineKeyboardButton(f"🔥 Tudo em {sym} (100%)", callback_data=f"msz_{sym}_100")],
+            [InlineKeyboardButton("↩️ Voltar", callback_data="manual")],
+        ])
+        await q.edit_message_text(
+            f"🎮 *Modo Manual — Passo 2 de 2*\nMoeda: *{sym}*\n\n"
+            "💰 *Quanto da banca* você quer apostar nesta operação?\n\n"
+            "_No manual não há teto automático: se quiser, vai *all-in*. "
+            "O disjuntor de drawdown ainda te protege de perda catastrófica._",
+            reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+    async def _manual_confirm(self, q, sym: str, pct: float) -> None:  # noqa: ANN001
+        eq = self._agent._last_equity or 0.0
+        approx = f"≈ *${eq * pct / 100.0:.2f}*" if eq > 0 else "_(valor exato calculado na hora pelo seu saldo)_"
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"✅ Confirmar e comprar {sym}", callback_data=f"mgo_{sym}_{pct:.0f}")],
+            [InlineKeyboardButton("↩️ Trocar tamanho", callback_data=f"mbuy_{sym}"),
+             InlineKeyboardButton("❌ Cancelar", callback_data="back_home")],
+        ])
+        await q.edit_message_text(
+            f"⚠️ *Confirmação — você está no comando*\n\n"
+            f"Vou comprar *{sym}* com *{pct:.0f}%* da banca ({approx}).\n\n"
+            "Este é um trade *manual*: ele *ignora a nota da IA* — você assume o risco "
+            "desta decisão. O que *continua valendo*:\n"
+            "🛡️ whitelist · anti-honeypot/taxa · slippage máx · anti-drain\n"
+            "🚨 disjuntor de drawdown (proteção contra perda catastrófica)\n"
+            f"🛑 stop-loss de -{self._agent.stop_loss_pct:.0f}% será monitorado normalmente\n\n"
+            "Confirma?",
+            reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+    async def _manual_execute(self, q, sym: str, pct: float) -> None:  # noqa: ANN001
+        await q.edit_message_text(
+            f"🟡 Compra manual de *{sym}* ({pct:.0f}% da banca) — swap real em andamento...\n"
+            "_Você receberá a confirmação com o link da BscScan._",
+            parse_mode=ParseMode.MARKDOWN)
+        if self._agent.state not in (AgentState.SCANNING, AgentState.IN_POSITION):
+            await self._agent.start()
+        await self._agent.force_buy(sym, size_pct=pct)
+
     async def cmd_status(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._is_master(update):
             return
@@ -294,13 +376,23 @@ class TelegramInterface:
         if not self._is_master(update):
             return
         if not ctx.args:
-            await update.message.reply_text("Uso: /buy SIMBOLO  (ex.: /buy ETH)")
+            await update.message.reply_text(
+                "Uso: /buy SIMBOLO [%]  (ex.: /buy ETH  ou  /buy FLOKI 100 para all-in)")
             return
         symbol = ctx.args[0].upper()
-        await update.message.reply_text(f"🟡 Compra manual de {symbol} (validação) — swap real em andamento...")
+        size_pct: float | None = None
+        if len(ctx.args) > 1:
+            try:
+                size_pct = max(0.0, min(float(ctx.args[1].rstrip("%")), 100.0))
+            except ValueError:
+                await update.message.reply_text("Tamanho inválido. Ex.: /buy FLOKI 50")
+                return
+        tam = f" ({size_pct:.0f}% da banca)" if size_pct is not None else ""
+        await update.message.reply_text(
+            f"🟡 Compra manual de {symbol}{tam} (validação) — swap real em andamento...")
         if self._agent.state not in (AgentState.SCANNING, AgentState.IN_POSITION):
             await self._agent.start()
-        await self._agent.force_buy(symbol)
+        await self._agent.force_buy(symbol, size_pct=size_pct)
 
     async def cmd_dashboard(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         import os

@@ -93,17 +93,28 @@ class RiskEngine:
         self._halted = True
 
     # ── Dimensionamento de posição ───────────────────────────────────────────
-    def position_size_usd(self, current_equity_usd: float, available_stable_usd: float) -> float:
+    def position_size_usd(self, current_equity_usd: float, available_stable_usd: float,
+                          override_pct: float | None = None) -> float:
         """Tamanho do trade, amigável a banca pequena.
 
-        = % da banca, mas com PISO operacional (min_position_usd) para não fazer
-        trade "poeira" que o gás come, e TETO (max_position_pct) para não
-        concentrar demais quando a banca é pequena. Limitado pelo stable disponível.
+        Automático: = % da banca (position_size_pct), com PISO operacional
+        (min_position_usd) para não fazer trade "poeira" que o gás come, e TETO
+        (max_position_pct) para não concentrar demais. Limitado pelo stable disponível.
+
+        Manual (override_pct): o dono escolhe o tamanho explicitamente (até 100% =
+        all-in), via confirmação no Telegram. Aqui o TETO automático NÃO se aplica
+        (é decisão consciente); o piso e o stable disponível continuam valendo, e o
+        disjuntor de drawdown segue ativo em can_open_position().
+
         Retorna 0.0 se nem o piso couber.
         """
         floor = self._cfg.min_position_usd
-        target = max(current_equity_usd * (self._cfg.position_size_pct / 100.0), floor)
-        target = min(target, current_equity_usd * (self._cfg.max_position_pct / 100.0))
+        if override_pct is not None:
+            pct = max(0.0, min(float(override_pct), 100.0))
+            target = max(current_equity_usd * (pct / 100.0), floor)
+        else:
+            target = max(current_equity_usd * (self._cfg.position_size_pct / 100.0), floor)
+            target = min(target, current_equity_usd * (self._cfg.max_position_pct / 100.0))
         size = min(target, available_stable_usd)
         if size < floor:
             return 0.0
