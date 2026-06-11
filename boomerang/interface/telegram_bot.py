@@ -38,6 +38,7 @@ _REASON_LABEL = {
     "SELL_STOP_LOSS": "🛑 Stop-loss disparado",
     "SELL_TRAILING": "📈 Trailing (lucro protegido)",
     "SELL_TAKE_PROFIT": "🎯 Lucro-alvo atingido",
+    "SELL_BRAIN": "🧠 Saída inteligente (tese mudou)",
     "liquidação": "🚨 Liquidação (circuit breaker)",
 }
 

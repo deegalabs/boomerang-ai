@@ -70,6 +70,8 @@ class BoomerangAgent:
         # tokens cuja EXECUÇÃO falhou (ex.: revert por liquidez): symbol -> expiry ts.
         # O agente os ignora por um tempo e roteia p/ candidatos tradáveis (auto-aprende).
         self._exec_cooldown: dict[str, float] = {}
+        # Skill Saída Inteligente: última reavaliação do cérebro por posição (throttle).
+        self._exit_checks: dict[str, float] = {}
         self._last_equity: float = 0.0          # patrimônio mais recente (cache p/ dashboard)
         self._last_holdings: list = []          # composição por moeda (cache p/ painel /live)
         self.agent_address: str | None = None   # endereço da carteira (preenchido no startup)
@@ -558,8 +560,32 @@ class BoomerangAgent:
             signal = self._risk.evaluate_position(pos, price)
             if signal != ExitSignal.HOLD:
                 await self._sell(pos, reason=signal.value, exit_price=price)
+            else:
+                # SKILL Saída Inteligente: se o mecânico diz HOLD, o cérebro reavalia a
+                # tese (a cada ~5min) e pode sair antes — proteger lucro / cortar reversão.
+                await self._smart_exit_check(pos, price)
         if not self.positions and self.state == AgentState.IN_POSITION:
             self.state = AgentState.SCANNING
+
+    async def _smart_exit_check(self, pos: Position, price: float) -> bool:
+        """Reavaliação qualitativa da posição pelo cérebro (throttled). Sai se a tese
+        quebrou (momentum virou / volume secou / esticou), independente do stop."""
+        now = time.time()
+        if now - self._exit_checks.get(pos.symbol, 0.0) < 300:  # 1 reavaliação / 5min / posição
+            return False
+        self._exit_checks[pos.symbol] = now
+        pnl = ((price - pos.entry_price) / pos.entry_price * 100.0) if pos.entry_price else 0.0
+        try:
+            decision = await self._analyzer.evaluate_exit(
+                pos.symbol, pnl_pct=pnl, held_min=(now - pos.opened_at) / 60.0)
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("Saída inteligente indisponível (%s): %s", pos.symbol, exc)
+            return False
+        if decision.should_exit:
+            self._log.info("SAÍDA INTELIGENTE | %s (PnL %+.2f%%): %s", pos.symbol, pnl, decision.reason)
+            await self._sell(pos, reason="SELL_BRAIN", exit_price=price)
+            return True
+        return False
 
     async def _sell(self, pos: Position, *, reason: str, exit_price: float | None = None) -> None:
         with self._risk.trade_lock:
