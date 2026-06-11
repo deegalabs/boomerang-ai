@@ -18,6 +18,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from boomerang.brain.cmc_analyzer import AttentionAnalyzer, momentum_prescore, passes_prefilter
+from boomerang.risk.risk_engine import dynamic_sl_tp, tier_from_var
 from boomerang.config import Config
 from boomerang.identity import bnb_agent as identity
 from boomerang.ipc import Alert, AlertBus, AlertType
@@ -570,8 +571,17 @@ class BoomerangAgent:
             current_equity_usd=equity, available_stable_usd=stable,
             open_positions=len(self.positions), now_ts=now,
         )
-        gate_note = "" if gate.allowed else f" · Gate BLOQUEOU: {gate.detail}"
-        if gate.allowed:
+        # GATE MACRO: se o BTC despenca (<= -5% em 24h), o mercado está risk-off →
+        # não abre posição nova (correção sistêmica). Posições abertas seguem geridas.
+        macro = await self._analyzer.gather_macro()
+        btc24 = macro.get("btc_24h")
+        systemic = btc24 is not None and btc24 <= -5.0
+        gate_note = ""
+        if systemic:
+            gate_note = f" · Gate MACRO: BTC {btc24:+.1f}%/24h (risco sistêmico)"
+        elif not gate.allowed:
+            gate_note = f" · Gate BLOQUEOU: {gate.detail}"
+        if gate.allowed and not systemic:
             best_score = -1
             for symbol in ranked[:TOP_K]:
                 addr = self._addr(symbol)
@@ -600,7 +610,13 @@ class BoomerangAgent:
                     await self._emit(AlertType.REJECTED, f"Trade barrado: {symbol}",
                                      val.detail, reason=val.reason.value if val.reason else "")
                     continue  # tenta o próximo melhor BUY
-                if await self._open(symbol, addr, size, verdict.rationale, now):
+                # SL/TP DINÂMICO: cérebro classificou a volatilidade; o código calcula
+                # (R:R >= 1:2) a partir de |Var24h|. Fallback determinístico se faltar tier.
+                var24 = abs(float(quotes[symbol].get("percent_change_24h") or 0.0))
+                tier = verdict.volatility or tier_from_var(var24)
+                sl_pct, tp_pct = dynamic_sl_tp(tier, var24)
+                if await self._open(symbol, addr, size, verdict.rationale, now,
+                                    stop_pct=sl_pct, tp_pct=tp_pct):
                     opened = True
                     break
                 # Execução falhou (ex.: revert por liquidez): cooldown e tenta o próximo.
@@ -619,8 +635,12 @@ class BoomerangAgent:
         await self._emit(AlertType.SCAN, "Ciclo concluído", detail)
         self._save()
 
-    async def _open(self, symbol: str, addr: str, size_usd: float, rationale: str, now: float) -> bool:
-        """Abre a posição (swap real). Retorna True se abriu, False se a execução falhou."""
+    async def _open(self, symbol: str, addr: str, size_usd: float, rationale: str, now: float,
+                    *, stop_pct: float = 0.0, tp_pct: float = 0.0) -> bool:
+        """Abre a posição (swap real). Retorna True se abriu, False se a execução falhou.
+
+        stop_pct/tp_pct: SL/TP DINÂMICO desta posição (calibrado pela volatilidade). 0 =
+        usa o fixo do config (compras manuais)."""
         def _do_buy():
             return self._executor.buy(to_token=addr, amount_usd=size_usd, password=self._password)
         with self._risk.trade_lock:
@@ -639,19 +659,27 @@ class BoomerangAgent:
             await self._emit(AlertType.ERROR, f"Compra falhou: {symbol}", res.error)
             return False
         entry = res.entry_price or await asyncio.to_thread(self._validator.onchain_price_usd, addr)
+        # SL/TP efetivo: dinâmico (volatilidade) se informado, senão o fixo do config.
+        eff_stop = stop_pct or self.stop_loss_pct
+        eff_tp = tp_pct or self.take_profit_pct
+        stop_price = entry * (1.0 - eff_stop / 100.0)
+        tp_price = entry * (1.0 + eff_tp / 100.0) if eff_tp > 0 else 0.0
         pos = Position(symbol=symbol, token_address=addr, entry_price=entry, amount_usd=size_usd,
-                       qty=res.qty or 0.0, stop_loss_price=self._risk.initial_stop_price(entry),
+                       qty=res.qty or 0.0, stop_loss_price=stop_price,
+                       stop_loss_pct=stop_pct, take_profit_pct=tp_pct,
                        opened_at=now, tx_hash=res.tx_hash)
         self.positions.append(pos)
         self.state = AgentState.IN_POSITION
         self._risk.record_trade(now)
-        self._log.info("TRADE ABERTO | %s $%.2f @ %.8g | tx=%s", symbol, size_usd, entry, res.tx_hash)
+        vol_note = f" | vol {pos.stop_loss_pct:.1f}/{pos.take_profit_pct:.1f}%" if stop_pct else ""
+        self._log.info("TRADE ABERTO | %s $%.2f @ %.8g%s | tx=%s",
+                       symbol, size_usd, entry, vol_note, res.tx_hash)
         append_trade({"type": "open", "symbol": symbol, "amount_usd": size_usd,
                       "entry_price": entry, "tx": res.tx_hash, "ts": now})
         await self._emit(AlertType.TRADE_OPENED, f"Posição aberta: {symbol}",
                          rationale, amount_usd=size_usd, entry=entry,
-                         stop=pos.stop_loss_price, take_profit=self._risk.take_profit_price(entry),
-                         stop_pct=self.stop_loss_pct, take_profit_pct=self.take_profit_pct,
+                         stop=stop_price, take_profit=tp_price,
+                         stop_pct=eff_stop, take_profit_pct=eff_tp,
                          tx=res.tx_hash)
         self._save()
         return True

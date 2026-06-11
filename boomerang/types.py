@@ -38,6 +38,7 @@ class Verdict:
     confidence_score: int
     action: Action
     rationale: str
+    volatility: str = ""  # tier classificada pelo cérebro: BAIXA | MEDIA | ALTA (p/ SL/TP dinâmico)
 
     @property
     def is_buy(self) -> bool:
@@ -93,6 +94,8 @@ class Position:
     amount_usd: float
     qty: float
     stop_loss_price: float
+    stop_loss_pct: float = 0.0      # SL dinâmico desta posição (0 = usa o fixo do config)
+    take_profit_pct: float = 0.0    # TP dinâmico desta posição (0 = usa o fixo do config)
     trailing_active: bool = False
     peak_price: float = 0.0
     opened_at: float = 0.0

@@ -181,8 +181,12 @@ class RiskEngine:
         if current_price > pos.peak_price:
             pos.peak_price = current_price
 
-        # Lucro-alvo: bateu a meta de ganho do usuário → realiza o lucro.
-        tp = self._cfg.user_take_profit_pct
+        # SL/TP DESTA posição: dinâmico (calibrado pela volatilidade na entrada) se houver,
+        # senão cai no fixo do config. O trailing usa a mesma distância de stop.
+        stop_pct = pos.stop_loss_pct or self._cfg.user_stop_loss_pct
+        tp = pos.take_profit_pct or self._cfg.user_take_profit_pct
+
+        # Lucro-alvo: bateu a meta de ganho → realiza o lucro.
         if tp > 0 and current_price >= pos.entry_price * (1.0 + tp / 100.0):
             return ExitSignal.SELL_TAKE_PROFIT
 
@@ -193,7 +197,7 @@ class RiskEngine:
             pos.stop_loss_price = max(pos.stop_loss_price, pos.entry_price)  # break-even
 
         if pos.trailing_active:
-            trailed = pos.peak_price * (1.0 - self._cfg.user_stop_loss_pct / 100.0)
+            trailed = pos.peak_price * (1.0 - stop_pct / 100.0)
             pos.stop_loss_price = max(pos.stop_loss_price, trailed)
 
         if current_price <= pos.stop_loss_price:
@@ -208,3 +212,38 @@ class RiskEngine:
             return False  # ainda não começou a operar nesta sessão
         horas = (now_ts - self._last_trade_ts) / 3600.0
         return horas >= self._cfg.heartbeat_after_hours
+
+
+# ── SL/TP dinâmico por volatilidade (determinístico; R:R sempre >= 1:2) ───────
+def dynamic_sl_tp(tier: str, var24h_abs: float) -> tuple[float, float]:
+    """Stop-loss e take-profit (%) calibrados pela VOLATILIDADE do ativo na entrada.
+
+    O cérebro classifica a tier (BAIXA/MEDIA/ALTA); a MATEMÁTICA é feita AQUI (LLM não
+    faz conta). Relação Risco:Retorno travada em >= 1:2. var24h_abs = |percent_change_24h|.
+
+      BAIXA  (|24h| <= 3%):  SL 2.0%            TP 4.0%   (1:2)
+      MEDIA  (3-8%):         SL max(|24h|*.75, 3)  TP SL*2.0
+      ALTA   (8-15%):        SL min(|24h|*.85, 7)  TP SL*2.5  (prêmio maior pelo risco)
+    """
+    t = (tier or "").strip().upper()
+    if t in ("ALTA", "ALTO", "HIGH"):
+        sl = max(min(var24h_abs * 0.85, 7.0), 3.0)
+        tp = sl * 2.5
+    elif t in ("MEDIA", "MÉDIA", "MEDIO", "MÉDIO", "MEDIUM", "MED"):
+        sl = max(var24h_abs * 0.75, 3.0)
+        tp = sl * 2.0
+    else:  # BAIXA / LOW / desconhecido → conservador
+        sl, tp = 2.0, 4.0
+    # Garante R:R >= 1:2 mesmo após arredondar.
+    sl = round(sl, 2)
+    tp = round(max(tp, sl * 2.0), 2)
+    return sl, tp
+
+
+def tier_from_var(var24h_abs: float) -> str:
+    """Fallback determinístico da tier a partir de |Var24h| (se o cérebro não classificar)."""
+    if var24h_abs <= 3.0:
+        return "BAIXA"
+    if var24h_abs <= 8.0:
+        return "MEDIA"
+    return "ALTA"
