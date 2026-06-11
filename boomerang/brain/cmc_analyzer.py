@@ -163,6 +163,24 @@ class CMCClient:
             return r.json()["data"]
         return await asyncio.to_thread(_go)
 
+    async def rest_listings(self, limit: int = 200, sort: str = "percent_change_24h") -> list[dict]:
+        """Top cryptos do mercado por um critério (default: maiores ganhos 24h).
+
+        Endpoint listings/latest (disponível no plano Basic). Base da SKILL Radar de
+        Atenção: descobre movers FORA da cesta fixa que estejam na whitelist elegível."""
+        import asyncio
+
+        import httpx
+
+        def _go() -> list[dict]:
+            r = httpx.get(f"{_CMC_REST}/v1/cryptocurrency/listings/latest",
+                          params={"limit": str(limit), "sort": sort, "sort_dir": "desc"},
+                          headers={"X-CMC_PRO_API_KEY": self._cfg.secrets.cmc_api_key,
+                                   "Accept": "application/json"}, timeout=25)
+            r.raise_for_status()
+            return r.json().get("data", [])
+        return await asyncio.to_thread(_go)
+
     async def list_tool_names(self) -> list[str]:
         from mcp import ClientSession
         from mcp.client.streamable_http import streamablehttp_client
@@ -372,6 +390,39 @@ class AttentionAnalyzer:
     async def gather_metrics(self, symbol: str) -> dict:
         """Conveniência: global + por-token juntos (uso avulso)."""
         return {**await self.gather_global(), **await self.gather_token(symbol)}
+
+    async def gather_movers(self, eligible_symbols: set[str], *, top_n: int = 8,
+                            min_change_24h: float = 5.0) -> dict:
+        """SKILL Radar de Atenção: maiores ganhos 24h do MERCADO que estão na whitelist
+        elegível (tradáveis) e ainda não na cesta fixa. Retorna {symbol: metrics} no
+        mesmo formato de gather_quotes — pega o surto antes de ele virar 'obvio'."""
+        try:
+            listings = await self._cmc.rest_listings(limit=200, sort="percent_change_24h")
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("Radar de atenção (listings) falhou: %s", exc)
+            return {}
+        out: dict = {}
+        for item in listings:  # já vem ordenado por maior ganho 24h
+            sym = str(item.get("symbol", "")).upper()
+            if sym not in eligible_symbols:
+                continue
+            q = (item.get("quote") or {}).get("USD") or {}
+            ch = q.get("percent_change_24h")
+            if ch is None or ch < min_change_24h:
+                continue
+            out[sym] = {
+                "price_usd": q.get("price"),
+                "volume_24h_usd": q.get("volume_24h"),
+                "volume_change_24h_pct": q.get("volume_change_24h"),
+                "percent_change_1h": q.get("percent_change_1h"),
+                "percent_change_24h": q.get("percent_change_24h"),
+                "percent_change_7d": q.get("percent_change_7d"),
+                "percent_change_30d": q.get("percent_change_30d"),
+                "market_cap_usd": q.get("market_cap"),
+            }
+            if len(out) >= top_n:
+                break
+        return out
 
     def _effective_cut(self, metrics: dict | None) -> int:
         """Corte de confiança ADAPTATIVO ao regime de mercado. Momentum/tendência

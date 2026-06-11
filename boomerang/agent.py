@@ -447,8 +447,19 @@ class BoomerangAgent:
                              "Falha ao obter cotações da CMC (REST). Verifique a API key / cota.")
             return
 
+        # SKILL Radar de Atenção: junta os maiores ganhos do MERCADO que estão na
+        # whitelist elegível (tradáveis) ao universo — pega surtos fora da cesta fixa.
+        try:
+            movers = await self._analyzer.gather_movers(set(self._token_addr.keys()), top_n=8)
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("Radar de atenção indisponível: %s", exc)
+            movers = {}
+        for sym, m in movers.items():
+            quotes.setdefault(sym, m)
+        universe = list(dict.fromkeys(list(self.token_focus) + list(movers.keys())))
+
         # Pré-score determinístico (de graça) para ranquear e FILTRAR quem vai ao LLM.
-        prescores = [(s, momentum_prescore(quotes.get(s))) for s in self.token_focus if quotes.get(s)]
+        prescores = [(s, momentum_prescore(quotes.get(s))) for s in universe if quotes.get(s)]
         candidates = [s for s, _ in prescores
                       if passes_prefilter(quotes.get(s), self._cfg.prefilter_min_vol_change)
                       and self._exec_cooldown.get(s, 0.0) <= now]  # pula intradáveis recentes
@@ -509,7 +520,8 @@ class BoomerangAgent:
         top = sorted(prescores, key=lambda x: -x[1])[:3]
         top_str = " · ".join(f"{s} {sc}" for s, sc in top) or "—"
         melhor = f" · Melhor avaliado: {top_eval}" if top_eval else ""
-        detail = (f"Analisei {len(prescores)} tokens (momentum). Top: {top_str}. "
+        radar = f" · Radar: +{len(movers)} movers" if movers else ""
+        detail = (f"Analisei {len(prescores)} tokens (momentum){radar}. Top: {top_str}. "
                   f"Candidatos p/ IA: {len(candidates)} · Claude: {claude_calls} chamada(s).{melhor} Sem entrada.")
         self._log.info("CICLO | %s", detail)  # visibilidade no log do servidor
         await self._emit(AlertType.SCAN, "Ciclo concluído", detail)
