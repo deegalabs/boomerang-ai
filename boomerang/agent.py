@@ -401,6 +401,29 @@ class BoomerangAgent:
         tag = f"compra manual {size_pct:.0f}%" if size_pct is not None else "compra manual"
         await self._open(symbol, addr, size, f"{tag} (validação)", now)
 
+    async def sell_position(self, symbol: str) -> bool:
+        """Venda manual de UMA posição aberta (a mercado), pelo dono via Telegram.
+        Não trava o agente (diferente do /panic) — ele segue operando."""
+        symbol = symbol.upper()
+        pos = next((p for p in self.positions if p.symbol.upper() == symbol), None)
+        if not pos:
+            await self._emit(AlertType.ERROR, "Venda manual", f"Sem posição aberta de {symbol}.")
+            return False
+        try:
+            price = await asyncio.to_thread(self._validator.onchain_price_usd, pos.token_address)
+        except Exception:  # noqa: BLE001
+            price = None
+        await self._sell(pos, reason="SELL_MANUAL", exit_price=price)
+        return True
+
+    async def sell_all_positions(self) -> int:
+        """Vende TODAS as posições abertas a mercado (sem travar o agente). Retorna a contagem."""
+        n = 0
+        for pos in list(self.positions):
+            if await self.sell_position(pos.symbol):
+                n += 1
+        return n
+
     # ── loops ────────────────────────────────────────────────────────────────
     async def _scan_loop(self) -> None:
         interval = int(self._cfg.loop["scan_interval_seconds"])
