@@ -430,48 +430,61 @@ class BoomerangAgent:
         prescores = [(s, momentum_prescore(quotes.get(s))) for s in self.token_focus if quotes.get(s)]
         candidates = [s for s, _ in prescores
                       if passes_prefilter(quotes.get(s), self._cfg.prefilter_min_vol_change)]
+        # Postura OPORTUNISTA: ordena por momentum e avalia os TOP-K mais promissores,
+        # escolhendo o MELHOR veredito (maior score) — não o primeiro qualquer. Assim o
+        # agente opera a melhor oportunidade RELATIVA do ciclo, inclusive em mercado calmo.
+        ranked = sorted(candidates, key=lambda s: momentum_prescore(quotes.get(s)), reverse=True)
+        TOP_K = 3
+        STRONG = 78  # setup claramente forte: para de gastar chamadas e já entra
 
         opened = False
         claude_calls = 0
-        for symbol in candidates:
-            addr = self._addr(symbol)
-            if not addr:
-                continue
-            gate = self._risk.can_open_position(
-                current_equity_usd=equity, available_stable_usd=stable,
-                open_positions=len(self.positions), now_ts=now,
-            )
-            if not gate.allowed:
-                if gate.reason and gate.reason.value in ("REJECTED_COOLDOWN", "REJECTED_MAX_POSITIONS"):
-                    break
-                continue
+        best: tuple = ()  # (verdict, symbol, addr) do maior score que deu BUY
+        top_eval = ""     # melhor score avaliado no ciclo (p/ visibilidade no log)
+        # gate (cooldown/max posições/drawdown/stable) não depende do símbolo: 1 checagem.
+        gate = self._risk.can_open_position(
+            current_equity_usd=equity, available_stable_usd=stable,
+            open_positions=len(self.positions), now_ts=now,
+        )
+        if gate.allowed:
+            best_score = -1
+            for symbol in ranked[:TOP_K]:
+                addr = self._addr(symbol)
+                if not addr:
+                    continue
+                # Só AQUI gastamos uma chamada (paga) ao Claude — apenas nos melhores candidatos.
+                verdict = await self._analyzer.evaluate(
+                    symbol, raw_metrics={**global_metrics, **quotes[symbol]})
+                claude_calls += 1
+                if verdict.confidence_score > best_score:
+                    best_score = verdict.confidence_score
+                    top_eval = f"{symbol} {verdict.confidence_score}{'✓' if verdict.is_buy else ''}"
+                if verdict.is_buy and (not best or verdict.confidence_score > best[0].confidence_score):
+                    best = (verdict, symbol, addr)
+                if verdict.is_buy and verdict.confidence_score >= STRONG:
+                    break  # já achamos um setup forte; não precisa avaliar mais
 
-            # Só AQUI gastamos uma chamada (paga) ao Claude — apenas em candidatos reais.
-            verdict = await self._analyzer.evaluate(symbol, raw_metrics={**global_metrics, **quotes[symbol]})
-            claude_calls += 1
-            if not verdict.is_buy:
-                continue
-
-            size = self._risk.position_size_usd(equity, stable)
-            val = await asyncio.to_thread(
-                self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size,
-                cmc_price_usd=quotes[symbol].get("price_usd"),  # ativa checagem de oráculo
-            )
-            if not val.ok:
-                await self._emit(AlertType.REJECTED, f"Trade barrado: {symbol}",
-                                 val.detail, reason=val.reason.value if val.reason else "")
-                continue
-
-            await self._open(symbol, addr, size, verdict.rationale, now)
-            opened = True
-            break  # uma entrada por ciclo
+            if best:
+                verdict, symbol, addr = best
+                size = self._risk.position_size_usd(equity, stable)
+                val = await asyncio.to_thread(
+                    self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size,
+                    cmc_price_usd=quotes[symbol].get("price_usd"),  # ativa checagem de oráculo
+                )
+                if val.ok:
+                    await self._open(symbol, addr, size, verdict.rationale, now)
+                    opened = True
+                else:
+                    await self._emit(AlertType.REJECTED, f"Trade barrado: {symbol}",
+                                     val.detail, reason=val.reason.value if val.reason else "")
 
         if opened:
             return  # TRADE_OPENED já notificou
         top = sorted(prescores, key=lambda x: -x[1])[:3]
         top_str = " · ".join(f"{s} {sc}" for s, sc in top) or "—"
+        melhor = f" · Melhor avaliado: {top_eval}" if top_eval else ""
         detail = (f"Analisei {len(prescores)} tokens (momentum). Top: {top_str}. "
-                  f"Candidatos p/ IA: {len(candidates)} · Claude: {claude_calls} chamada(s). Sem entrada.")
+                  f"Candidatos p/ IA: {len(candidates)} · Claude: {claude_calls} chamada(s).{melhor} Sem entrada.")
         self._log.info("CICLO | %s", detail)  # visibilidade no log do servidor
         await self._emit(AlertType.SCAN, "Ciclo concluído", detail)
         self._save()
