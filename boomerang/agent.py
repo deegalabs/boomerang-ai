@@ -274,7 +274,8 @@ class BoomerangAgent:
             self.token_focus = list(self._default_focus)
             self.position_size_pct = self._default_size  # também volta ao tamanho default (25%)
             data["position_size_pct"] = self._default_size  # não deixa o restore sobrescrever abaixo
-            self._log.info("Reset: foco→cesta (%d moedas), tamanho→%.0f%% via BOOMERANG_RESET_FOCUS.",
+            data["peak_equity"] = 0.0  # rebaseia o pico (limpa peak fantasma) → drawdown 0% no 1º ciclo
+            self._log.info("Reset: foco→cesta (%d moedas), tamanho→%.0f%%, peak rebaseado.",
                            len(self.token_focus), self.position_size_pct)
         self.stop_loss_pct = data.get("stop_loss_pct", self.stop_loss_pct)
         self.take_profit_pct = data.get("take_profit_pct", self.take_profit_pct)
