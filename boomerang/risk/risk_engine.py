@@ -115,7 +115,10 @@ class RiskEngine:
         else:
             target = max(current_equity_usd * (self._cfg.position_size_pct / 100.0), floor)
             target = min(target, current_equity_usd * (self._cfg.max_position_pct / 100.0))
-        size = min(target, available_stable_usd)
+        # BUFFER: nunca gastar 100% do stable. Trocar o saldo exato reverte com
+        # "BEP20: transfer amount exceeds balance" por arredondamento/wobble de preço
+        # entre a leitura e o swap. Deixa 3% de folga.
+        size = min(target, available_stable_usd * 0.97)
         if size < floor:
             return 0.0
         return round(size, 6)
