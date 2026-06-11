@@ -676,9 +676,32 @@ class BoomerangAgent:
         return False
 
     async def _sell(self, pos: Position, *, reason: str, exit_price: float | None = None) -> None:
+        # Vende o saldo REAL on-chain (não o qty rastreado, que pode estar defasado por
+        # dust/fee-on-transfer) com 0,1% de folga — evita "transfer amount exceeds balance".
+        try:
+            raw = await asyncio.to_thread(self._validator._token_balance, pos.token_address, self.agent_address)
+            dec = await asyncio.to_thread(self._validator._decimals, pos.token_address)
+            real_qty = raw / (10 ** dec)
+        except Exception:  # noqa: BLE001
+            real_qty = pos.qty
+        px = exit_price or pos.entry_price or 0.0
+        if real_qty <= 0 or real_qty * px < 0.10:
+            # Só restou poeira → a posição já saiu de fato; destrava o tracking.
+            if pos in self.positions:
+                self.positions.remove(pos)
+            self._save()
+            self._log.info("%s já liquidada on-chain (poeira); removida do tracking.", pos.symbol)
+            await self._emit(AlertType.TRADE_CLOSED, f"Posição encerrada: {pos.symbol}",
+                             "Já estava vendida (só restava poeira on-chain).", reason=reason,
+                             pnl_pct=None, entry=pos.entry_price, exit=px, amount_usd=pos.amount_usd, tx=None)
+            if not self.positions and self.state == AgentState.IN_POSITION:
+                self.state = AgentState.SCANNING
+            return
+        sell_qty = real_qty * 0.999
+
         def _do_sell():
             return self._executor.sell_all(
-                token=pos.token_address, amount=pos.qty, password=self._password)
+                token=pos.token_address, amount=sell_qty, password=self._password)
         with self._risk.trade_lock:
             res = await asyncio.to_thread(_do_sell)
         # 1ª venda de um token exige approval (token→router); o swap pode reverter antes
