@@ -445,14 +445,13 @@ class AttentionAnalyzer:
             return q.get("percent_change_24h")
         return {"btc_24h": chg(1), "eth_24h": chg(1027)}
 
-    def _effective_cut(self, metrics: dict | None) -> int:
-        """Corte de confiança ADAPTATIVO ao regime de mercado. Momentum/tendência
-        forte abaixa a barra (deixa entrar quando há sinal claro); mercado fraco
-        mantém a barra alta (evita operar ruído). Determinístico e explicável;
-        nunca abaixo de 50 (não opera puro ruído). Resolve o '70 fixo nunca bate'."""
+    def _effective_cut(self, metrics: dict | None, cut_adjust: int = 0) -> int:
+        """Corte de confiança ADAPTATIVO. Momentum forte abaixa a barra; o REGIME de mercado
+        (cut_adjust: BULL abaixa, DEFENSIVO sobe) desloca-a também. Determinístico; nunca
+        abaixo de 48 (não opera puro ruído)."""
         base = self._cfg.min_confidence_score
         bonus = min(int(momentum_prescore(metrics) * 0.18), 15)  # tendência forte: -até 15 pts
-        return max(base - bonus, 48)
+        return max(base - bonus + cut_adjust, 48)
 
     @staticmethod
     def _derive(m: dict) -> dict:
@@ -474,11 +473,11 @@ class AttentionAnalyzer:
         return out
 
     async def evaluate(self, symbol: str, raw_metrics: dict | None = None,
-                       memory: str = "") -> Verdict:
+                       memory: str = "", cut_adjust: int = 0) -> Verdict:
         metrics = raw_metrics if raw_metrics is not None else await self.gather_metrics(symbol)
         metrics = self._derive(metrics)
         clean = sanitize_metrics(metrics) or {}
-        return await self._ask_llm(symbol, clean, self._effective_cut(metrics), memory)
+        return await self._ask_llm(symbol, clean, self._effective_cut(metrics, cut_adjust), memory)
 
     async def _ask_llm(self, symbol: str, clean_metrics: dict, cut: int, memory: str = "") -> Verdict:
         from anthropic import AsyncAnthropic

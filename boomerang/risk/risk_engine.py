@@ -258,6 +258,23 @@ def tier_from_var(var24h_abs: float) -> str:
     return "ALTA"
 
 
+# ── SKILL: Adaptação por regime (a postura muda com o mercado) ────────────────
+def market_regime(btc_24h: float | None) -> tuple[str, int]:
+    """Lê o REGIME do mercado pelo BTC (24h) e devolve (rótulo, ajuste-de-corte).
+    O ajuste desloca a barra de entrada: BULL abaixa (mais agressivo, surfa a onda);
+    DEFENSIVO sobe (mais seletivo em mercado fraco). Acima de -5% o gate macro já corta.
+      BTC >= +3%  → BULL      (-5: entra mais fácil)
+      BTC <= -2%  → DEFENSIVO (+8: só os melhores)
+      senão       → NEUTRO    (0)"""
+    if btc_24h is None:
+        return ("NEUTRO", 0)
+    if btc_24h >= 3.0:
+        return ("BULL", -5)
+    if btc_24h <= -2.0:
+        return ("DEFENSIVO", 8)
+    return ("NEUTRO", 0)
+
+
 # ── SKILL: Sizing por convicção (aposta escala com o confidence_score) ────────
 def conviction_size_pct(base_pct: float, score: int, max_pct: float = 50.0) -> float:
     """Escala o tamanho da posição pela CONVICÇÃO do cérebro (confidence_score).

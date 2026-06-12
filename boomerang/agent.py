@@ -18,7 +18,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from boomerang.brain.cmc_analyzer import AttentionAnalyzer, momentum_prescore, passes_prefilter
-from boomerang.risk.risk_engine import conviction_size_pct, dynamic_sl_tp, tier_from_var
+from boomerang.risk.risk_engine import (
+    conviction_size_pct, dynamic_sl_tp, market_regime, tier_from_var)
 from boomerang.config import Config
 from boomerang.identity import bnb_agent as identity
 from boomerang.ipc import Alert, AlertBus, AlertType
@@ -596,6 +597,8 @@ class BoomerangAgent:
         macro = await self._analyzer.gather_macro()
         btc24 = macro.get("btc_24h")
         systemic = btc24 is not None and btc24 <= -5.0
+        # SKILL Adaptação por regime: a postura (barra de entrada) muda com o mercado.
+        regime_label, cut_adjust = market_regime(btc24)
         gate_note = ""
         if systemic:
             gate_note = f" · Gate MACRO: BTC {btc24:+.1f}%/24h (risco sistêmico)"
@@ -610,7 +613,8 @@ class BoomerangAgent:
                     continue
                 # Só AQUI gastamos uma chamada (paga) ao Claude — apenas nos melhores candidatos.
                 verdict = await self._analyzer.evaluate(
-                    symbol, raw_metrics={**global_metrics, **quotes[symbol]}, memory=memory)
+                    symbol, raw_metrics={**global_metrics, **quotes[symbol]},
+                    memory=memory, cut_adjust=cut_adjust)
                 claude_calls += 1
                 if verdict.confidence_score > best_score:
                     best_score = verdict.confidence_score
@@ -662,7 +666,8 @@ class BoomerangAgent:
         top_str = " · ".join(f"{s} {sc}" for s, sc in top) or "—"
         melhor = f" · Melhor avaliado: {top_eval}" if top_eval else ""
         radar = f" · Radar: +{len(movers)} movers" if movers else ""
-        detail = (f"Analisei {len(prescores)} tokens (momentum){radar}. Top: {top_str}. "
+        reg = f" · Regime: {regime_label}({cut_adjust:+d})" if regime_label != "NEUTRO" else ""
+        detail = (f"Analisei {len(prescores)} tokens (momentum){radar}{reg}. Top: {top_str}. "
                   f"Candidatos p/ IA: {len(candidates)} · Claude: {claude_calls} chamada(s)."
                   f"{melhor}{gate_note}{rot_note} Sem entrada.")
         self._log.info("CICLO | %s", detail)  # visibilidade no log do servidor
