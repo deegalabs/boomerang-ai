@@ -18,7 +18,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from boomerang.brain.cmc_analyzer import AttentionAnalyzer, momentum_prescore, passes_prefilter
-from boomerang.risk.risk_engine import dynamic_sl_tp, tier_from_var
+from boomerang.risk.risk_engine import conviction_size_pct, dynamic_sl_tp, tier_from_var
 from boomerang.config import Config
 from boomerang.identity import bnb_agent as identity
 from boomerang.ipc import Alert, AlertBus, AlertType
@@ -621,7 +621,10 @@ class BoomerangAgent:
 
             # Tenta do MELHOR pro pior: se Filtro 2 barra OU a execução reverte, cai no próximo.
             for verdict, symbol, addr in sorted(buys, key=lambda b: -b[0].confidence_score):
-                size = self._risk.position_size_usd(equity, stable)
+                # SKILL Sizing por convicção: aposta escala com o confidence_score.
+                conv_pct = conviction_size_pct(self.position_size_pct, verdict.confidence_score,
+                                               max_pct=self._cfg.max_position_pct)
+                size = self._risk.position_size_usd(equity, stable, override_pct=conv_pct)
                 val = await asyncio.to_thread(
                     self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size,
                     cmc_price_usd=quotes[symbol].get("price_usd"),  # ativa checagem de oráculo
@@ -630,13 +633,15 @@ class BoomerangAgent:
                     await self._emit(AlertType.REJECTED, f"Trade barrado: {symbol}",
                                      val.detail, reason=val.reason.value if val.reason else "")
                     continue  # tenta o próximo melhor BUY
-                # SL/TP DINÂMICO: cérebro classificou a volatilidade; o código calcula
-                # (R:R >= 1:2) a partir de |Var24h|. Fallback determinístico se faltar tier.
+                # SL/TP DINÂMICO: cérebro classificou a volatilidade; o código calcula o STOP.
                 var24 = abs(float(quotes[symbol].get("percent_change_24h") or 0.0))
                 tier = verdict.volatility or tier_from_var(var24)
-                sl_pct, tp_pct = dynamic_sl_tp(tier, var24)
+                sl_pct, _tp_pct = dynamic_sl_tp(tier, var24)
+                # SKILL Saída assimétrica: corta perda curta (stop dinâmico) mas DEIXA O
+                # VENCEDOR CORRER — tp_pct=0 → sem teto fixo; o trailing protege e acompanha
+                # o pico (ratchet). O brilho do leaderboard vem dos grandes vencedores.
                 if await self._open(symbol, addr, size, verdict.rationale, now,
-                                    stop_pct=sl_pct, tp_pct=tp_pct):
+                                    stop_pct=sl_pct, tp_pct=0.0):
                     opened = True
                     break
                 # Execução falhou (ex.: revert por liquidez): cooldown e tenta o próximo.

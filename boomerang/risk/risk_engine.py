@@ -185,10 +185,15 @@ class RiskEngine:
         if current_price > pos.peak_price:
             pos.peak_price = current_price
 
-        # SL/TP DESTA posição: dinâmico (calibrado pela volatilidade na entrada) se houver,
-        # senão cai no fixo do config. O trailing usa a mesma distância de stop.
-        stop_pct = pos.stop_loss_pct or self._cfg.user_stop_loss_pct
-        tp = pos.take_profit_pct or self._cfg.user_take_profit_pct
+        # SL/TP DESTA posição. Se stop_loss_pct > 0 = posição DINÂMICA (autônoma): usa o
+        # stop calibrado e respeita tp=0 como "DEIXA CORRER" (saída assimétrica, só trailing).
+        # Senão (manual/legado) cai no fixo do config. O trailing usa a distância do stop.
+        if pos.stop_loss_pct > 0:
+            stop_pct = pos.stop_loss_pct
+            tp = pos.take_profit_pct  # 0 = sem teto (deixa o vencedor correr)
+        else:
+            stop_pct = self._cfg.user_stop_loss_pct
+            tp = self._cfg.user_take_profit_pct
 
         # Lucro-alvo: bateu a meta de ganho → realiza o lucro.
         if tp > 0 and current_price >= pos.entry_price * (1.0 + tp / 100.0):
@@ -251,3 +256,14 @@ def tier_from_var(var24h_abs: float) -> str:
     if var24h_abs <= 8.0:
         return "MEDIA"
     return "ALTA"
+
+
+# ── SKILL: Sizing por convicção (aposta escala com o confidence_score) ────────
+def conviction_size_pct(base_pct: float, score: int, max_pct: float = 50.0) -> float:
+    """Escala o tamanho da posição pela CONVICÇÃO do cérebro (confidence_score).
+    Ancora no base_pct por volta do score 62 (corte típico); cresce +3%/ponto acima e
+    encolhe abaixo, limitado entre 0,6x e 2,0x — e nunca acima do teto (max_pct).
+    Concentra capital na vantagem real, sem virar all-in."""
+    mult = 1.0 + (score - 62) * 0.03
+    mult = max(0.6, min(mult, 2.0))
+    return round(min(base_pct * mult, max_pct), 2)
