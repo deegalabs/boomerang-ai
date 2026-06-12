@@ -648,6 +648,13 @@ class BoomerangAgent:
                 self._exec_cooldown[symbol] = now + 7200  # 2h fora do radar
                 self._log.info("%s em cooldown de execução (2h) após falha de swap.", symbol)
 
+        # SKILL Rotação por oportunidade: 100% alocado, mas surgiu algo MUITO melhor? Gira
+        # do holding mais FRACO (nunca de um vencedor em corrida) p/ liberar capital.
+        rot_note = ""
+        if (not opened and not systemic and self.positions
+                and not gate.allowed and "insuficiente" in (gate.detail or "").lower()):
+            rot_note = await self._maybe_rotate(equity, quotes, global_metrics, ranked, now)
+
         if opened:
             return  # TRADE_OPENED já notificou
         top = sorted(prescores, key=lambda x: -x[1])[:3]
@@ -655,10 +662,49 @@ class BoomerangAgent:
         melhor = f" · Melhor avaliado: {top_eval}" if top_eval else ""
         radar = f" · Radar: +{len(movers)} movers" if movers else ""
         detail = (f"Analisei {len(prescores)} tokens (momentum){radar}. Top: {top_str}. "
-                  f"Candidatos p/ IA: {len(candidates)} · Claude: {claude_calls} chamada(s).{melhor}{gate_note} Sem entrada.")
+                  f"Candidatos p/ IA: {len(candidates)} · Claude: {claude_calls} chamada(s)."
+                  f"{melhor}{gate_note}{rot_note} Sem entrada.")
         self._log.info("CICLO | %s", detail)  # visibilidade no log do servidor
         await self._emit(AlertType.SCAN, "Ciclo concluído", detail)
         self._save()
+
+    async def _maybe_rotate(self, equity: float, quotes: dict, global_metrics: dict,
+                            ranked: list, now: float) -> str:
+        """SKILL Rotação: 100% alocado, mas surgiu um candidato de ALTA convicção? Vende o
+        holding mais FRACO (e que NÃO é vencedor em corrida) p/ liberar capital. A compra
+        entra no próximo ciclo (o cooldown da venda evita churn). Retorna nota p/ o log."""
+        ROTATION_CUT = 72
+        held = {p.symbol.upper() for p in self.positions}
+        cand = next((s for s in ranked if self._addr(s) and s.upper() not in held), None)
+        if not cand:
+            return ""
+        verdict = await self._analyzer.evaluate(
+            cand, raw_metrics={**global_metrics, **quotes[cand]})
+        if not verdict.is_buy or verdict.confidence_score < ROTATION_CUT:
+            return ""
+        # holding mais fraco que NÃO é vencedor em corrida (preserva os ganhadores!)
+        weakest = None
+        weakest_pre, weakest_px = 999, 0.0
+        for pos in self.positions:
+            try:
+                px = await asyncio.to_thread(self._validator.onchain_price_usd, pos.token_address)
+            except Exception:  # noqa: BLE001
+                continue
+            pnl = ((px - pos.entry_price) / pos.entry_price * 100.0) if pos.entry_price else 0.0
+            if pnl >= 5.0 or pos.trailing_active:  # vencedor em corrida → NUNCA rotaciona
+                continue
+            pre = momentum_prescore(quotes.get(pos.symbol)) if quotes.get(pos.symbol) else 0
+            if pre < weakest_pre:
+                weakest_pre, weakest, weakest_px = pre, pos, px
+        if weakest is None or weakest_pre >= 15:  # só rotaciona se o holding é claramente fraco
+            return ""
+        self._log.info("ROTAÇÃO | vendo %s (fraco pre=%d) → liberar capital p/ %s (score %d)",
+                       weakest.symbol, weakest_pre, cand, verdict.confidence_score)
+        await self._emit(AlertType.SCAN, "🔁 Rotação de capital",
+                         f"Saindo de {weakest.symbol} (sinal fraco) p/ perseguir {cand} "
+                         f"(score {verdict.confidence_score}). Compra no próximo ciclo.")
+        await self._sell(weakest, reason="SELL_ROTACAO", exit_price=weakest_px)
+        return f" · 🔁 Rotação: {weakest.symbol}→{cand}({verdict.confidence_score})"
 
     async def _open(self, symbol: str, addr: str, size_usd: float, rationale: str, now: float,
                     *, stop_pct: float = 0.0, tp_pct: float = 0.0) -> bool:
