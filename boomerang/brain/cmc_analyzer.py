@@ -473,19 +473,22 @@ class AttentionAnalyzer:
             out["overextended_24h"] = p24 > 20.0                       # entrada tardia/esticada
         return out
 
-    async def evaluate(self, symbol: str, raw_metrics: dict | None = None) -> Verdict:
+    async def evaluate(self, symbol: str, raw_metrics: dict | None = None,
+                       memory: str = "") -> Verdict:
         metrics = raw_metrics if raw_metrics is not None else await self.gather_metrics(symbol)
         metrics = self._derive(metrics)
         clean = sanitize_metrics(metrics) or {}
-        return await self._ask_llm(symbol, clean, self._effective_cut(metrics))
+        return await self._ask_llm(symbol, clean, self._effective_cut(metrics), memory)
 
-    async def _ask_llm(self, symbol: str, clean_metrics: dict, cut: int) -> Verdict:
+    async def _ask_llm(self, symbol: str, clean_metrics: dict, cut: int, memory: str = "") -> Verdict:
         from anthropic import AsyncAnthropic
 
         client = AsyncAnthropic(api_key=self._cfg.secrets.anthropic_api_key)
+        # SKILL Memória: o cérebro vê o PRÓPRIO histórico e se calibra (aprende com o que fez).
+        mem = f"\n\n{memory}" if memory else ""
         user = (
             f"Token: {symbol}\n"
-            f"Metricas estruturadas (sanitizadas):\n{json.dumps(clean_metrics, ensure_ascii=False)}"
+            f"Metricas estruturadas (sanitizadas):\n{json.dumps(clean_metrics, ensure_ascii=False)}{mem}"
         )
         msg = await client.messages.create(
             model=self._cfg.secrets.llm_model,

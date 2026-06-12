@@ -601,6 +601,7 @@ class BoomerangAgent:
             gate_note = f" · Gate MACRO: BTC {btc24:+.1f}%/24h (risco sistêmico)"
         elif not gate.allowed:
             gate_note = f" · Gate BLOQUEOU: {gate.detail}"
+        memory = self._performance_digest()  # SKILL Memória: histórico p/ o cérebro calibrar
         if gate.allowed and not systemic:
             best_score = -1
             for symbol in ranked[:TOP_K]:
@@ -609,7 +610,7 @@ class BoomerangAgent:
                     continue
                 # Só AQUI gastamos uma chamada (paga) ao Claude — apenas nos melhores candidatos.
                 verdict = await self._analyzer.evaluate(
-                    symbol, raw_metrics={**global_metrics, **quotes[symbol]})
+                    symbol, raw_metrics={**global_metrics, **quotes[symbol]}, memory=memory)
                 claude_calls += 1
                 if verdict.confidence_score > best_score:
                     best_score = verdict.confidence_score
@@ -679,7 +680,7 @@ class BoomerangAgent:
         if not cand:
             return ""
         verdict = await self._analyzer.evaluate(
-            cand, raw_metrics={**global_metrics, **quotes[cand]})
+            cand, raw_metrics={**global_metrics, **quotes[cand]}, memory=self._performance_digest())
         if not verdict.is_buy or verdict.confidence_score < ROTATION_CUT:
             return ""
         # holding mais fraco que NÃO é vencedor em corrida (preserva os ganhadores!)
@@ -850,6 +851,32 @@ class BoomerangAgent:
                          tx=res.tx_hash)
         self._save()
         await self._publish_reputation()  # SKILL: atualiza reputação on-chain (best-effort)
+
+    def _performance_digest(self) -> str:
+        """SKILL Memória: resumo do PRÓPRIO histórico p/ o cérebro se calibrar (aprende com
+        o que fez). Win-rate, PnL médio, últimos resultados e tokens que sangraram."""
+        closes = [t for t in load_trades() if t.get("type") == "close" and t.get("pnl_pct") is not None]
+        if len(closes) < 3:
+            return ""  # histórico curto → não enviesa
+        recent = closes[-20:]
+        wins = sum(1 for t in recent if t["pnl_pct"] > 0)
+        wr = wins / len(recent) * 100.0
+        avg = sum(t["pnl_pct"] for t in recent) / len(recent)
+        last5 = "".join("V" if t["pnl_pct"] > 0 else "D" for t in recent[-5:])
+        from collections import defaultdict
+        by_sym: dict[str, list] = defaultdict(list)
+        for t in recent:
+            by_sym[t["symbol"]].append(t["pnl_pct"])
+        sangra = sorted(((s, sum(v) / len(v)) for s, v in by_sym.items()
+                         if len(v) >= 2 and sum(v) / len(v) < -1.0), key=lambda x: x[1])[:3]
+        note = (f"SEU HISTORICO ({len(recent)} trades): {wr:.0f}% de acerto, PnL medio "
+                f"{avg:+.1f}%, ultimos 5: {last5}.")
+        if sangra:
+            note += (" Tokens que te sangraram: "
+                     + ", ".join(f"{s}({a:+.0f}%)" for s, a in sangra)
+                     + " — seja MAIS seletivo neles.")
+        note += " Use isso p/ calibrar conviccao: se vem perdendo, suba a barra; se acertando, confie."
+        return note
 
     async def _publish_reputation(self) -> None:
         """SKILL Reputação on-chain: publica o histórico (trades/win-rate/PnL) como
