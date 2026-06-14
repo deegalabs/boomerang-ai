@@ -40,6 +40,20 @@ def _password() -> str:
     return os.getenv("BNB_IDENTITY_PASSWORD") or os.getenv("WALLET_PASSWORD") or ""
 
 
+def _wallet_provider(pw: str):
+    """Builds the identity wallet provider.
+
+    PRODUCTION: the keystore dir (identity_wallet/) is git-ignored and excluded from the
+    container, so a securely-injected private key (BNB_IDENTITY_PRIVATE_KEY) is used —
+    otherwise the SDK would create a NEW wallet that is NOT the owner of the agentId, and
+    every set_metadata would revert "Not authorized". LOCAL: falls back to the keystore."""
+    from bnbagent import EVMWalletProvider
+    pk = os.getenv("BNB_IDENTITY_PRIVATE_KEY")
+    if pk:
+        return EVMWalletProvider(password=pw, private_key=pk, persist=False)
+    return EVMWalletProvider(password=pw, persist=True, wallets_dir=str(IDENTITY_DIR))
+
+
 def explorer_tx(card: dict) -> str:
     base = _SCAN_TX.get(card.get("network", ""), _SCAN_TX["bsc-mainnet"])
     return base + card.get("tx", "") if card.get("tx") else ""
@@ -111,7 +125,7 @@ def register(
     if not force and is_registered():
         return load_card()  # type: ignore[return-value]
 
-    from bnbagent import AgentEndpoint, ERC8004Agent, EVMWalletProvider
+    from bnbagent import AgentEndpoint, ERC8004Agent
 
     pw = password or _password()
     if not pw:
@@ -121,7 +135,7 @@ def register(
         )
     IDENTITY_DIR.mkdir(parents=True, exist_ok=True)
 
-    wallet = EVMWalletProvider(password=pw, persist=True, wallets_dir=str(IDENTITY_DIR))
+    wallet = _wallet_provider(pw)
     sdk = ERC8004Agent(wallet_provider=wallet, network=network)
 
     agent_uri = sdk.generate_agent_uri(
@@ -168,7 +182,7 @@ def commit_prediction(pred: dict, *, password: str | None = None) -> dict | None
 
         from web3 import Web3
 
-        from bnbagent import ERC8004Agent, EVMWalletProvider
+        from bnbagent import ERC8004Agent
         pw = password or _password()
         if not pw:
             return None
@@ -176,7 +190,7 @@ def commit_prediction(pred: dict, *, password: str | None = None) -> dict | None
         canonical = "|".join(str(pred.get(k, "")) for k in
                              ("symbol", "score", "volatility", "ch24", "rationale", "ts"))
         h = Web3.keccak(text=canonical).hex()
-        wallet = EVMWalletProvider(password=pw, persist=True, wallets_dir=str(IDENTITY_DIR))
+        wallet = _wallet_provider(pw)
         sdk = ERC8004Agent(wallet_provider=wallet, network=card.get("network", DEFAULT_NETWORK))
         key = f"pred_{pred.get('ts')}_{pred.get('symbol')}"[:60]
         value = _json.dumps({"hash": h, "sym": pred.get("symbol"), "dir": "BUY",
@@ -207,12 +221,12 @@ def publish_risk_state(state: dict, *, password: str | None = None) -> dict | No
     if not card or not card.get("agent_id"):
         return None
     try:
-        from bnbagent import ERC8004Agent, EVMWalletProvider
+        from bnbagent import ERC8004Agent
 
         pw = password or _password()
         if not pw:
             return None
-        wallet = EVMWalletProvider(password=pw, persist=True, wallets_dir=str(IDENTITY_DIR))
+        wallet = _wallet_provider(pw)
         sdk = ERC8004Agent(wallet_provider=wallet, network=card.get("network", DEFAULT_NETWORK))
         value = json.dumps(state, separators=(",", ":"))[:480]
         result = sdk.set_metadata(agent_id=card["agent_id"], key="risk_state", value=value)
@@ -230,12 +244,12 @@ def publish_track_record(stats: dict, *, password: str | None = None) -> dict | 
     if not card or not card.get("agent_id"):
         return None
     try:
-        from bnbagent import ERC8004Agent, EVMWalletProvider
+        from bnbagent import ERC8004Agent
 
         pw = password or _password()
         if not pw:
             return None
-        wallet = EVMWalletProvider(password=pw, persist=True, wallets_dir=str(IDENTITY_DIR))
+        wallet = _wallet_provider(pw)
         sdk = ERC8004Agent(wallet_provider=wallet, network=card.get("network", DEFAULT_NETWORK))
         value = json.dumps(stats, separators=(",", ":"))[:480]
         result = sdk.set_metadata(agent_id=card["agent_id"], key="track_record", value=value)
