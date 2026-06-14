@@ -1022,6 +1022,8 @@ class BoomerangAgent:
         closes = [t for t in load_trades() if t.get("type") == "close" and t.get("pnl_pct") is not None]
         if not closes:
             return
+        # Back off even on FAILURE (don't retry a reverting write every cycle).
+        self._last_rep_publish = now
         wins = sum(1 for t in closes if t["pnl_pct"] > 0)
         stats = {
             "trades": len(closes), "wins": wins,
@@ -1032,7 +1034,6 @@ class BoomerangAgent:
         try:
             res = await asyncio.to_thread(identity.publish_track_record, stats)
             if res:
-                self._last_rep_publish = now
                 await self._emit(AlertType.STARTED, "🏅 On-chain reputation updated",
                                  f"{stats['trades']} trades · {stats['win_rate']:.0f}% win · "
                                  f"cum PnL {stats['total_pnl_pct']:+.2f}%",
@@ -1051,6 +1052,9 @@ class BoomerangAgent:
         equity = self._last_equity or 0.0
         if equity <= 0 and not halted_event:
             return
+        # Back off even on FAILURE: a persistently reverting write (e.g. on-chain "Not
+        # authorized") must not be retried every cycle. Advance the timer at the attempt.
+        self._last_risk_publish = now
         peak = self._risk.peak_equity
 
         def to_bps(pct: float | None) -> int:  # 1% = 100 bps
@@ -1066,7 +1070,6 @@ class BoomerangAgent:
         try:
             res = await asyncio.to_thread(identity.publish_risk_state, state)
             if res:
-                self._last_risk_publish = now
                 self._log.info("Circuit breaker attested on-chain: %s (tx=%s)", state, res.get("transactionHash"))
                 if halted_event:
                     await self._emit(AlertType.CIRCUIT_BREAKER, "🔒 Circuit breaker sealed on-chain",
