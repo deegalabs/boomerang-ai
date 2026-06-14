@@ -50,7 +50,7 @@ Every scan cycle runs three filters in series. A single rejection aborts the tra
    │   SANITIZE (anti prompt-injection) → Claude (forced tool) →            │
    │   {confidence_score, action}. Deterministic cutoff: score < min → HOLD │
    └────────────────────────────────────┬──────────────────────────────────┘
-                                         │ BUY (score ≥ 70, conservative)
+                                         │ BUY (score ≥ adaptive cutoff, ~58 conservative)
    ┌─────────────────────────────────────▼─────────────────────────────────┐
    │ 2️⃣  FILTER 2 — On-chain validation (vault/bnb_validation.py)          │
    │   liquidity (V2 + V3 via TWAK aggregator) · round-trip (hidden-tax     │
@@ -94,7 +94,7 @@ Two **logical** layers, one **physical** container:
 | **Trust Wallet Agent Kit (TWAK)** | `vault/twak_executor.py` | the only execution layer — agent-side signing, swaps (V2+V3 aggregation), ERC-20 approvals, anti-drain transfers |
 | **BNB AI Agent SDK (ERC-8004)** | `boomerang/identity/` | the agent registers a verifiable **on-chain identity** (agentId 131071) — gas-free via MegaFuel |
 | **x402** | `boomerang/payments/x402_cmc.py` | real pay-per-call micropayments (EIP-3009 USDC on Base), signed by the BNB AI Agent SDK |
-| **Claude (Anthropic)** | `brain/cmc_analyzer.py` | the decision brain (`claude-sonnet-4-6` by default, configurable via `LLM_MODEL`) — forced tool output, deterministic cutoff |
+| **Claude (Anthropic)** | `brain/cmc_analyzer.py` | the decision brain (`claude-opus-4-8` by default, configurable via `LLM_MODEL`) — forced tool output, deterministic cutoff |
 
 ---
 
@@ -188,7 +188,7 @@ boomerang/
 | Block | Meaning |
 |---|---|
 | `user` | tunable via Telegram — `token_focus`, `stop_loss_pct`, `take_profit_pct`, `mode` |
-| `dev_safety` | locked safety laws — confidence cutoffs (conservative 70 / aggressive 60), slippage cap, drawdown limits, position sizing, min position |
+| `dev_safety` | locked safety laws — confidence cutoffs (conservative 58 / aggressive 52), slippage cap, drawdown limits, position sizing, min position |
 | `hackathon` | event rules — drawdown DQ (30%), min trades/day, eligible-tokens file |
 
 ---
@@ -197,7 +197,7 @@ boomerang/
 
 ✅ **Live and operating.** Deployed 24/7 on Railway, controlled from Telegram. Full trade lifecycle (buy / sell / withdraw), ERC-8004 identity, and x402 payment are all proven on-chain (see the proof table above).
 
-> **Note on token universe:** the agent trades the focus list via the TWAK aggregator, but on-chain *pricing* (used for stop-loss monitoring and equity) is unreliable for thin-liquidity tokens. The most liquid majors (ETH, ADA, XRP, DOGE, LINK, LTC, AVAX, DOT, UNI, AAVE, BCH) are the recommended set.
+> **Note on token universe:** the eligible whitelist holds 147 BEP-20 tokens, but on-chain *pricing* (used for stop-loss monitoring and equity) is unreliable for thin-liquidity tokens. The agent therefore trades a curated focus list of liquid tokens with real PancakeSwap pools — ETH, XRP, DOGE, ADA, LINK, LTC, AVAX, DOT, UNI, SHIB, FLOKI, TWT (ATOM/BCH/AAVE were dropped: Binance-Peg, CEX-only, no DEX pool).
 
 ## Disclaimer
 
