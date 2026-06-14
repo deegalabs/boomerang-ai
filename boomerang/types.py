@@ -102,6 +102,11 @@ class Position:
     opened_at: float = 0.0
     tx_hash: str | None = None
     regime: str = ""                # regime na ENTRADA (uptrend/choppy/downtrend) p/ win-rate por regime
+    strategy: str = ""              # estratégia que abriu: momentum | mean_reversion | dca
+    trailing_trigger_pct: float = 0.0  # lucro p/ ativar trailing (0 = usa o global do config)
+    trailing_pct: float = 0.0       # distância do trailing (0 = usa stop_loss_pct)
+    time_stop_min: float = 0.0      # minutos p/ time-stop (0 = usa o global do config)
+    time_stop_band_pct: float = 0.0  # faixa morta do time-stop (0 = usa o global; 999 = por tempo puro)
 
     def __post_init__(self) -> None:
         if self.peak_price == 0.0:

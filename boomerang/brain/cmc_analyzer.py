@@ -518,21 +518,22 @@ class AttentionAnalyzer:
             self._log.debug("Funding (derivativos) indisponível: %s", exc)
             return None
 
-    def _effective_cut(self, metrics: dict | None, cut_adjust: int = 0) -> int:
+    def _effective_cut(self, metrics: dict | None, cut_adjust: int = 0, strategy: str = "") -> int:
         """Corte de confiança ADAPTATIVO. Momentum forte abaixa a barra; o REGIME de mercado
         (cut_adjust: BULL abaixa, DEFENSIVO sobe) desloca-a também. Determinístico; nunca
         abaixo de 52 (não opera puro ruído num lateral sem direção)."""
         base = self._cfg.min_confidence_score
         bonus = min(int(momentum_prescore(metrics) * 0.18), 15)  # tendência forte: -até 15 pts
         cut = base - bonus + cut_adjust
-        # SELETIVIDADE NO CHOP (dados do mercado mostram que lateral sem tendência sangra):
-        # sem alta consistente entre prazos, a barra SOBE; faca caindo (alinhada p/ baixo)
-        # sobe muito mais. Determinístico, sobre os sinais derivados.
+        # SELETIVIDADE NO CHOP — SÓ p/ MOMENTUM. Mean-reversion e DCA têm o chop/queda como
+        # ALVO (o gatilho determinístico já qualificou o setup), então penalizar o regime
+        # off-trend aqui BLOQUEARIA a própria estratégia. Para essas, sem penalidade.
         m = metrics or {}
-        if m.get("trend_aligned_down"):
-            cut += 8
-        elif not m.get("trend_aligned_up") and not m.get("accelerating"):
-            cut += 4
+        if strategy in ("", "momentum"):
+            if m.get("trend_aligned_down"):
+                cut += 8
+            elif not m.get("trend_aligned_up") and not m.get("accelerating"):
+                cut += 4
         return max(cut, 52)
 
     @staticmethod
@@ -554,21 +555,40 @@ class AttentionAnalyzer:
             out["overextended_24h"] = p24 > 20.0                       # entrada tardia/esticada
         return out
 
+    # Reframe do julgamento por ESTRATÉGIA: o gatilho determinístico já selecionou o
+    # setup; aqui o cérebro CONFIRMA no frame certo (senão julgaria tudo como momentum
+    # e vetaria dip-buys legítimos da mean-reversion / DCA).
+    _STRAT_CTX = {
+        "momentum": "ESTRATEGIA ATIVA: MOMENTUM (empuxo jovem com volume subindo, tendencia de alta). "
+                    "Confirme (BUY) um setup de continuacao saudavel e nao esticado.",
+        "mean_reversion": "ESTRATEGIA ATIVA: REVERSAO A MEDIA (comprar um DIP curto de um token FORTE no dia, "
+                          "num range). NAO julgue como momentum: aqui o 1h NEGATIVO E o setup. Confirme (BUY) se "
+                          "e repique provavel (24h forte, queda curta, volume estavel); HOLD se a queda parece o "
+                          "INICIO de uma reversao real (volume explodindo, 24h virando, tese quebrando).",
+        "dca": "ESTRATEGIA ATIVA: DCA em PANICO (medo extremo, queda livre). Comprar ativo SOLIDO/liquido "
+               "visando repique violento. Confirme (BUY) se o ativo aguenta o tranco e tem repique provavel; "
+               "HOLD se for fraco/iliquido (risco de cair e nao voltar).",
+    }
+
     async def evaluate(self, symbol: str, raw_metrics: dict | None = None,
-                       memory: str = "", cut_adjust: int = 0) -> Verdict:
+                       memory: str = "", cut_adjust: int = 0, strategy: str = "") -> Verdict:
         metrics = raw_metrics if raw_metrics is not None else await self.gather_metrics(symbol)
         metrics = self._derive(metrics)
         clean = sanitize_metrics(metrics) or {}
-        return await self._ask_llm(symbol, clean, self._effective_cut(metrics, cut_adjust), memory)
+        cut = self._effective_cut(metrics, cut_adjust, strategy)
+        return await self._ask_llm(symbol, clean, cut, memory, strategy)
 
-    async def _ask_llm(self, symbol: str, clean_metrics: dict, cut: int, memory: str = "") -> Verdict:
+    async def _ask_llm(self, symbol: str, clean_metrics: dict, cut: int,
+                       memory: str = "", strategy: str = "") -> Verdict:
         from anthropic import AsyncAnthropic
 
         client = AsyncAnthropic(api_key=self._cfg.secrets.anthropic_api_key)
         # SKILL Memória: o cérebro vê o PRÓPRIO histórico e se calibra (aprende com o que fez).
         mem = f"\n\n{memory}" if memory else ""
+        ctx = self._STRAT_CTX.get(strategy, "")
+        ctx_block = f"{ctx}\n\n" if ctx else ""
         user = (
-            f"Token: {symbol}\n"
+            f"{ctx_block}Token: {symbol}\n"
             f"Metricas estruturadas (sanitizadas):\n{json.dumps(clean_metrics, ensure_ascii=False)}{mem}"
         )
         msg = await client.messages.create(

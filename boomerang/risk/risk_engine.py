@@ -206,49 +206,52 @@ class RiskEngine:
 
     # ── Avaliação contínua de uma posição (loop de 2s) ───────────────────────
     def evaluate_position(self, pos: Position, current_price: float) -> ExitSignal:
-        """Decide se mantém ou sai. Atualiza pico/trailing da posição in-place.
+        """Decide se mantém ou sai, com os parâmetros DA ESTRATÉGIA da posição.
+        Atualiza pico/trailing in-place. Cada campo cai no global do config se = 0
+        (compras manuais/legado), então o comportamento antigo é preservado.
 
-        - Stop-loss: preço <= stop → vende.
-        - Trailing: ao subir o gatilho (ex.: +5%), move o stop p/ break-even e
-          passa a acompanhar o pico (ratchet), nunca descendo o stop.
+        Ordem: TP fixo → trailing (gatilho/ratchet) → SL → time-stop.
+          • TP fixo (mean-rev/dca): vende ao bater a meta.
+          • Trailing (momentum): após o gatilho, move o stop p/ break-even e segue o pico.
+          • SL: só dispara se houver stop_loss_price (DCA = sem SL fixo → 0 → ignorado).
+          • Time-stop: por faixa-morta (momentum 20min) ou por TEMPO puro (dca 24h, band 999).
         """
         if current_price > pos.peak_price:
             pos.peak_price = current_price
 
-        # SL/TP DESTA posição. Se stop_loss_pct > 0 = posição DINÂMICA (autônoma): usa o
-        # stop calibrado e respeita tp=0 como "DEIXA CORRER" (saída assimétrica, só trailing).
-        # Senão (manual/legado) cai no fixo do config. O trailing usa a distância do stop.
-        if pos.stop_loss_pct > 0:
-            stop_pct = pos.stop_loss_pct
-            tp = pos.take_profit_pct  # 0 = sem teto (deixa o vencedor correr)
-        else:
-            stop_pct = self._cfg.user_stop_loss_pct
-            tp = self._cfg.user_take_profit_pct
+        # Parâmetros DESTA posição (0 = fallback p/ o global do config).
+        stop_pct = pos.stop_loss_pct if pos.stop_loss_pct > 0 else self._cfg.user_stop_loss_pct
+        tp = pos.take_profit_pct if pos.take_profit_pct > 0 else (
+            0.0 if pos.stop_loss_pct > 0 else self._cfg.user_take_profit_pct)
+        trail_trigger = (pos.trailing_trigger_pct if pos.trailing_trigger_pct > 0
+                         else self._cfg.trailing_trigger_pct)
+        trail_dist = pos.trailing_pct if pos.trailing_pct > 0 else stop_pct
 
-        # Lucro-alvo: bateu a meta de ganho → realiza o lucro.
+        # 1) Lucro-alvo FIXO: bateu a meta → realiza.
         if tp > 0 and current_price >= pos.entry_price * (1.0 + tp / 100.0):
             return ExitSignal.SELL_TAKE_PROFIT
 
-        trigger_price = pos.entry_price * (1.0 + self._cfg.trailing_trigger_pct / 100.0)
+        # 2) Trailing: ao cruzar o gatilho de lucro, sobe o stop p/ break-even e segue o pico.
+        if trail_trigger > 0:
+            if not pos.trailing_active and current_price >= pos.entry_price * (1.0 + trail_trigger / 100.0):
+                pos.trailing_active = True
+                pos.stop_loss_price = max(pos.stop_loss_price, pos.entry_price)  # break-even
+            if pos.trailing_active:
+                trailed = pos.peak_price * (1.0 - trail_dist / 100.0)
+                pos.stop_loss_price = max(pos.stop_loss_price, trailed)
 
-        if not pos.trailing_active and current_price >= trigger_price:
-            pos.trailing_active = True
-            pos.stop_loss_price = max(pos.stop_loss_price, pos.entry_price)  # break-even
-
-        if pos.trailing_active:
-            trailed = pos.peak_price * (1.0 - stop_pct / 100.0)
-            pos.stop_loss_price = max(pos.stop_loss_price, trailed)
-
-        if current_price <= pos.stop_loss_price:
+        # 3) Stop-loss: só se houver stop (DCA abre sem SL → stop_loss_price = 0 → pulado).
+        if pos.stop_loss_price > 0 and current_price <= pos.stop_loss_price:
             return ExitSignal.SELL_TRAILING if pos.trailing_active else ExitSignal.SELL_STOP_LOSS
 
-        # SAÍDA POR TEMPO (capital parado): posição SEM trailing (não é vencedora correndo),
-        # aberta há mais que o teto, com PnL na faixa morta → libera o capital p/ a próxima
-        # oportunidade em vez de apodrecer parada. Não toca vencedores (trailing ativo).
-        if (not pos.trailing_active and self._cfg.max_hold_hours > 0 and pos.opened_at
-                and (time.time() - pos.opened_at) / 3600.0 >= self._cfg.max_hold_hours):
+        # 4) Time-stop: posição SEM trailing ativo, aberta há tempo demais. Por faixa-morta
+        # (capital parado) OU por tempo puro (DCA: band 999 → sai no prazo qualquer que seja o PnL).
+        ts_min = pos.time_stop_min if pos.time_stop_min > 0 else self._cfg.max_hold_hours * 60.0
+        ts_band = pos.time_stop_band_pct if pos.time_stop_band_pct > 0 else self._cfg.stale_pnl_band_pct
+        if (not pos.trailing_active and ts_min > 0 and pos.opened_at
+                and (time.time() - pos.opened_at) / 60.0 >= ts_min):
             pnl = ((current_price - pos.entry_price) / pos.entry_price * 100.0) if pos.entry_price else 0.0
-            if abs(pnl) <= self._cfg.stale_pnl_band_pct:
+            if abs(pnl) <= ts_band:
                 return ExitSignal.SELL_TIME_STALE
 
         return ExitSignal.HOLD

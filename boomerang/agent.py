@@ -27,6 +27,7 @@ from boomerang.ipc import Alert, AlertBus, AlertType
 from boomerang.persistence import append_trade, load_state, load_trades, save_state
 from boomerang.risk import RiskEngine
 from boomerang.risk.risk_engine import ExitSignal
+from boomerang.strategy.playbook import select_strategy, setup_strength
 from boomerang.types import AgentState, Position
 from boomerang.vault.bnb_validation import BNBValidator
 from boomerang.vault.twak_executor import TwakError, TwakExecutor
@@ -600,84 +601,91 @@ class BoomerangAgent:
             quotes.setdefault(sym, m)
         universe = list(dict.fromkeys(list(self.token_focus) + list(movers.keys())))
 
-        # Pré-score determinístico (de graça) para ranquear e FILTRAR quem vai ao LLM.
-        prescores = [(s, momentum_prescore(quotes.get(s))) for s in universe if quotes.get(s)]
-        candidates = [s for s, _ in prescores
-                      if passes_prefilter(quotes.get(s), self._cfg.prefilter_min_vol_change)
-                      and self._exec_cooldown.get(s, 0.0) <= now]  # pula intradáveis recentes
-        # Postura OPORTUNISTA: ordena por momentum e avalia os TOP-K mais promissores,
-        # escolhendo o MELHOR veredito (maior score) — não o primeiro qualquer. Assim o
-        # agente opera a melhor oportunidade RELATIVA do ciclo, inclusive em mercado calmo.
-        ranked = sorted(candidates, key=lambda s: momentum_prescore(quotes.get(s)), reverse=True)
-        TOP_K = 3
-        STRONG = 78  # setup claramente forte: para de gastar chamadas e já entra
-
-        opened = False
-        claude_calls = 0
-        buys: list = []   # [(verdict, symbol, addr)] de TODOS que deram BUY, p/ fallback
-        top_eval = ""     # melhor score avaliado no ciclo (p/ visibilidade no log)
-        # gate (cooldown/max posições/drawdown/stable) não depende do símbolo: 1 checagem.
-        gate = self._risk.can_open_position(
-            current_equity_usd=equity, available_stable_usd=stable,
-            open_positions=len(self.positions), now_ts=now,
-        )
-        # GATE MACRO: se o BTC despenca (<= -5% em 24h), o mercado está risk-off →
-        # não abre posição nova (correção sistêmica). Posições abertas seguem geridas.
+        # MACRO PRIMEIRO (o seletor de estratégia precisa do F&G p/ rotear pânico→DCA).
         macro = await self._analyzer.gather_macro()
         btc24, fng, funding = macro.get("btc_24h"), macro.get("fng"), macro.get("funding")
         # Publica o mercado REAL p/ a demo do site reusar (mesmo processo) — custo zero.
         market_cache.put(dict(quotes), btc24, fng)
         systemic = btc24 is not None and btc24 <= -5.0
-        # DEPEG GUARD: se a stable de trade (USDC) desviar de $1 além do limite, o "caixa
-        # seguro" não está seguro → bloqueia novas entradas e alerta o dono (não liquida:
-        # vender token p/ stable quebrada é pior). Determinístico, fora da IA.
+        # DEPEG GUARD: se a stable de trade (USDC) desviar de $1, o "caixa seguro" não está
+        # seguro → bloqueia TODAS as entradas e alerta o dono (não liquida).
         depeg = self._stable_depeg_bps(macro)
-        if depeg is not None and depeg >= self._cfg.stable_depeg_bps > 0:
-            systemic = True
+        depeg_block = depeg is not None and depeg >= self._cfg.stable_depeg_bps > 0
+        if depeg_block:
             await self._maybe_alert_depeg(depeg)
-        # SKILL Adaptação por regime: preço (BTC) + SENTIMENTO (medo/ganância) + ALAVANCAGEM
-        # (funding dos perpétuos) calibram a postura.
+        # SKILL Adaptação por regime: preço (BTC) + SENTIMENTO (medo/ganância) + ALAVANCAGEM.
         regime_label, cut_adjust = market_regime(btc24, fng, funding)
+
+        # Pré-score (só p/ ranquear/logar) + SELEÇÃO DE ESTRATÉGIA por token (o gatilho REAL).
+        prescores = [(s, momentum_prescore(quotes.get(s))) for s in universe if quotes.get(s)]
+        ranked = [s for s, _ in sorted(prescores, key=lambda x: -x[1])]  # p/ rotação/log
+        # PLAYBOOK: cada token é roteado p/ a estratégia cujo gatilho determinístico dispara
+        # (momentum / mean-reversion / dca), conforme o regime + sinais. Em pânico, só DCA.
+        fired: list = []  # [(spec, symbol, strength)]
+        for s in universe:
+            mq = quotes.get(s)
+            if not mq or self._exec_cooldown.get(s, 0.0) > now:
+                continue
+            spec = select_strategy(fng, mq)
+            if spec:
+                fired.append((spec, s, setup_strength(spec, mq)))
+        fired.sort(key=lambda x: -x[2])
+        TOP_K = 3
+        STRONG = 78  # setup claramente forte: para de gastar chamadas e já entra
+
+        opened = False
+        claude_calls = 0
+        buys: list = []   # [(verdict, symbol, addr, spec)] de TODOS que deram BUY
+        top_eval = ""
+        gate = self._risk.can_open_position(
+            current_equity_usd=equity, available_stable_usd=stable,
+            open_positions=len(self.positions), now_ts=now,
+        )
+        # DCA é a estratégia de PÂNICO → ignora o gate de BTC despencando (foi FEITA pra isso).
+        # Depeg bloqueia tudo; disjuntor/cap/max-posições (gate) continuam valendo sempre.
+        active_is_dca = bool(fired) and fired[0][0].key == "dca"
+        block = depeg_block or (systemic and not active_is_dca)
         gate_note = ""
-        if depeg is not None and depeg >= self._cfg.stable_depeg_bps > 0:
+        if depeg_block:
             gate_note = f" · Gate DEPEG: stable desviou {depeg/100:.2f}% (risco sistêmico)"
-        elif systemic:
+        elif block:
             gate_note = f" · Gate MACRO: BTC {btc24:+.1f}%/24h (risco sistêmico)"
         elif not gate.allowed:
             gate_note = f" · Gate BLOQUEOU: {gate.detail}"
         memory = self._performance_digest()  # SKILL Memória: histórico p/ o cérebro calibrar
-        if gate.allowed and not systemic:
+        if gate.allowed and not block and fired:
             best_score = -1
-            for symbol in ranked[:TOP_K]:
+            for spec, symbol, _strength in fired[:TOP_K]:
                 addr = self._addr(symbol)
                 if not addr:
                     continue
-                # Só AQUI gastamos uma chamada (paga) ao Claude — apenas nos melhores candidatos.
+                # Mean-rev/DCA: o ajuste DEFENSIVO de regime NÃO se aplica (a estratégia já É a
+                # resposta ao regime). O cérebro CONFIRMA o setup no frame da estratégia ativa.
+                ca = cut_adjust if spec.key == "momentum" else 0
                 verdict = await self._analyzer.evaluate(
                     symbol, raw_metrics={**global_metrics, **quotes[symbol]},
-                    memory=memory, cut_adjust=cut_adjust)
+                    memory=memory, cut_adjust=ca, strategy=spec.key)
                 claude_calls += 1
                 if verdict.confidence_score > best_score:
                     best_score = verdict.confidence_score
-                    top_eval = f"{symbol} {verdict.confidence_score}{'✓' if verdict.is_buy else ''}"
+                    top_eval = f"{symbol} {verdict.confidence_score}{'✓' if verdict.is_buy else ''} [{spec.key}]"
                 if verdict.is_buy:
-                    buys.append((verdict, symbol, addr))
+                    buys.append((verdict, symbol, addr, spec))
                 if verdict.is_buy and verdict.confidence_score >= STRONG:
-                    break  # já achamos um setup forte; não precisa avaliar mais
+                    break
 
-            # Tenta do MELHOR pro pior: se Filtro 2 barra OU a execução reverte, cai no próximo.
-            for verdict, symbol, addr in sorted(buys, key=lambda b: -b[0].confidence_score):
+            for verdict, symbol, addr, spec in sorted(buys, key=lambda b: -b[0].confidence_score):
                 ch24 = float(quotes[symbol].get("percent_change_24h") or 0.0)
-                # TRAVA DURA anti-topo (determinística, independe do LLM): pump extremo
-                # = risco de blow-off top → fica de fora.
-                if ch24 > self._cfg.max_entry_24h_pct:
+                # Anti-topo + amortecimento de esticamento SÓ p/ MOMENTUM. Mean-rev e DCA
+                # compram QUEDAS de propósito — penalizá-las aqui mataria a estratégia.
+                if spec.key == "momentum" and ch24 > self._cfg.max_entry_24h_pct:
                     await self._emit(AlertType.REJECTED, f"Entrada barrada (esticado): {symbol}",
                                      f"24h {ch24:+.1f}% > {self._cfg.max_entry_24h_pct:.0f}% — risco de topo.")
                     continue
-                # SKILL Sizing por convicção, AMORTECIDO por esticamento (não aposta grande no topo).
                 conv_pct = conviction_size_pct(self.position_size_pct, verdict.confidence_score,
                                                max_pct=self._cfg.max_position_pct)
-                conv_pct *= overextension_factor(ch24)
+                if spec.key == "momentum":
+                    conv_pct *= overextension_factor(ch24)
                 size = self._risk.position_size_usd(equity, stable, override_pct=conv_pct)
                 val = await asyncio.to_thread(
                     self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size,
@@ -686,19 +694,16 @@ class BoomerangAgent:
                 if not val.ok:
                     await self._emit(AlertType.REJECTED, f"Trade barrado: {symbol}",
                                      val.detail, reason=val.reason.value if val.reason else "")
-                    continue  # tenta o próximo melhor BUY
-                # SL/TP DINÂMICO: cérebro classificou a volatilidade; o código calcula o STOP.
-                var24 = abs(float(quotes[symbol].get("percent_change_24h") or 0.0))
-                tier = verdict.volatility or tier_from_var(var24)
-                sl_pct, _tp_pct = dynamic_sl_tp(tier, var24)
-                # ERC-8004: SELA o raciocínio on-chain ANTES de executar (não-bloqueante —
-                # dispara e segue; se falhar, o trade acontece igual). Prova anti-fabricação.
+                    continue
+                # ERC-8004: SELA o raciocínio on-chain ANTES de executar (não-bloqueante).
                 asyncio.create_task(self._commit_prediction(symbol, verdict, ch24, now))
-                # SKILL Saída assimétrica: corta perda curta (stop dinâmico) mas DEIXA O
-                # VENCEDOR CORRER — tp_pct=0 → sem teto fixo; o trailing protege e acompanha
-                # o pico (ratchet). O brilho do leaderboard vem dos grandes vencedores.
-                if await self._open(symbol, addr, size, verdict.rationale, now,
-                                    stop_pct=sl_pct, tp_pct=0.0, regime=verdict.regime):
+                # Abre com os parâmetros DA ESTRATÉGIA (SL/TP/trailing/time-stop próprios).
+                if await self._open(symbol, addr, size, f"[{spec.label}] {verdict.rationale}", now,
+                                    stop_pct=spec.stop_pct, tp_pct=spec.take_profit_pct,
+                                    trailing_trigger_pct=spec.trailing_trigger_pct,
+                                    trailing_pct=spec.trailing_pct, time_stop_min=spec.time_stop_min,
+                                    time_stop_band_pct=spec.time_stop_band_pct,
+                                    strategy=spec.key, regime=verdict.regime):
                     opened = True
                     break
                 # Execução falhou (ex.: revert por liquidez): cooldown e tenta o próximo.
@@ -708,7 +713,7 @@ class BoomerangAgent:
         # SKILL Rotação por oportunidade: 100% alocado, mas surgiu algo MUITO melhor? Gira
         # do holding mais FRACO (nunca de um vencedor em corrida) p/ liberar capital.
         rot_note = ""
-        if (not opened and not systemic and self.positions
+        if (not opened and not block and self.positions
                 and not gate.allowed and "insuficiente" in (gate.detail or "").lower()):
             rot_note = await self._maybe_rotate(equity, quotes, global_metrics, ranked, now)
 
@@ -767,11 +772,13 @@ class BoomerangAgent:
         return f" · 🔁 Rotação: {weakest.symbol}→{cand}({verdict.confidence_score})"
 
     async def _open(self, symbol: str, addr: str, size_usd: float, rationale: str, now: float,
-                    *, stop_pct: float = 0.0, tp_pct: float = 0.0, regime: str = "") -> bool:
+                    *, stop_pct: float = 0.0, tp_pct: float = 0.0, regime: str = "",
+                    strategy: str = "", trailing_trigger_pct: float = 0.0, trailing_pct: float = 0.0,
+                    time_stop_min: float = 0.0, time_stop_band_pct: float = 0.0) -> bool:
         """Abre a posição (swap real). Retorna True se abriu, False se a execução falhou.
 
-        stop_pct/tp_pct: SL/TP DINÂMICO desta posição (calibrado pela volatilidade). 0 =
-        usa o fixo do config (compras manuais)."""
+        Com `strategy`, usa os parâmetros DA ESTRATÉGIA literalmente (stop_pct=0 = SEM SL,
+        ex.: DCA). Sem strategy (compra manual), stop/tp caem no fixo do config."""
         def _do_buy():
             return self._executor.buy(to_token=addr, amount_usd=size_usd, password=self._password)
         with self._risk.trade_lock:
@@ -790,15 +797,20 @@ class BoomerangAgent:
             await self._emit(AlertType.ERROR, f"Compra falhou: {symbol}", res.error)
             return False
         entry = res.entry_price or await asyncio.to_thread(self._validator.onchain_price_usd, addr)
-        # SL/TP efetivo: dinâmico (volatilidade) se informado, senão o fixo do config.
-        eff_stop = stop_pct or self.stop_loss_pct
-        eff_tp = tp_pct or self.take_profit_pct
-        stop_price = entry * (1.0 - eff_stop / 100.0)
+        # SL/TP efetivo. Com estratégia: literal (stop=0 → SEM SL, ex.: DCA). Manual: fixo do config.
+        if strategy:
+            eff_stop, eff_tp = stop_pct, tp_pct
+        else:
+            eff_stop = stop_pct or self.stop_loss_pct
+            eff_tp = tp_pct or self.take_profit_pct
+        stop_price = entry * (1.0 - eff_stop / 100.0) if eff_stop > 0 else 0.0  # 0 = sem SL (disjuntor global cobre)
         tp_price = entry * (1.0 + eff_tp / 100.0) if eff_tp > 0 else 0.0
         pos = Position(symbol=symbol, token_address=addr, entry_price=entry, amount_usd=size_usd,
                        qty=res.qty or 0.0, stop_loss_price=stop_price,
-                       stop_loss_pct=stop_pct, take_profit_pct=tp_pct,
-                       opened_at=now, tx_hash=res.tx_hash, regime=regime)
+                       stop_loss_pct=eff_stop, take_profit_pct=eff_tp,
+                       opened_at=now, tx_hash=res.tx_hash, regime=regime, strategy=strategy,
+                       trailing_trigger_pct=trailing_trigger_pct, trailing_pct=trailing_pct,
+                       time_stop_min=time_stop_min, time_stop_band_pct=time_stop_band_pct)
         self.positions.append(pos)
         self.state = AgentState.IN_POSITION
         self._risk.record_trade(now)
@@ -806,7 +818,8 @@ class BoomerangAgent:
         self._log.info("TRADE ABERTO | %s $%.2f @ %.8g%s | tx=%s",
                        symbol, size_usd, entry, vol_note, res.tx_hash)
         append_trade({"type": "open", "symbol": symbol, "amount_usd": size_usd,
-                      "entry_price": entry, "tx": res.tx_hash, "ts": now, "regime": regime})
+                      "entry_price": entry, "tx": res.tx_hash, "ts": now, "regime": regime,
+                      "strategy": strategy})
         await self._emit(AlertType.TRADE_OPENED, f"Posição aberta: {symbol}",
                          rationale, amount_usd=size_usd, entry=entry,
                          stop=stop_price, take_profit=tp_price,
