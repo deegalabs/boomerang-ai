@@ -1,1 +1,1 @@
-"""Process B (vault) — validação on-chain e execução com chave local."""
+"""Process B (vault) — on-chain validation and execution with a local key."""

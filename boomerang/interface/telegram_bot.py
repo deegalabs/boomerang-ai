@@ -1,10 +1,10 @@
-"""Interface Telegram do Boomerang AI (Process A).
+"""Boomerang AI Telegram interface (Process A).
 
-Painel de controle do dono. Princípios de segurança:
-  - NUNCA acessa chaves privadas (só conversa com o agente via métodos de controle).
-  - MASTER_USER_ID pinning: ignora silenciosamente qualquer outro usuário.
-  - Botões (InlineKeyboards) em vez de comandos de texto livre.
-Recebe alertas do agente pelo AlertBus e renderiza mensagens ricas.
+The owner's control panel. Security principles:
+  - NEVER accesses private keys (only talks to the agent via control methods).
+  - MASTER_USER_ID pinning: silently ignores any other user.
+  - Buttons (InlineKeyboards) instead of free-text commands.
+Receives agent alerts via the AlertBus and renders rich messages.
 """
 from __future__ import annotations
 
@@ -33,16 +33,16 @@ _EMOJI = {
     AlertType.SCAN: "🔍", AlertType.DATA_ERROR: "⚠️",
 }
 
-# Motivo de saída → rótulo amigável.
+# Exit reason → friendly label.
 _REASON_LABEL = {
-    "SELL_STOP_LOSS": "🛑 Stop-loss disparado",
-    "SELL_TRAILING": "📈 Trailing (lucro protegido)",
-    "SELL_TAKE_PROFIT": "🎯 Lucro-alvo atingido",
-    "SELL_BRAIN": "🧠 Saída inteligente (tese mudou)",
-    "SELL_TIME_STALE": "⏳ Saída por tempo (capital parado liberado)",
-    "SELL_ROTACAO": "🔁 Rotação (capital p/ oportunidade melhor)",
-    "SELL_MANUAL": "🤝 Venda manual (você decidiu)",
-    "liquidação": "🚨 Liquidação (circuit breaker)",
+    "SELL_STOP_LOSS": "🛑 Stop-loss triggered",
+    "SELL_TRAILING": "📈 Trailing (profit protected)",
+    "SELL_TAKE_PROFIT": "🎯 Take-profit reached",
+    "SELL_BRAIN": "🧠 Smart exit (thesis changed)",
+    "SELL_TIME_STALE": "⏳ Time-based exit (idle capital freed)",
+    "SELL_ROTACAO": "🔁 Rotation (capital to a better opportunity)",
+    "SELL_MANUAL": "🤝 Manual sell (you decided)",
+    "liquidação": "🚨 Liquidation (circuit breaker)",
 }
 
 
@@ -68,15 +68,15 @@ class TelegramInterface:
         self._app: Application | None = None
         alerts.subscribe(self._on_alert)
 
-    # ── segurança: só o dono ─────────────────────────────────────────────────
+    # ── security: owner only ─────────────────────────────────────────────────
     def _is_master(self, update: Update) -> bool:
         u = update.effective_user
         if self._master and u and u.id == self._master:
             return True
-        self._log.warning("Comando ignorado de ID nao-autorizado: %s", u.id if u else "?")
+        self._log.warning("Command ignored from unauthorized ID: %s", u.id if u else "?")
         return False
 
-    # ── alertas do agente → Telegram ─────────────────────────────────────────
+    # ── agent alerts → Telegram ─────────────────────────────────────────
     async def _on_alert(self, alert: Alert) -> None:
         if not (self._app and self._master):
             return
@@ -87,51 +87,51 @@ class TelegramInterface:
         d = alert.data or {}
 
         if alert.type == AlertType.TRADE_OPENED:
-            text += f"\n💵 Comprei *${d.get('amount_usd')}* @ entrada {_fmt_price(d.get('entry'))}"
+            text += f"\n💵 Bought *${d.get('amount_usd')}* @ entry {_fmt_price(d.get('entry'))}"
             if d.get("stop"):
                 text += f"\n🛑 Stop-loss: {_fmt_price(d['stop'])} (-{d.get('stop_pct')}%)"
             if d.get("take_profit"):
-                text += f"\n🎯 Lucro-alvo: {_fmt_price(d['take_profit'])} (+{d.get('take_profit_pct')}%)"
+                text += f"\n🎯 Take-profit: {_fmt_price(d['take_profit'])} (+{d.get('take_profit_pct')}%)"
             else:
-                text += "\n🎯 Lucro-alvo: deixar correr (trailing)"
+                text += "\n🎯 Take-profit: let it run (trailing)"
             if d.get("tx"):
-                text += f"\n🔗 [ver na BscScan](https://bscscan.com/tx/{d['tx']})"
+                text += f"\n🔗 [view on BscScan](https://bscscan.com/tx/{d['tx']})"
 
         if alert.type == AlertType.TRADE_CLOSED:
             lbl = _REASON_LABEL.get(d.get("reason"), d.get("reason") or "")
             if lbl:
                 text += f"\n{lbl}"
             if d.get("entry") and d.get("exit"):
-                text += f"\nentrada {_fmt_price(d['entry'])} → saída {_fmt_price(d['exit'])}"
+                text += f"\nentry {_fmt_price(d['entry'])} → exit {_fmt_price(d['exit'])}"
             if d.get("pnl_pct") is not None:
                 emo = "🟢" if d["pnl_pct"] >= 0 else "🔴"
                 text += f"\n{emo} *PnL: {d['pnl_pct']:+.2f}%*"
             if d.get("tx"):
-                text += f"\n🔗 [ver na BscScan](https://bscscan.com/tx/{d['tx']})"
+                text += f"\n🔗 [view on BscScan](https://bscscan.com/tx/{d['tx']})"
         try:
             await self._app.bot.send_message(self._master, text, parse_mode=ParseMode.MARKDOWN)
         except Exception as exc:  # noqa: BLE001
-            self._log.error("Falha ao enviar alerta: %s", exc)
+            self._log.error("Failed to send alert: %s", exc)
 
     # ── handlers ─────────────────────────────────────────────────────────────
     def _home_menu(self) -> tuple[str, InlineKeyboardMarkup]:
         text = (
             "🪃 *Boomerang AI*\n\n"
-            "Agente de trading na BNB Chain. Toda ação passa pelo "
-            "*Protocolo dos 3 Escudos*:\n"
-            "🧠 Analítico (CoinMarketCap) · 🛡️ Rede (BNB Chain) · 💼 Patrimonial (Trust Wallet)\n\n"
-            "🤖 *Automático* — a IA decide sozinha quando entrar e sair.\n"
-            "🎮 *Manual* — você escolhe a moeda e o tamanho; eu executo o swap real "
-            "com todos os escudos de segurança (a IA não te barra).\n\n"
-            "Use o menu abaixo:"
+            "Trading agent on BNB Chain. Every action passes through the "
+            "*3-Shield Protocol*:\n"
+            "🧠 Analytical (CoinMarketCap) · 🛡️ Network (BNB Chain) · 💼 Wallet (Trust Wallet)\n\n"
+            "🤖 *Automatic* — the AI decides on its own when to enter and exit.\n"
+            "🎮 *Manual* — you pick the coin and the size; I execute the real swap "
+            "with all the security shields (the AI doesn't block you).\n\n"
+            "Use the menu below:"
         )
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🤖 Modo Automático", callback_data="cfg"),
-             InlineKeyboardButton("🎮 Modo Manual", callback_data="manual")],
-            [InlineKeyboardButton("▶️ Ativar (auto)", callback_data="activate"),
+            [InlineKeyboardButton("🤖 Automatic Mode", callback_data="cfg"),
+             InlineKeyboardButton("🎮 Manual Mode", callback_data="manual")],
+            [InlineKeyboardButton("▶️ Activate (auto)", callback_data="activate"),
              InlineKeyboardButton("📊 Status", callback_data="status")],
-            [InlineKeyboardButton("⏸️ Pausar", callback_data="pause"),
-             InlineKeyboardButton("🚨 Sacar Tudo e Parar", callback_data="withdraw")],
+            [InlineKeyboardButton("⏸️ Pause", callback_data="pause"),
+             InlineKeyboardButton("🚨 Withdraw All and Stop", callback_data="withdraw")],
         ])
         return text, kb
 
@@ -175,30 +175,30 @@ class TelegramInterface:
             await self._step_summary(q)
         elif data.startswith("sellgo_"):
             sym = data.split("_", 1)[1]
-            await q.edit_message_text(f"🔴 Vendendo *{sym}* a mercado — swap real em andamento...",
+            await q.edit_message_text(f"🔴 Selling *{sym}* at market — real swap in progress...",
                                       parse_mode=ParseMode.MARKDOWN)
             await self._agent.sell_position(sym)
         elif data == "sellallgo":
-            await q.edit_message_text("🔴 Vendendo *todas* as posições a mercado...",
+            await q.edit_message_text("🔴 Selling *all* positions at market...",
                                       parse_mode=ParseMode.MARKDOWN)
             n = await self._agent.sell_all_positions()
-            await self._app.bot.send_message(self._master, f"✅ {n} posição(ões) vendida(s).")
+            await self._app.bot.send_message(self._master, f"✅ {n} position(s) sold.")
         elif data.startswith("sell_"):
             sym = data.split("_", 1)[1]
             kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"✅ Confirmar venda de {sym}", callback_data=f"sellgo_{sym}")],
-                [InlineKeyboardButton("↩️ Voltar", callback_data="status")],
+                [InlineKeyboardButton(f"✅ Confirm selling {sym}", callback_data=f"sellgo_{sym}")],
+                [InlineKeyboardButton("↩️ Back", callback_data="status")],
             ])
             await q.edit_message_text(
-                f"🔴 *Vender {sym}?*\n\nVai vender a posição inteira *a mercado* (preço atual).\n"
-                "O agente continua operando depois (não trava). Confirma?",
+                f"🔴 *Sell {sym}?*\n\nThis will sell the entire position *at market* (current price).\n"
+                "The agent keeps trading afterwards (no halt). Confirm?",
                 reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
         elif data == "sellall":
             kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Confirmar venda de TUDO", callback_data="sellallgo")],
-                [InlineKeyboardButton("↩️ Voltar", callback_data="status")],
+                [InlineKeyboardButton("✅ Confirm selling EVERYTHING", callback_data="sellallgo")],
+                [InlineKeyboardButton("↩️ Back", callback_data="status")],
             ])
-            await q.edit_message_text("🔴 *Vender TODAS as posições?* A mercado, agora. Confirma?",
+            await q.edit_message_text("🔴 *Sell ALL positions?* At market, now. Confirm?",
                                       reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
         elif data == "manual":
             await self._manual_pick_coin(q)
@@ -212,25 +212,25 @@ class TelegramInterface:
             await self._manual_execute(q, sym, float(pct))
         elif data == "activate":
             await self._agent.start()
-            await q.edit_message_text("▶️ Agente ativado. Você receberá alertas a cada ciclo.")
+            await q.edit_message_text("▶️ Agent activated. You'll receive alerts on every cycle.")
         elif data == "pause":
             await self._agent.pause()
-            await q.edit_message_text("⏸️ Agente pausado. Use /start para retomar.")
+            await q.edit_message_text("⏸️ Agent paused. Use /start to resume.")
         elif data == "status":
             await self._send_status(q)
         elif data == "withdraw":
-            await q.edit_message_text("🪃 Sacando tudo para sua carteira e parando...")
+            await q.edit_message_text("🪃 Withdrawing everything to your wallet and stopping...")
             await self._agent.withdraw_all()
 
-    # ── passos do assistente de configuração ─────────────────────────────────
+    # ── configuration wizard steps ─────────────────────────────────
     async def _step_tokens(self, q) -> None:  # noqa: ANN001
         n = len(self._agent._default_focus)
         rows = [
-            [InlineKeyboardButton(f"🧺 Cesta recomendada ({n} líquidas)", callback_data="tok_basket")],
-            [InlineKeyboardButton("🌐 Todas as elegíveis (mais cara)", callback_data="tok_all")],
+            [InlineKeyboardButton(f"🧺 Recommended basket ({n} liquid)", callback_data="tok_basket")],
+            [InlineKeyboardButton("🌐 All eligible (more expensive)", callback_data="tok_all")],
         ]
         line = []
-        for sym in self._agent._token_addr.keys():  # todas as moedas-foco elegíveis
+        for sym in self._agent._token_addr.keys():  # all eligible focus coins
             line.append(InlineKeyboardButton(sym, callback_data=f"tok_{sym}"))
             if len(line) == 4:
                 rows.append(line)
@@ -238,23 +238,23 @@ class TelegramInterface:
         if line:
             rows.append(line)
         await q.edit_message_text(
-            "⚙️ *Configuração — Passo 1 de 4*\nEm que o agente deve focar a análise?\n\n"
-            "🧺 *Cesta recomendada* — várias moedas líquidas (melhor p/ o modo autônomo "
-            "ter oportunidades). \n"
-            "🪙 *Uma moeda* — restringe o autônomo a ela só (use se quiser vigiar 1 ativo).",
+            "⚙️ *Configuration — Step 1 of 4*\nWhat should the agent focus its analysis on?\n\n"
+            "🧺 *Recommended basket* — several liquid coins (better for the autonomous mode "
+            "to have opportunities). \n"
+            "🪙 *A single coin* — restricts the autonomous mode to it alone (use if you want to watch 1 asset).",
             reply_markup=InlineKeyboardMarkup(rows), parse_mode=ParseMode.MARKDOWN)
 
     async def _step_risk(self, q) -> None:  # noqa: ANN001
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🟢 Conservador (stop 2%)", callback_data="risk_2"),
-             InlineKeyboardButton("🟡 Moderado (stop 4%)", callback_data="risk_4")],
-            [InlineKeyboardButton("🔵 Padrão (stop 5%)", callback_data="risk_5")],
-            [InlineKeyboardButton("↩️ Voltar", callback_data="cfg")],
+            [InlineKeyboardButton("🟢 Conservative (stop 2%)", callback_data="risk_2"),
+             InlineKeyboardButton("🟡 Moderate (stop 4%)", callback_data="risk_4")],
+            [InlineKeyboardButton("🔵 Default (stop 5%)", callback_data="risk_5")],
+            [InlineKeyboardButton("↩️ Back", callback_data="cfg")],
         ])
         foco = ", ".join(self._agent.token_focus)
         await q.edit_message_text(
-            f"⚙️ *Configuração — Passo 2 de 4*\nFoco: *{foco}*\n\n"
-            "🛑 Qual o *Stop-Loss* (quanto aceita perder por operação antes de vender)?",
+            f"⚙️ *Configuration — Step 2 of 4*\nFocus: *{foco}*\n\n"
+            "🛑 What *Stop-Loss* (how much you accept losing per trade before selling)?",
             reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
     async def _step_profit(self, q) -> None:  # noqa: ANN001
@@ -262,14 +262,14 @@ class TelegramInterface:
             [InlineKeyboardButton("🎯 +5%", callback_data="tp_5"),
              InlineKeyboardButton("🎯 +10%", callback_data="tp_10"),
              InlineKeyboardButton("🎯 +15%", callback_data="tp_15")],
-            [InlineKeyboardButton("📈 Deixar correr (trailing)", callback_data="tp_0")],
-            [InlineKeyboardButton("↩️ Voltar", callback_data="cfg")],
+            [InlineKeyboardButton("📈 Let it run (trailing)", callback_data="tp_0")],
+            [InlineKeyboardButton("↩️ Back", callback_data="cfg")],
         ])
         await q.edit_message_text(
-            f"⚙️ *Configuração — Passo 3 de 4*\nStop-Loss: *{self._agent.stop_loss_pct:.0f}%*\n\n"
-            "🎯 Qual o *lucro-alvo* (quando o ganho chegar nesse nível, eu vendo e realizo)?\n\n"
-            "_\"Deixar correr\" = sem teto fixo; eu seguro com o trailing pra capturar "
-            "altas maiores, protegendo o lucro já feito._",
+            f"⚙️ *Configuration — Step 3 of 4*\nStop-Loss: *{self._agent.stop_loss_pct:.0f}%*\n\n"
+            "🎯 What *take-profit* (when the gain reaches this level, I sell and lock it in)?\n\n"
+            "_\"Let it run\" = no fixed ceiling; I hold with the trailing to capture "
+            "bigger rallies, protecting the profit already made._",
             reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
     async def _step_size(self, q) -> None:  # noqa: ANN001
@@ -277,50 +277,50 @@ class TelegramInterface:
             [InlineKeyboardButton("💵 10%", callback_data="size_10"),
              InlineKeyboardButton("💵 25%", callback_data="size_25"),
              InlineKeyboardButton("💪 50%", callback_data="size_50")],
-            [InlineKeyboardButton("↩️ Voltar", callback_data="cfg")],
+            [InlineKeyboardButton("↩️ Back", callback_data="cfg")],
         ])
         await q.edit_message_text(
-            "⚙️ *Configuração — Passo 4 de 4*\nLucro-alvo definido.\n\n"
-            "📊 Qual o *tamanho de cada trade* (quanto da sua banca eu aposto por operação)?\n\n"
-            "_Banca pequena pede tamanho maior: trades de 5% somem no gás. "
-            "Mesmo apostando mais, o disjuntor de drawdown continua te protegendo._",
+            "⚙️ *Configuration — Step 4 of 4*\nTake-profit set.\n\n"
+            "📊 What *size for each trade* (how much of your bankroll I bet per trade)?\n\n"
+            "_A small bankroll calls for a bigger size: 5% trades vanish in gas. "
+            "Even betting more, the drawdown circuit breaker keeps protecting you._",
             reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
     async def _step_summary(self, q) -> None:  # noqa: ANN001
         a = self._agent
         corte = self._cfg.min_confidence_score
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("▶️ Ativar Agora", callback_data="activate")],
-            [InlineKeyboardButton("⚙️ Reconfigurar", callback_data="cfg")],
+            [InlineKeyboardButton("▶️ Activate Now", callback_data="activate")],
+            [InlineKeyboardButton("⚙️ Reconfigure", callback_data="cfg")],
         ])
-        alvo = f"+{a.take_profit_pct:.0f}%" if a.take_profit_pct else "deixar correr (trailing)"
+        alvo = f"+{a.take_profit_pct:.0f}%" if a.take_profit_pct else "let it run (trailing)"
         await q.edit_message_text(
-            "✅ *Pronto para ativar*\n\n"
-            f"🎯 Foco: *{', '.join(a.token_focus)}*\n"
+            "✅ *Ready to activate*\n\n"
+            f"🎯 Focus: *{', '.join(a.token_focus)}*\n"
             f"🛑 Stop-Loss: *{a.stop_loss_pct:.0f}%*\n"
-            f"🎯 Lucro-alvo: *{alvo}*\n"
-            f"🧠 Modo: *{a.mode}* (compra se score ≥ {corte}, *adaptativo* ao mercado)\n"
-            f"📊 Tamanho/trade: *{a.position_size_pct:.0f}%* da banca\n\n"
-            "Confirme para eu começar a operar:",
+            f"🎯 Take-profit: *{alvo}*\n"
+            f"🧠 Mode: *{a.mode}* (buys if score ≥ {corte}, *adaptive* to the market)\n"
+            f"📊 Size/trade: *{a.position_size_pct:.0f}%* of the bankroll\n\n"
+            "Confirm for me to start trading:",
             reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
-    # ── modo manual: você escolhe a moeda e o tamanho ────────────────────────
+    # ── manual mode: you pick the coin and the size ────────────────────────
     async def _manual_pick_coin(self, q) -> None:  # noqa: ANN001
         rows, line = [], []
-        for sym in self._agent.token_focus:  # set curado e líquido que você configurou
+        for sym in self._agent.token_focus:  # the curated, liquid set you configured
             line.append(InlineKeyboardButton(sym, callback_data=f"mbuy_{sym}"))
             if len(line) == 4:
                 rows.append(line)
                 line = []
         if line:
             rows.append(line)
-        rows.append([InlineKeyboardButton("↩️ Voltar", callback_data="back_home")])
+        rows.append([InlineKeyboardButton("↩️ Back", callback_data="back_home")])
         await q.edit_message_text(
-            "🎮 *Modo Manual — Passo 1 de 2*\n\n"
-            "Qual moeda você quer *comprar agora*?\n\n"
-            "_Aqui é você quem decide — a IA não precisa aprovar. Os escudos de "
-            "segurança (whitelist, anti-honeypot/taxa, slippage, anti-drain e o "
-            "disjuntor de drawdown) continuam ativos._",
+            "🎮 *Manual Mode — Step 1 of 2*\n\n"
+            "Which coin do you want to *buy now*?\n\n"
+            "_Here you're the one deciding — the AI doesn't need to approve. The security "
+            "shields (whitelist, anti-honeypot/tax, slippage, anti-drain and the "
+            "drawdown circuit breaker) stay active._",
             reply_markup=InlineKeyboardMarkup(rows), parse_mode=ParseMode.MARKDOWN)
 
     async def _manual_pick_size(self, q, sym: str) -> None:  # noqa: ANN001
@@ -328,39 +328,39 @@ class TelegramInterface:
             [InlineKeyboardButton("💵 10%", callback_data=f"msz_{sym}_10"),
              InlineKeyboardButton("💵 25%", callback_data=f"msz_{sym}_25"),
              InlineKeyboardButton("💪 50%", callback_data=f"msz_{sym}_50")],
-            [InlineKeyboardButton(f"🔥 Tudo em {sym} (100%)", callback_data=f"msz_{sym}_100")],
-            [InlineKeyboardButton("↩️ Voltar", callback_data="manual")],
+            [InlineKeyboardButton(f"🔥 All in {sym} (100%)", callback_data=f"msz_{sym}_100")],
+            [InlineKeyboardButton("↩️ Back", callback_data="manual")],
         ])
         await q.edit_message_text(
-            f"🎮 *Modo Manual — Passo 2 de 2*\nMoeda: *{sym}*\n\n"
-            "💰 *Quanto da banca* você quer apostar nesta operação?\n\n"
-            "_No manual não há teto automático: se quiser, vai *all-in*. "
-            "O disjuntor de drawdown ainda te protege de perda catastrófica._",
+            f"🎮 *Manual Mode — Step 2 of 2*\nCoin: *{sym}*\n\n"
+            "💰 *How much of the bankroll* do you want to bet on this trade?\n\n"
+            "_In manual there's no automatic ceiling: if you want, go *all-in*. "
+            "The drawdown circuit breaker still protects you from catastrophic loss._",
             reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
     async def _manual_confirm(self, q, sym: str, pct: float) -> None:  # noqa: ANN001
         eq = self._agent._last_equity or 0.0
-        approx = f"≈ *${eq * pct / 100.0:.2f}*" if eq > 0 else "_(valor exato calculado na hora pelo seu saldo)_"
+        approx = f"≈ *${eq * pct / 100.0:.2f}*" if eq > 0 else "_(exact value computed at execution from your balance)_"
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"✅ Confirmar e comprar {sym}", callback_data=f"mgo_{sym}_{pct:.0f}")],
-            [InlineKeyboardButton("↩️ Trocar tamanho", callback_data=f"mbuy_{sym}"),
-             InlineKeyboardButton("❌ Cancelar", callback_data="back_home")],
+            [InlineKeyboardButton(f"✅ Confirm and buy {sym}", callback_data=f"mgo_{sym}_{pct:.0f}")],
+            [InlineKeyboardButton("↩️ Change size", callback_data=f"mbuy_{sym}"),
+             InlineKeyboardButton("❌ Cancel", callback_data="back_home")],
         ])
         await q.edit_message_text(
-            f"⚠️ *Confirmação — você está no comando*\n\n"
-            f"Vou comprar *{sym}* com *{pct:.0f}%* da banca ({approx}).\n\n"
-            "Este é um trade *manual*: ele *ignora a nota da IA* — você assume o risco "
-            "desta decisão. O que *continua valendo*:\n"
-            "🛡️ whitelist · anti-honeypot/taxa · slippage máx · anti-drain\n"
-            "🚨 disjuntor de drawdown (proteção contra perda catastrófica)\n"
-            f"🛑 stop-loss de -{self._agent.stop_loss_pct:.0f}% será monitorado normalmente\n\n"
-            "Confirma?",
+            f"⚠️ *Confirmation — you're in command*\n\n"
+            f"I'll buy *{sym}* with *{pct:.0f}%* of the bankroll ({approx}).\n\n"
+            "This is a *manual* trade: it *ignores the AI score* — you take the risk "
+            "of this decision. What *still applies*:\n"
+            "🛡️ whitelist · anti-honeypot/tax · max slippage · anti-drain\n"
+            "🚨 drawdown circuit breaker (protection against catastrophic loss)\n"
+            f"🛑 stop-loss of -{self._agent.stop_loss_pct:.0f}% will be monitored normally\n\n"
+            "Confirm?",
             reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
     async def _manual_execute(self, q, sym: str, pct: float) -> None:  # noqa: ANN001
         await q.edit_message_text(
-            f"🟡 Compra manual de *{sym}* ({pct:.0f}% da banca) — swap real em andamento...\n"
-            "_Você receberá a confirmação com o link da BscScan._",
+            f"🟡 Manual buy of *{sym}* ({pct:.0f}% of the bankroll) — real swap in progress...\n"
+            "_You'll receive the confirmation with the BscScan link._",
             parse_mode=ParseMode.MARKDOWN)
         if self._agent.state not in (AgentState.SCANNING, AgentState.IN_POSITION):
             await self._agent.start()
@@ -373,19 +373,19 @@ class TelegramInterface:
 
     async def _send_status(self, target) -> None:  # noqa: ANN001
         s = await self._agent.status()
-        eq = f"${s['equity_usd']:.2f}" if s["equity_usd"] is not None else "n/d"
-        dd = f"{s['drawdown_pct']:.1f}%" if s["drawdown_pct"] is not None else "n/d"
+        eq = f"${s['equity_usd']:.2f}" if s["equity_usd"] is not None else "n/a"
+        dd = f"{s['drawdown_pct']:.1f}%" if s["drawdown_pct"] is not None else "n/a"
         tp = s.get("take_profit_pct") or 0
-        tp_txt = f"alvo +{tp:.0f}%" if tp else "alvo: deixa correr"
+        tp_txt = f"target +{tp:.0f}%" if tp else "target: let it run"
         lines = [
-            "📊 *Status do Boomerang AI*",
-            f"Estado: *{s['state']}*",
-            f"💰 Patrimônio: *{eq}*  ·  Drawdown: {dd}",
-            f"⚙️ Stop -{s['stop_loss_pct']:.0f}% · 🎯 {tp_txt} · modo {self._agent.mode}",
+            "📊 *Boomerang AI Status*",
+            f"State: *{s['state']}*",
+            f"💰 Equity: *{eq}*  ·  Drawdown: {dd}",
+            f"⚙️ Stop -{s['stop_loss_pct']:.0f}% · 🎯 {tp_txt} · mode {self._agent.mode}",
         ]
         det = s.get("positions_detail") or []
         if det:
-            lines.append("\n*📌 Posições abertas:*")
+            lines.append("\n*📌 Open positions:*")
             for p in det:
                 pnl = f"{p['pnl_pct']:+.2f}%" if p["pnl_pct"] is not None else "—"
                 emo = "🟢" if (p["pnl_pct"] or 0) >= 0 else "🔴"
@@ -393,22 +393,22 @@ class TelegramInterface:
                 trail = " · 📈trailing ON" if p["trailing_active"] else ""
                 lines.append(
                     f"{emo} *{p['symbol']}*  ${p['amount_usd']:.2f}  ·  PnL *{pnl}*{trail}\n"
-                    f"   entrada {_fmt_price(p['entry'])} → agora {_fmt_price(p['current'])}\n"
-                    f"   🛑 stop {_fmt_price(p['stop'])}  ·  🎯 alvo {tpp}"
+                    f"   entry {_fmt_price(p['entry'])} → now {_fmt_price(p['current'])}\n"
+                    f"   🛑 stop {_fmt_price(p['stop'])}  ·  🎯 target {tpp}"
                 )
         else:
-            lines.append("\n📌 Nenhuma posição aberta no momento.")
-        lines.append(f"\n🎯 Foco ({len(s['token_focus'])} moedas): {', '.join(s['token_focus'])}")
+            lines.append("\n📌 No open positions at the moment.")
+        lines.append(f"\n🎯 Focus ({len(s['token_focus'])} coins): {', '.join(s['token_focus'])}")
         text = "\n".join(lines)
-        # Botões de VENDA por posição (dinheiro real → exige confirmação no clique seguinte).
+        # Per-position SELL buttons (real money → requires confirmation on the next click).
         rows = []
         for p in det:
             pnl = f"{p['pnl_pct']:+.1f}%" if p["pnl_pct"] is not None else "—"
-            rows.append([InlineKeyboardButton(f"🔴 Vender {p['symbol']} (PnL {pnl})",
+            rows.append([InlineKeyboardButton(f"🔴 Sell {p['symbol']} (PnL {pnl})",
                                               callback_data=f"sell_{p['symbol']}")])
         if len(det) > 1:
-            rows.append([InlineKeyboardButton("🔴 Vender TUDO", callback_data="sellall")])
-        rows.append([InlineKeyboardButton("🔄 Atualizar", callback_data="status")])
+            rows.append([InlineKeyboardButton("🔴 Sell EVERYTHING", callback_data="sellall")])
+        rows.append([InlineKeyboardButton("🔄 Refresh", callback_data="status")])
         kb = InlineKeyboardMarkup(rows)
         send = target.edit_message_text if hasattr(target, "edit_message_text") else target.message.reply_text
         await send(text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
@@ -416,21 +416,21 @@ class TelegramInterface:
     async def cmd_panic(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._is_master(update):
             return
-        await update.message.reply_text("🚨 Pânico: liquidando tudo e travando o agente...")
-        await self._agent.panic("Comando manual /panic do dono.")
+        await update.message.reply_text("🚨 Panic: liquidating everything and halting the agent...")
+        await self._agent.panic("Owner's manual /panic command.")
 
     async def cmd_pause(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._is_master(update):
             return
         await self._agent.pause()
-        await update.message.reply_text("⏸️ Agente pausado. Use /start para retomar.")
+        await update.message.reply_text("⏸️ Agent paused. Use /start to resume.")
 
     async def cmd_buy(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._is_master(update):
             return
         if not ctx.args:
             await update.message.reply_text(
-                "Uso: /buy SIMBOLO [%]  (ex.: /buy ETH  ou  /buy FLOKI 100 para all-in)")
+                "Usage: /buy SYMBOL [%]  (e.g. /buy ETH  or  /buy FLOKI 100 for all-in)")
             return
         symbol = ctx.args[0].upper()
         size_pct: float | None = None
@@ -438,11 +438,11 @@ class TelegramInterface:
             try:
                 size_pct = max(0.0, min(float(ctx.args[1].rstrip("%")), 100.0))
             except ValueError:
-                await update.message.reply_text("Tamanho inválido. Ex.: /buy FLOKI 50")
+                await update.message.reply_text("Invalid size. E.g. /buy FLOKI 50")
                 return
-        tam = f" ({size_pct:.0f}% da banca)" if size_pct is not None else ""
+        tam = f" ({size_pct:.0f}% of the bankroll)" if size_pct is not None else ""
         await update.message.reply_text(
-            f"🟡 Compra manual de {symbol}{tam} (validação) — swap real em andamento...")
+            f"🟡 Manual buy of {symbol}{tam} (validation) — real swap in progress...")
         if self._agent.state not in (AgentState.SCANNING, AgentState.IN_POSITION):
             await self._agent.start()
         await self._agent.force_buy(symbol, size_pct=size_pct)
@@ -450,38 +450,38 @@ class TelegramInterface:
     async def cmd_reiniciar(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._is_master(update):
             return
-        await update.message.reply_text("🔄 Destravando e reiniciando a sessão...")
+        await update.message.reply_text("🔄 Unlocking and restarting the session...")
         await self._agent.restart_session()
 
     async def cmd_registrar(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._is_master(update):
             return
         await update.message.reply_text(
-            "🏁 Registrando a carteira do agente na competição (on-chain)...")
+            "🏁 Registering the agent's wallet in the competition (on-chain)...")
         try:
             res = await self._agent.register_competition()
             tx = res.get("transactionHash") or res.get("tx") if isinstance(res, dict) else None
-            msg = "✅ *Registro enviado!*" + (f"\n🔗 [BscScan](https://bscscan.com/tx/{tx})" if tx else "")
+            msg = "✅ *Registration submitted!*" + (f"\n🔗 [BscScan](https://bscscan.com/tx/{tx})" if tx else "")
             if isinstance(res, dict) and res.get("error"):
-                msg = f"⚠️ Resposta: {res['error']}"
+                msg = f"⚠️ Response: {res['error']}"
             await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN,
                                             disable_web_page_preview=True)
         except Exception as exc:  # noqa: BLE001
             await update.message.reply_text(
-                f"❌ Falha no registro: {exc}\n\nVerifique se já está registrado com /competicao.")
+                f"❌ Registration failed: {exc}\n\nCheck whether it's already registered with /competicao.")
 
     async def cmd_competicao(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._is_master(update):
             return
-        await update.message.reply_text("🔎 Consultando status da competição...")
+        await update.message.reply_text("🔎 Querying competition status...")
         try:
             res = await self._agent.competition_status()
             import json as _json
             await update.message.reply_text(
-                f"🏁 *Status da competição:*\n```\n{_json.dumps(res, ensure_ascii=False, indent=2)[:1500]}\n```",
+                f"🏁 *Competition status:*\n```\n{_json.dumps(res, ensure_ascii=False, indent=2)[:1500]}\n```",
                 parse_mode=ParseMode.MARKDOWN)
         except Exception as exc:  # noqa: BLE001
-            await update.message.reply_text(f"❌ Não consegui consultar: {exc}")
+            await update.message.reply_text(f"❌ Couldn't query: {exc}")
 
     async def cmd_dashboard(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         import os
@@ -490,26 +490,26 @@ class TelegramInterface:
         token = os.getenv("DASHBOARD_TOKEN")
         base = os.getenv("DASHBOARD_BASE_URL", "http://localhost:8080")
         if not token:
-            await update.message.reply_text("Dashboard não configurado (DASHBOARD_TOKEN ausente no .env).")
+            await update.message.reply_text("Dashboard not configured (DASHBOARD_TOKEN missing in .env).")
             return
         url = f"{base}/dash?key={token}"
         await update.message.reply_text(
-            f"📊 *Seu painel (só-leitura):*\n{url}\n\n⚠️ Link privado — não compartilhe.",
+            f"📊 *Your panel (read-only):*\n{url}\n\n⚠️ Private link — don't share it.",
             parse_mode=ParseMode.MARKDOWN)
 
     _HELP = (
-        "🪃 *Comandos do Boomerang AI*\n\n"
-        "• /start — menu principal (🤖 Automático · 🎮 Manual · Status · Pausar · Sacar)\n"
-        "• /status — situação + *botões de VENDER* cada posição\n"
-        "• /buy SÍMBOLO [%] — compra manual (ex.: `/buy CAKE` ou `/buy FLOKI 100` p/ all-in)\n"
-        "• /pausar (ou /parar, /stop) — pausa o agente (retoma com /start)\n"
-        "• /panic — vende tudo *e trava* o agente (emergência)\n"
-        "• /reiniciar — *destrava* após /panic ou saque e volta a operar\n"
-        "• /dashboard — link do painel só-leitura\n"
-        "• /registrar — registra a carteira na competição (rodar 1x antes de 22/jun)\n"
-        "• /competicao — status do registro na competição\n"
-        "• /ajuda — esta lista\n\n"
-        "_Para vender sem travar, use os botões 🔴 dentro do /status._"
+        "🪃 *Boomerang AI commands*\n\n"
+        "• /start — main menu (🤖 Automatic · 🎮 Manual · Status · Pause · Withdraw)\n"
+        "• /status — situation + *SELL buttons* for each position\n"
+        "• /buy SYMBOL [%] — manual buy (e.g. `/buy CAKE` or `/buy FLOKI 100` for all-in)\n"
+        "• /pausar (or /parar, /stop) — pauses the agent (resume with /start)\n"
+        "• /panic — sells everything *and halts* the agent (emergency)\n"
+        "• /reiniciar — *unlocks* after /panic or a withdrawal and resumes trading\n"
+        "• /dashboard — read-only panel link\n"
+        "• /registrar — registers the wallet in the competition (run once before Jun 22)\n"
+        "• /competicao — competition registration status\n"
+        "• /ajuda — this list\n\n"
+        "_To sell without halting, use the 🔴 buttons inside /status._"
     )
 
     async def cmd_help(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -521,13 +521,13 @@ class TelegramInterface:
         if not self._is_master(update):
             return
         await update.message.reply_text(
-            "❓ Não entendi esse comando. Veja /ajuda para a lista completa.\n\n" + self._HELP,
+            "❓ I didn't understand that command. See /ajuda for the full list.\n\n" + self._HELP,
             parse_mode=ParseMode.MARKDOWN)
 
-    # ── ciclo de vida ────────────────────────────────────────────────────────
+    # ── lifecycle ────────────────────────────────────────────────────────
     def build(self) -> Application:
         if not self._token:
-            raise RuntimeError("TELEGRAM_BOT_TOKEN ausente no .env")
+            raise RuntimeError("TELEGRAM_BOT_TOKEN missing in .env")
         app = Application.builder().token(self._token).build()
         app.add_handler(CommandHandler("start", self.cmd_start))
         app.add_handler(CommandHandler("status", self.cmd_status))
@@ -540,7 +540,7 @@ class TelegramInterface:
         app.add_handler(CommandHandler(["competicao", "compete"], self.cmd_competicao))
         app.add_handler(CommandHandler(["ajuda", "help", "comandos"], self.cmd_help))
         app.add_handler(CallbackQueryHandler(self.on_button))
-        # fallback: qualquer comando/texto nao reconhecido -> orienta o usuario
+        # fallback: any unrecognized command/text -> guide the user
         app.add_handler(MessageHandler(filters.COMMAND | (filters.TEXT & ~filters.COMMAND),
                                        self.cmd_unknown))
         self._app = app
@@ -551,4 +551,4 @@ class TelegramInterface:
         await app.initialize()
         await app.start()
         await app.updater.start_polling()
-        self._log.info("Bot do Telegram em polling.")
+        self._log.info("Telegram bot polling.")

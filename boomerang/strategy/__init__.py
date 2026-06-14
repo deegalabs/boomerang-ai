@@ -1,1 +1,1 @@
-"""Motor multi-estratégia do Boomerang AI (playbook roteado por regime)."""
+"""Boomerang AI multi-strategy engine (regime-routed playbook)."""

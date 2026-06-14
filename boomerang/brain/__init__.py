@@ -1,1 +1,1 @@
-"""Process A (cognitivo) — Filtro 1: inteligência de atenção via CMC + LLM."""
+"""Process A (cognitive) — Filter 1: CMC attention intelligence + LLM."""

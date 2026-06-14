@@ -1,13 +1,13 @@
-"""Site público do Boomerang AI (produção) — landing, docs, guia, prova ao vivo e Console.
+"""Boomerang AI public site (production) — landing, docs, guide, live proof and Console.
 
-App Starlette server-side (Jinja2 + CSS à mão + Alpine/JS), sem build. Serve para:
-  - dev local:  python scripts/preview_web.py            (porta 8090)
-  - produção:   uvicorn boomerang.webapp.site:app        (atrás de TLS/reverse proxy)
+Server-side Starlette app (Jinja2 + hand-written CSS + Alpine/JS), no build. Serves for:
+  - local dev:   python scripts/preview_web.py            (port 8090)
+  - production:  uvicorn boomerang.webapp.site:app        (behind TLS/reverse proxy)
 
-Tudo aqui é público e só-leitura, EXCETO o Console, que exige login por carteira
-(SIWE). No deploy público o Console roda em modo DEMO (agente simulado por carteira),
-então nenhum dinheiro real é tocado pela web. O controle real do agente é só pelo
-Telegram (dono) / pela carteira dona.
+Everything here is public and read-only, EXCEPT the Console, which requires wallet login
+(SIWE). On the public deploy the Console runs in DEMO mode (simulated agent per wallet),
+so no real money is touched by the web. Real control of the agent is only via
+Telegram (owner) / via the owner wallet.
 """
 from __future__ import annotations
 
@@ -90,20 +90,20 @@ async def live_page(request):  # noqa: ANN001
     return _resp(request, "live.html", "/live")
 
 
-async def api_live(request):  # noqa: ANN001 — público, só leitura do estado persistido
+async def api_live(request):  # noqa: ANN001 — public, read-only of the persisted state
     return JSONResponse({"state": load_state() or {}, "trades": load_trades(),
                          "identity": identity.summary()})
 
 
-# ── Console (dono) + SIWE ────────────────────────────────────────────────────
+# ── Console (owner) + SIWE ────────────────────────────────────────────────────
 async def console_page(request):  # noqa: ANN001
     lang = _lang(request)
     addr = auth.check_session(request.cookies.get(SESSION_COOKIE))
     ctx = {"request": request, "lang": lang, "t": strings(lang), "nav": nav_items(lang),
            "active": "/console", "authed": bool(addr), "owner_short": _short(addr or ""), "demo": True}
     resp = _set_lang_cookie(request, templates.TemplateResponse(request, "console.html", ctx))
-    # Nunca cachear: a página depende do cookie de sessão. Sem isso, após o login
-    # o reload pode servir a versão de login em cache e "não entrar".
+    # Never cache: the page depends on the session cookie. Without this, after login
+    # the reload may serve the cached login version and "not log in".
     resp.headers["Cache-Control"] = "no-store, must-revalidate"
     return resp
 
@@ -117,7 +117,7 @@ async def auth_nonce(request):  # noqa: ANN001
     return JSONResponse({"message": auth.build_message(addr, auth.new_nonce(), domain)})
 
 
-async def auth_verify(request):  # noqa: ANN001 — DEMO: qualquer carteira (cada uma = agente simulado próprio)
+async def auth_verify(request):  # noqa: ANN001 — DEMO: any wallet (each one = its own simulated agent)
     body = await request.json()
     if not auth.verify_signer(body.get("address", ""), body.get("message", ""), body.get("signature", "")):
         return JSONResponse({"ok": False}, status_code=401)
@@ -127,8 +127,8 @@ async def auth_verify(request):  # noqa: ANN001 — DEMO: qualquer carteira (cad
     return resp
 
 
-async def auth_guest(request):  # noqa: ANN001 — DEMO: entra sem carteira (cada convidado = agente simulado próprio)
-    addr = "0x" + secrets.token_hex(20)  # carteira-convidado aleatória, só para a sessão demo
+async def auth_guest(request):  # noqa: ANN001 — DEMO: enters without a wallet (each guest = its own simulated agent)
+    addr = "0x" + secrets.token_hex(20)  # random guest wallet, only for the demo session
     resp = JSONResponse({"ok": True})
     resp.set_cookie(SESSION_COOKIE, auth.make_session(addr),
                     httponly=True, samesite="lax", max_age=43200, path="/")
@@ -148,10 +148,10 @@ async def console_state(request):  # noqa: ANN001
     return JSONResponse(demo.snapshot(addr))
 
 
-async def console_action(request):  # noqa: ANN001 — ações no agente SIMULADO da carteira da sessão
+async def console_action(request):  # noqa: ANN001 — actions on the SIMULATED agent of the session wallet
     addr = auth.check_session(request.cookies.get(SESSION_COOKIE))
     if not addr:
-        return JSONResponse({"ok": False, "detail": "não autenticado"}, status_code=401)
+        return JSONResponse({"ok": False, "detail": "not authenticated"}, status_code=401)
     name = request.path_params["name"]
     body = {}
     try:
@@ -160,7 +160,7 @@ async def console_action(request):  # noqa: ANN001 — ações no agente SIMULAD
         pass
     if name == "start":
         ok, msg = demo.start(addr)
-    elif name == "tick":  # avança 1 ciclo do agente autônomo simulado
+    elif name == "tick":  # advances 1 cycle of the simulated autonomous agent
         return JSONResponse({"ok": True, **demo.tick(addr)})
     elif name == "configure":
         ok, msg = demo.configure(addr, body.get("token_focus", "ALL"),
@@ -172,13 +172,13 @@ async def console_action(request):  # noqa: ANN001 — ações no agente SIMULAD
     elif name == "panic":
         ok, msg = demo.panic(addr)
     else:
-        ok, msg = False, "ação desconhecida"
+        ok, msg = False, "unknown action"
     return JSONResponse({"ok": ok, "detail": msg})
 
 
-async def healthz(request):  # noqa: ANN001 — checagem de saúde p/ o reverse proxy/uptime
-    # Reflete a SAÚDE DO AGENTE: se o sinal de vida ficou velho (> 5min), o agente
-    # travou/morreu → 503 → a Railway reinicia o container. Cobre deadlock (sem exceção).
+async def healthz(request):  # noqa: ANN001 — health check for the reverse proxy/uptime
+    # Reflects the AGENT'S HEALTH: if the heartbeat got stale (> 5min), the agent
+    # froze/died → 503 → Railway restarts the container. Covers deadlock (no exception).
     from boomerang.liveness import age_seconds
     age = age_seconds()
     if age > 300:
@@ -187,10 +187,10 @@ async def healthz(request):  # noqa: ANN001 — checagem de saúde p/ o reverse 
                          "identity": identity.summary().get("registered", False)})
 
 
-# ── proxy x402 embutido ──────────────────────────────────────────────────────
-# Dá ao `twak x402` (que roda local, onde está a carteira de trade) um endpoint
-# PÚBLICO (a URL da Railway) que injeta o header Accept do MCP da CMC. Assim o
-# pagamento real liquida sem mover carteira nem subir VPS.
+# ── embedded x402 proxy ──────────────────────────────────────────────────────
+# Gives `twak x402` (which runs locally, where the trade wallet is) a PUBLIC
+# endpoint (the Railway URL) that injects the Accept header of CMC's MCP. This way
+# the real payment settles without moving the wallet or spinning up a VPS.
 _X402_TARGET = os.getenv("X402_TARGET", "https://mcp.coinmarketcap.com/x402/mcp")
 _X402_FWD = ("payment-signature", "x-payment", "x-payment-signature", "mcp-protocol-version")
 

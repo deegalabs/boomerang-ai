@@ -1,13 +1,13 @@
-"""Agente SIMULADO AUTÔNOMO para o Console demo (público), operando sobre o MERCADO REAL.
+"""AUTONOMOUS SIMULATED agent for the (public) demo Console, operating on the REAL MARKET.
 
-Lê as cotações REAIS que o agente (Track 1) já busca na CoinMarketCap (via market_cache,
-mesmo processo) — então as DECISÕES são sobre dados de verdade: preços, variações 24h e
-regime do BTC reais, com as MESMAS funções do robô (momentum_prescore, dynamic_sl_tp,
-conviction_size_pct, market_regime). Custo zero: nenhuma chamada extra à CMC.
+It reads the REAL quotes the agent (Track 1) already fetches from CoinMarketCap (via
+market_cache, same process) — so the DECISIONS are over real data: real prices, 24h changes
+and BTC regime, with the SAME functions as the bot (momentum_prescore, dynamic_sl_tp,
+conviction_size_pct, market_regime). Zero cost: no extra calls to CMC.
 
-A carteira é fictícia ($100), por sessão; um micro-movimento entre atualizações dá
-vivacidade à tela (as atualizações reais chegam a cada ciclo do agente, ~5 min).
-Se o agente ainda não publicou dados, cai num mercado simulado (a demo nunca quebra).
+The wallet is fictional ($100), per session; a micro-movement between updates gives the
+screen some liveliness (the real updates arrive every agent cycle, ~5 min).
+If the agent hasn't published data yet, it falls back to a simulated market (the demo never breaks).
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ START_CASH = 100.0
 MAX_POSITIONS = 3
 BASE_POS_PCT = 22.0
 
-# Fallback simulado (só se o agente ainda não publicou cotações reais).
+# Simulated fallback (only if the agent hasn't published real quotes yet).
 _FALLBACK = {
     "ETH": 3200.0, "LINK": 18.0, "UNI": 12.0, "ADA": 0.62, "AVAX": 38.0, "DOT": 7.5,
     "DOGE": 0.16, "SHIB": 0.000022, "FLOKI": 0.00018, "TWT": 1.1, "LTC": 85.0, "XRP": 2.1,
@@ -37,8 +37,8 @@ def _now() -> float:
 
 
 def _market() -> tuple[dict, float | None, int | None, bool]:
-    """Mercado REAL do cache do agente: ({symbol: metrics}, btc_24h, fng, real?).
-    Fallback simulado se o agente ainda não publicou nada."""
+    """REAL market from the agent cache: ({symbol: metrics}, btc_24h, fng, real?).
+    Simulated fallback if the agent hasn't published anything yet."""
     c = market_cache.get()
     q = c.get("quotes") or {}
     real = {s: m for s, m in q.items() if (m.get("price_usd") or 0) > 0}
@@ -63,7 +63,7 @@ def _agent(addr: str) -> dict:
 
 
 def _price(a: dict, market: dict, sym: str) -> float:
-    """Preço atual = âncora REAL × micro-wobble da sessão (vivacidade entre updates)."""
+    """Current price = REAL anchor × session micro-wobble (liveliness between updates)."""
     base = float((market.get(sym) or {}).get("price_usd") or 0.0)
     return base * (1 + a["wob"].get(sym, 0.0) / 100.0)
 
@@ -77,27 +77,27 @@ def _equity(a: dict, market: dict) -> float:
     return a["cash"] + sum(p["qty"] * _price(a, market, p["symbol"]) for p in a["positions"])
 
 
-# ── controles ─────────────────────────────────────────────────────────────────
+# ── controls ─────────────────────────────────────────────────────────────────
 def start(addr: str) -> tuple[bool, str]:
     a = _agent(addr)
     a["running"], a["paused"] = True, False
     _, _, _, real = _market()
-    fonte = "mercado REAL (CoinMarketCap)" if real else "mercado simulado (agente ainda aquecendo)"
-    _log(a, "sys", f"🚀 Agente autônomo ATIVADO — lendo {fonte}, 3 escudos online.")
-    return True, "Agente autônomo ativado."
+    fonte = "REAL market (CoinMarketCap)" if real else "simulated market (agent still warming up)"
+    _log(a, "sys", f"🚀 Autonomous agent ACTIVATED — reading {fonte}, 3 shields online.")
+    return True, "Autonomous agent activated."
 
 
 def pause(addr: str) -> tuple[bool, str]:
     a = _agent(addr)
     a["paused"] = not a["paused"]
-    _log(a, "sys", "⏸️ Pausado pelo dono." if a["paused"] else "▶️ Retomado.")
-    return True, ("Pausado." if a["paused"] else "Retomado.")
+    _log(a, "sys", "⏸️ Paused by the owner." if a["paused"] else "▶️ Resumed.")
+    return True, ("Paused." if a["paused"] else "Resumed.")
 
 
 def configure(addr: str, focus: str, stop: float, tp: float) -> tuple[bool, str]:
     a = _agent(addr)
     a["config"] = {"focus": focus, "stop": float(stop), "tp": float(tp)}
-    return True, "Preferências salvas — o agente calibra SL/TP sozinho pela volatilidade."
+    return True, "Preferences saved — the agent calibrates SL/TP on its own by volatility."
 
 
 def _close(a: dict, market: dict, pos: dict, reason: str) -> float:
@@ -107,7 +107,7 @@ def _close(a: dict, market: dict, pos: dict, reason: str) -> float:
     a["positions"].remove(pos)
     a["trades"].append({"type": "close", "symbol": pos["symbol"], "pnl_pct": pnl, "ts": _now()})
     emo = "🟢" if pnl >= 0 else "🔴"
-    _log(a, "sell", f"{emo} VENDEU {pos['symbol']} — {reason} · PnL {pnl:+.1f}%")
+    _log(a, "sell", f"{emo} SOLD {pos['symbol']} — {reason} · PnL {pnl:+.1f}%")
     return pnl
 
 
@@ -115,22 +115,22 @@ def withdraw(addr: str) -> tuple[bool, str]:
     a = _agent(addr)
     market, _, _, _ = _market()
     for p in list(a["positions"]):
-        _close(a, market, p, "saque")
+        _close(a, market, p, "withdrawal")
     a["paused"], a["running"] = True, False
-    return True, "Saque simulado: tudo no caixa e agente parado."
+    return True, "Simulated withdrawal: everything in cash and agent stopped."
 
 
 def panic(addr: str) -> tuple[bool, str]:
     a = _agent(addr)
     market, _, _, _ = _market()
     for p in list(a["positions"]):
-        _close(a, market, p, "pânico (liquidação)")
+        _close(a, market, p, "panic (liquidation)")
     a["paused"], a["running"] = True, False
-    _log(a, "sys", "🚨 PÂNICO: liquidou tudo e travou.")
-    return True, "Pânico simulado: liquidou tudo e travou."
+    _log(a, "sys", "🚨 PANIC: liquidated everything and halted.")
+    return True, "Simulated panic: liquidated everything and halted."
 
 
-# ── 1 CICLO do agente autônomo sobre o MERCADO REAL ───────────────────────────
+# ── 1 CYCLE of the autonomous agent over the REAL MARKET ───────────────────────────
 def tick(addr: str) -> dict:
     a = _agent(addr)
     if not a["running"] or a["paused"]:
@@ -139,14 +139,14 @@ def tick(addr: str) -> dict:
     market, btc24, fng, real = _market()
     a["real"] = real
 
-    # micro-wobble por token (só vivacidade — PEQUENO p/ não estourar os stops curtos)
+    # per-token micro-wobble (liveliness only — SMALL so it doesn't blow the tight stops)
     for sym in market:
         w = a["wob"].get(sym, 0.0)
         a["wob"][sym] = max(-0.6, min(w * 0.85 + random.uniform(-0.16, 0.16), 0.6))
 
     regime_lbl, cut_adj = market_regime(btc24, fng)
 
-    # SAÍDA ASSIMÉTRICA: corta perda curta, deixa o ganho correr (trailing)
+    # ASYMMETRIC EXIT: cut the loss short, let the gain run (trailing)
     for pos in list(a["positions"]):
         if pos["symbol"] not in market:
             continue
@@ -156,19 +156,19 @@ def tick(addr: str) -> dict:
         if not pos["trailing"] and pnl >= 3.0:
             pos["trailing"] = True
             pos["stop"] = max(pos["stop"], pos["entry_price"])
-            _log(a, "skill", f"📈 {pos['symbol']} +3% → trailing ON (deixando o vencedor correr)")
+            _log(a, "skill", f"📈 {pos['symbol']} +3% → trailing ON (letting the winner run)")
         if pos["trailing"]:
             pos["stop"] = max(pos["stop"], pos["peak"] * (1 - pos["sl_pct"] / 100.0))
         if cur <= pos["stop"]:
-            _close(a, market, pos, "trailing (lucro protegido)" if pos["trailing"] else "stop-loss disparado")
+            _close(a, market, pos, "trailing (profit protected)" if pos["trailing"] else "stop-loss triggered")
 
-    # GATE MACRO: BTC despencando → risk-off
+    # MACRO GATE: BTC plunging → risk-off
     if btc24 is not None and btc24 <= -5.0:
-        _log(a, "scan", f"🛡️ Gate MACRO: BTC {btc24:+.1f}%/24h — risk-off, sem novas entradas.")
+        _log(a, "scan", f"🛡️ MACRO gate: BTC {btc24:+.1f}%/24h — risk-off, no new entries.")
         a["peak"] = max(a["peak"], _equity(a, market))
         return snapshot(addr)
 
-    # ESCANEIA + decide (prescore REAL, melhor oportunidade relativa)
+    # SCANS + decides (REAL prescore, best relative opportunity)
     ranked = sorted(market.keys(), key=lambda s: momentum_prescore(market[s]), reverse=True)
     held = {p["symbol"] for p in a["positions"]}
     cand = next((s for s in ranked if s not in held), None)
@@ -179,19 +179,19 @@ def tick(addr: str) -> dict:
             weak = min(a["positions"], key=lambda p: momentum_prescore(market.get(p["symbol"]) or {}))
             wpre = momentum_prescore(market.get(weak["symbol"]) or {})
             cpre = momentum_prescore(market[cand])
-            # só rotaciona p/ algo CLARAMENTE mais forte (e nunca um vencedor em corrida)
+            # only rotate to something CLEARLY stronger (and never a winner mid-run)
             if wpre < 12 and cpre >= wpre + 12 and not weak["trailing"]:
-                _log(a, "skill", f"🔁 Rotação: {weak['symbol']} (fraco) → liberar capital p/ {cand} (forte)")
-                _close(a, market, weak, "rotação (capital p/ melhor oportunidade)")
+                _log(a, "skill", f"🔁 Rotation: {weak['symbol']} (weak) → free up capital for {cand} (strong)")
+                _close(a, market, weak, "rotation (capital to a better opportunity)")
         elif random.random() < 0.3:
-            _log(a, "scan", f"🔍 Regime {regime_lbl} · {len(a['positions'])} posições · "
-                            "deixando os vencedores correrem.")
+            _log(a, "scan", f"🔍 Regime {regime_lbl} · {len(a['positions'])} positions · "
+                            "letting the winners run.")
     elif cand:
         m = market[cand]
         pre = momentum_prescore(m)
         ch24 = float(m.get("percent_change_24h") or 0.0)
-        # Mirror do cérebro real: momentum jovem pontua, mas ESTICAMENTO (subiu demais =
-        # risco de topo) PENALIZA — não compra o topo do pump.
+        # Mirror of the real brain: young momentum scores, but OVEREXTENSION (rose too much =
+        # top risk) PENALIZES — it doesn't buy the top of the pump.
         overext = max(0.0, ch24 - 12.0) * 1.6
         score = int(max(40, min(56 + pre * 0.7 + min(ch24, 12.0) * 0.6 - overext
                                  + random.uniform(-4, 5), 90)))
@@ -210,11 +210,11 @@ def tick(addr: str) -> dict:
                     "trailing": False, "score": score, "tier": tier, "opened_at": _now(),
                 })
                 a["trades"].append({"type": "open", "symbol": cand, "amount_usd": amount, "ts": _now()})
-                _log(a, "buy", f"✅ COMPREI {cand} ${amount:.0f} · score {score} · vol {tier} · "
-                               f"SL {sl:.0f}%/alvo correndo · convicção {conv:.0f}% · 24h {ch24:+.1f}%")
+                _log(a, "buy", f"✅ BOUGHT {cand} ${amount:.0f} · score {score} · vol {tier} · "
+                               f"SL {sl:.0f}%/target running · conviction {conv:.0f}% · 24h {ch24:+.1f}%")
         else:
-            _log(a, "scan", f"🔍 Regime {regime_lbl} · melhor: {cand} (score {score} < corte {cut}) "
-                            f"· 24h {float(m.get('percent_change_24h') or 0):+.1f}% — sem setup.")
+            _log(a, "scan", f"🔍 Regime {regime_lbl} · best: {cand} (score {score} < cut {cut}) "
+                            f"· 24h {float(m.get('percent_change_24h') or 0):+.1f}% — no setup.")
 
     a["peak"] = max(a["peak"], _equity(a, market))
     return snapshot(addr)

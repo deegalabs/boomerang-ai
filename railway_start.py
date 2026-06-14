@@ -1,12 +1,12 @@
-"""Entrypoint único da Railway: roda o SITE público + o AGENTE no mesmo container.
+"""Single Railway entrypoint: runs the public SITE + the AGENT in the same container.
 
-Os dois compartilham o diretório de estado (volume), então o /live mostra os trades
-reais do agente. O site roda na thread principal (responde /healthz na hora); o agente
-roda numa thread própria com seu próprio event loop — assim chamadas bloqueantes do
-twak não travam o site, e um crash do agente não derruba a web.
+Both share the state directory (volume), so /live shows the agent's real trades. The
+site runs on the main thread (answers /healthz instantly); the agent runs on its own
+thread with its own event loop — that way blocking twak calls don't freeze the site,
+and an agent crash doesn't take down the web.
 
-Antes de subir, materializa o keystore cifrado do TWAK e (só na 1a vez) o estado, a
-partir de env vars base64. Assim nada sensível precisa ficar no repositório.
+Before starting, it materializes TWAK's encrypted keystore and (only the 1st time) the
+state, from base64 env vars. That way nothing sensitive needs to live in the repository.
 """
 from __future__ import annotations
 
@@ -32,50 +32,50 @@ def _seed_file(env_key: str, dest: Path, *, only_if_absent: bool = False) -> Non
 
 
 def _bootstrap() -> None:
-    # Keystore cifrado do TWAK (mesma carteira de trade). Sempre materializa.
+    # TWAK's encrypted keystore (same trading wallet). Always materialized.
     _seed_file("TWAK_WALLET_JSON_B64", Path(os.path.expanduser("~/.twak/wallet.json")))
-    # Estado inicial (posições/peak) só na 1a vez; depois o volume é a fonte de verdade.
+    # Initial state (positions/peak) only the 1st time; afterwards the volume is the source of truth.
     state_dir = Path(os.getenv("BOOMERANG_STATE_DIR", "state"))
     _seed_file("STATE_SEED_B64", state_dir / "agent_state.json", only_if_absent=True)
 
 
 def _run_agent() -> None:
-    """Roda o agente com SUPERVISÃO: se cair (exceção ou retorno inesperado), espera um
-    backoff e REINICIA. Sem isso, um crash no startup deixava o agente morto até um
-    re-deploy manual (com o site verde, sem ninguém saber). Encerra limpo só no shutdown."""
+    """Runs the agent with SUPERVISION: if it goes down (exception or unexpected return), it
+    waits for a backoff and RESTARTS. Without this, a startup crash left the agent dead until a
+    manual re-deploy (with the site green, nobody knowing). Shuts down cleanly only on shutdown."""
     import sys
     import time
     import traceback
     attempt = 0
     while True:
         attempt += 1
-        os.environ["BOOMERANG_RESTART_COUNT"] = str(attempt - 1)  # 0 no 1º; >0 = reinício
+        os.environ["BOOMERANG_RESTART_COUNT"] = str(attempt - 1)  # 0 on the 1st; >0 = restart
         try:
             from run_agent import main as agent_main
-            print(f">>> [agent-thread] iniciando (tentativa {attempt})", flush=True)
+            print(f">>> [agent-thread] starting (attempt {attempt})", flush=True)
             asyncio.run(agent_main())
-            print(">>> [agent-thread] main() retornou inesperadamente; reiniciando.", flush=True)
+            print(">>> [agent-thread] main() returned unexpectedly; restarting.", flush=True)
         except (KeyboardInterrupt, SystemExit):
-            print(">>> [agent-thread] encerrando (shutdown).", flush=True)
+            print(">>> [agent-thread] terminating (shutdown).", flush=True)
             return
         except Exception as exc:  # noqa: BLE001
-            print(f">>> [agent-thread] CAIU: {exc!r}; reiniciando.", flush=True)
+            print(f">>> [agent-thread] CRASHED: {exc!r}; restarting.", flush=True)
             traceback.print_exc()
             sys.stdout.flush()
-        time.sleep(min(60, 5 * attempt))  # backoff: 5s, 10s, ... até 60s
+        time.sleep(min(60, 5 * attempt))  # backoff: 5s, 10s, ... up to 60s
 
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     for noisy in ("httpx", "httpcore", "telegram", "telegram.ext", "urllib3"):
-        logging.getLogger(noisy).setLevel(logging.WARNING)  # não vazar token na URL
+        logging.getLogger(noisy).setLevel(logging.WARNING)  # don't leak the token in the URL
     print(">>> [launcher] bootstrap (wallet/state)", flush=True)
     _bootstrap()
-    print(">>> [launcher] iniciando thread do agente", flush=True)
-    # Agente numa thread isolada (event loop próprio).
+    print(">>> [launcher] starting agent thread", flush=True)
+    # Agent on an isolated thread (its own event loop).
     threading.Thread(target=_run_agent, name="boomerang-agent", daemon=True).start()
-    print(">>> [launcher] subindo site (uvicorn)", flush=True)
-    # Site público na thread principal — responde /healthz imediatamente.
+    print(">>> [launcher] bringing up site (uvicorn)", flush=True)
+    # Public site on the main thread — answers /healthz immediately.
     import uvicorn
     from boomerang.webapp.site import app
     port = int(os.getenv("PORT", "8080"))
