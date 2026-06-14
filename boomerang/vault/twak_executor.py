@@ -45,6 +45,26 @@ class TwakExecutor:
         self._base_stable = config.dev_safety["base_stable_symbol"]
 
     # ── CLI invocation ───────────────────────────────────────────────────────
+    @staticmethod
+    def _redact_args(args: list[str]) -> str:
+        """Log-safe view of the CLI args: drop 0x addresses/hashes (noise) and
+        REDACT the value right after --password. The keystore password must NEVER
+        reach the logs (the old 0x-only filter let it through)."""
+        parts: list[str] = []
+        redact_next = False
+        for a in args:
+            if redact_next:
+                parts.append("***")
+                redact_next = False
+            elif a == "--password":
+                parts.append(a)
+                redact_next = True
+            elif a.startswith("0x"):
+                continue
+            else:
+                parts.append(a)
+        return " ".join(parts)
+
     def _run(self, args: list[str], *, timeout: int = 120) -> dict | list:
         cmd = [self._twak_bin, *args, "--json"]
         if os.name == "nt":  # .cmd needs cmd.exe on Windows
@@ -54,7 +74,7 @@ class TwakExecutor:
         if self._node_dir:
             env["PATH"] = self._node_dir + os.pathsep + env.get("PATH", "")
 
-        self._log.debug("twak %s", " ".join(a for a in args if not a.startswith("0x")))
+        self._log.debug("twak %s", self._redact_args(args))
         proc = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=timeout)
         out = (proc.stdout or "").strip()
         if not out:
