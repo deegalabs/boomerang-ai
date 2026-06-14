@@ -14,6 +14,12 @@ already have funds for. CMC also accepts payment in USDC/United Stables on the B
 Custody: the signer is the wallet passed to `X402Signer` (the SDK requires that
 `message['from']` be that wallet). So the paying wallet must in fact
 hold the USDC. We keep that outside this module (the caller injects the wallet/signer).
+
+POSITIONING: this is the standalone x402 SHOWCASE / proof-of-capability, exercised by
+`scripts/x402_pay.py` (a real end-to-end paid call). It is NOT the runtime data path:
+the brain (cmc_analyzer) fetches market data over the CMC REST API, and the runtime x402
+payment, when used, goes through the `twak x402` CLI (keeping self-custody in the TWAK
+keystore). Kept here as a clean, SDK-signed reference implementation.
 """
 from __future__ import annotations
 

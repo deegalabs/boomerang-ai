@@ -53,25 +53,21 @@ def _run_agent() -> None:
     """Runs the agent with SUPERVISION: if it goes down (exception or unexpected return), it
     waits for a backoff and RESTARTS. Without this, a startup crash left the agent dead until a
     manual re-deploy (with the site green, nobody knowing). Shuts down cleanly only on shutdown."""
-    import sys
     import time
-    import traceback
     attempt = 0
     while True:
         attempt += 1
         os.environ["BOOMERANG_RESTART_COUNT"] = str(attempt - 1)  # 0 on the 1st; >0 = restart
         try:
             from run_agent import main as agent_main
-            print(f">>> [agent-thread] starting (attempt {attempt})", flush=True)
+            log.info("[agent-thread] starting (attempt %d)", attempt)
             asyncio.run(agent_main())
-            print(">>> [agent-thread] main() returned unexpectedly; restarting.", flush=True)
+            log.warning("[agent-thread] main() returned unexpectedly; restarting.")
         except (KeyboardInterrupt, SystemExit):
-            print(">>> [agent-thread] terminating (shutdown).", flush=True)
+            log.info("[agent-thread] terminating (shutdown).")
             return
         except Exception as exc:  # noqa: BLE001
-            print(f">>> [agent-thread] CRASHED: {exc!r}; restarting.", flush=True)
-            traceback.print_exc()
-            sys.stdout.flush()
+            log.exception("[agent-thread] CRASHED: %r; restarting.", exc)
         time.sleep(min(60, 5 * attempt))  # backoff: 5s, 10s, ... up to 60s
 
 
@@ -79,12 +75,12 @@ async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     for noisy in ("httpx", "httpcore", "telegram", "telegram.ext", "urllib3"):
         logging.getLogger(noisy).setLevel(logging.WARNING)  # don't leak the token in the URL
-    print(">>> [launcher] bootstrap (wallet/state)", flush=True)
+    log.info("[launcher] bootstrap (wallet/state)")
     _bootstrap()
-    print(">>> [launcher] starting agent thread", flush=True)
+    log.info("[launcher] starting agent thread")
     # Agent on an isolated thread (its own event loop).
     threading.Thread(target=_run_agent, name="boomerang-agent", daemon=True).start()
-    print(">>> [launcher] bringing up site (uvicorn)", flush=True)
+    log.info("[launcher] bringing up site (uvicorn)")
     # Public site on the main thread — answers /healthz immediately.
     import uvicorn
     from boomerang.webapp.site import app

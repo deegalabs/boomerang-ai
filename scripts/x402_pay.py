@@ -1,14 +1,15 @@
-"""Faz UMA chamada paga real à CoinMarketCap via x402 (assinada pelo BNB AI Agent SDK).
+"""Make ONE real paid call to CoinMarketCap via x402 (signed by the BNB AI Agent SDK).
 
-Prova o pagamento pay-per-call ponta a ponta: desafio 402 -> assina EIP-3009 ->
-reenvia -> dados. A carteira pagadora precisa deter o ativo (padrão: USDC na Base).
+This is the x402 SHOWCASE: proves the pay-per-call end to end (402 challenge -> sign
+EIP-3009 -> resend -> data). The runtime brain uses CMC REST; this script is the
+standalone proof-of-capability. The paying wallet must hold the asset (default: USDC on Base).
 
-Uso:
-  python scripts/x402_pay.py                         # carteira de identidade, BNB quote
+Usage:
+  python scripts/x402_pay.py                         # identity wallet, BNB quote
   python scripts/x402_pay.py --tool get_crypto_latest_news --symbol ETH
-  python scripts/x402_pay.py --network eip155:56     # pagar na BNB Chain (permit2)
+  python scripts/x402_pay.py --network eip155:56     # pay on the BNB Chain (permit2)
 
-Pré-checagem de saldo: avisa (mas tenta mesmo assim) se a carteira tiver 0 do ativo.
+Balance pre-check: warns (but still tries) if the wallet holds 0 of the asset.
 """
 import argparse
 import sys

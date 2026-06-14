@@ -1,4 +1,7 @@
-"""Pagamentos x402 (pay-per-call) do agente, assinados pelo BNB AI Agent SDK."""
+"""x402 (pay-per-call) payments signed by the BNB AI Agent SDK.
+
+Standalone showcase / proof-of-capability (see scripts/x402_pay.py) — NOT the runtime
+data path (the brain uses CMC REST; runtime x402 goes through the twak CLI)."""
 from boomerang.payments.x402_cmc import (
     CMC_X402_URL,
     X402Error,
