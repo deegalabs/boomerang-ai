@@ -36,6 +36,9 @@ def setup_logging(name: str = "boomerang", level: int = logging.INFO) -> logging
     if logger.handlers:  # idempotent
         return logger
     logger.setLevel(level)
+    # Don't bubble up to the root logger (railway_start's basicConfig) — otherwise every
+    # message is emitted TWICE (once by our handler, once by root's default handler).
+    logger.propagate = False
 
     fmt = logging.Formatter(
         "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
