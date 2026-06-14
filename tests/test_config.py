@@ -23,9 +23,11 @@ def test_confidence_cutoff_is_mode_aware(cfg):
 
 
 def test_sizing_defaults(cfg):
-    # Effective base size follows the user override (25%); dev_safety base (5%) is the fallback.
+    # Effective base size follows the user setting (10%, conservative); dev_safety base
+    # (5%) is the fallback; max_position_pct caps any conviction-scaled bet.
     assert cfg.dev_safety["position_size_pct"] == 5.0
-    assert cfg.position_size_pct == 25.0
+    assert cfg.position_size_pct == 10.0
+    assert cfg.user_position_size_pct == 10.0
     assert cfg.max_position_pct == 50.0
     assert cfg.min_position_usd == 1.0
 
