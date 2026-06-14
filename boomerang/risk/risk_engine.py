@@ -205,8 +205,12 @@ class RiskEngine:
         return entry_price * (1.0 + tp / 100.0) if tp > 0 else 0.0
 
     # ── Avaliação contínua de uma posição (loop de 2s) ───────────────────────
-    def evaluate_position(self, pos: Position, current_price: float) -> ExitSignal:
+    def evaluate_position(self, pos: Position, current_price: float, tighten: bool = False) -> ExitSignal:
         """Decide se mantém ou sai, com os parâmetros DA ESTRATÉGIA da posição.
+
+        tighten=True (GANÂNCIA EXTREMA no mercado): aperta o trailing — ativa mais cedo e
+        segue mais perto — p/ TRAVAR o lucro antes da reversão do topo eufórico. É o lado
+        simétrico do F&G: "tenha medo quando todos têm ganância" (protege o ganho no topo).
         Atualiza pico/trailing in-place. Cada campo cai no global do config se = 0
         (compras manuais/legado), então o comportamento antigo é preservado.
 
@@ -226,6 +230,9 @@ class RiskEngine:
         trail_trigger = (pos.trailing_trigger_pct if pos.trailing_trigger_pct > 0
                          else self._cfg.trailing_trigger_pct)
         trail_dist = pos.trailing_pct if pos.trailing_pct > 0 else stop_pct
+        if tighten and trail_trigger > 0:
+            trail_trigger *= 0.5   # ativa o trailing com metade do lucro (trava mais cedo)
+            trail_dist = max(trail_dist * 0.6, 0.5)  # segue mais perto do pico (piso 0,5%)
 
         # 1) Lucro-alvo FIXO: bateu a meta → realiza.
         if tp > 0 and current_price >= pos.entry_price * (1.0 + tp / 100.0):

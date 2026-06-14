@@ -81,6 +81,8 @@ class BoomerangAgent:
         self._last_rep_publish: float = 0.0
         self._last_risk_publish: float = 0.0
         self._last_depeg_alert: float = 0.0
+        self._extreme_greed: bool = False     # F&G >= 78 → aperta exits (trava lucro no topo)
+        self._fng_ema: float | None = None    # média suave do F&G p/ ler a DIREÇÃO (medo aliviando vs esfriando)
         self._last_equity: float = 0.0          # patrimônio mais recente (cache p/ dashboard)
         self._last_holdings: list = []          # composição por moeda (cache p/ painel /live)
         self.agent_address: str | None = None   # endereço da carteira (preenchido no startup)
@@ -615,6 +617,20 @@ class BoomerangAgent:
             await self._maybe_alert_depeg(depeg)
         # SKILL Adaptação por regime: preço (BTC) + SENTIMENTO (medo/ganância) + ALAVANCAGEM.
         regime_label, cut_adjust = market_regime(btc24, fng, funding)
+        # F&G #1 (ganância extrema): aperta os exits das posições abertas (trava lucro no topo).
+        self._extreme_greed = fng is not None and fng >= 78
+        # F&G #2 (DIREÇÃO, não só nível): EMA suave (~2,7h) lê se o sentimento está MELHORANDO
+        # (medo aliviando → repique começando) ou PIORANDO (ganância esfriando → topo virando).
+        # O sinal mais forte é a virada, não o valor estático.
+        if fng is not None:
+            self._fng_ema = float(fng) if self._fng_ema is None else 0.97 * self._fng_ema + 0.03 * fng
+            trend = fng - self._fng_ema
+            if trend >= 4 and fng <= 55:          # medo aliviando / recuperação começando
+                cut_adjust -= 2
+                regime_label += "↑"
+            elif trend <= -4 and fng >= 50:        # ganância esfriando / topo virando
+                cut_adjust += 2
+                regime_label += "↓"
 
         # Pré-score (só p/ ranquear/logar) + SELEÇÃO DE ESTRATÉGIA por token (o gatilho REAL).
         prescores = [(s, momentum_prescore(quotes.get(s))) for s in universe if quotes.get(s)]
@@ -836,7 +852,7 @@ class BoomerangAgent:
             except Exception as exc:  # noqa: BLE001
                 self._log.warning("preço indisponível %s: %s", pos.symbol, exc)
                 continue
-            signal = self._risk.evaluate_position(pos, price)
+            signal = self._risk.evaluate_position(pos, price, tighten=self._extreme_greed)
             if signal != ExitSignal.HOLD:
                 await self._sell(pos, reason=signal.value, exit_price=price)
             else:
