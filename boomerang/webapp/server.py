@@ -1,9 +1,9 @@
-"""Servidor do dashboard (Starlette + uvicorn). Roda em paralelo ao agente.
+"""Dashboard server (Starlette + uvicorn). Runs in parallel with the agent.
 
-Endpoints (todos exigem ?key=TOKEN):
-  GET /dash          → página HTML do painel
-  GET /api/status    → estado atual (lê state/agent_state.json)
-  GET /api/trades    → histórico de trades (lê state/trades.json)
+Endpoints (all require ?key=TOKEN):
+  GET /dash          → dashboard HTML page
+  GET /api/status    → current state (reads state/agent_state.json)
+  GET /api/trades    → trade history (reads state/trades.json)
 """
 from __future__ import annotations
 
@@ -23,14 +23,14 @@ from boomerang.persistence import load_state, load_trades
 _HTML = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")
 _log = logging.getLogger("boomerang.webapp")
 
-# Cache do breakdown on-chain: 1 leitura RPC compartilhada por todos os viewers.
+# Cache of the on-chain breakdown: 1 RPC read shared by all viewers.
 _WALLET_CACHE_TTL = 25.0
 
 
 def make_app(token: str, wallet_provider: Callable[[], dict] | None = None) -> Starlette:
-    """wallet_provider: função SÍNCRONA que devolve o breakdown on-chain da carteira
-    (ex.: validator.wallet_breakdown(addr)). Se None, /api/wallet cai no que houver
-    no state salvo (útil para testes sem RPC)."""
+    """wallet_provider: SYNCHRONOUS function that returns the wallet's on-chain breakdown
+    (e.g.: validator.wallet_breakdown(addr)). If None, /api/wallet falls back to whatever
+    is in the saved state (useful for tests without RPC)."""
     def ok(request) -> bool:  # noqa: ANN001
         return bool(token) and request.query_params.get("key") == token
 
@@ -38,7 +38,7 @@ def make_app(token: str, wallet_provider: Callable[[], dict] | None = None) -> S
 
     async def dash(request):  # noqa: ANN001
         if not ok(request):
-            return PlainTextResponse("403 — token invalido. Use /dashboard no Telegram.", status_code=403)
+            return PlainTextResponse("403 — invalid token. Use /dashboard on Telegram.", status_code=403)
         return HTMLResponse(_HTML)
 
     async def api_status(request):  # noqa: ANN001
@@ -61,11 +61,11 @@ def make_app(token: str, wallet_provider: Callable[[], dict] | None = None) -> S
         if cache["data"] is not None and now - cache["ts"] < _WALLET_CACHE_TTL:
             return JSONResponse(cache["data"])
         try:
-            data = await asyncio.to_thread(wallet_provider)  # web3 é bloqueante → thread
+            data = await asyncio.to_thread(wallet_provider)  # web3 is blocking → thread
             cache["data"], cache["ts"] = data, now
             return JSONResponse(data)
         except Exception as exc:  # noqa: BLE001
-            _log.warning("api/wallet falhou: %s", exc)
+            _log.warning("api/wallet failed: %s", exc)
             stale = cache["data"] or {"holdings": [], "total_usd": None}
             return JSONResponse({**stale, "error": str(exc)})
 

@@ -1,41 +1,41 @@
-"""Playbook MULTI-ESTRATÉGIA roteado pelo REGIME de mercado.
+"""MULTI-STRATEGY playbook routed by the market REGIME.
 
-Três estratégias, cada uma com gatilho de entrada DETERMINÍSTICO e gestão de
-saída própria. O seletor escolhe a estratégia ativa pelo regime (medo/ganância)
-e pelos sinais do token; o cérebro (Opus) CONFIRMA o setup (go/no-go + convicção).
-As travas globais (disjuntor de drawdown, cap diário, depeg, liquidez/oráculo)
-continuam valendo POR CIMA de qualquer estratégia.
+Three strategies, each with a DETERMINISTIC entry trigger and its own exit
+management. The selector picks the active strategy by the regime (fear/greed)
+and by the token's signals; the brain (Opus) CONFIRMS the setup (go/no-go + conviction).
+The global locks (drawdown circuit breaker, daily cap, depeg, liquidity/oracle)
+still apply ON TOP OF any strategy.
 
-  1) MOMENTUM (tendência de alta): pega empuxo jovem com volume subindo; corta a
-     perda curtíssima e deixa o vencedor correr (trailing).
-  2) MEAN-REVERSION (lateral/chop): compra um DIP curto de um token forte no dia,
-     apostando no retorno à média; TP e SL fixos e cirúrgicos.
-  3) DCA (pânico/medo extremo): compra ativo sólido em queda livre visando repique;
-     sem SL fixo (coberto pelo disjuntor global + time-stop de 24h).
+  1) MOMENTUM (uptrend): catches young thrust with rising volume; cuts the
+     loss very short and lets the winner run (trailing).
+  2) MEAN-REVERSION (sideways/chop): buys a short DIP of a token strong on the day,
+     betting on the return to the mean; fixed, surgical TP and SL.
+  3) DCA (panic/extreme fear): buys a solid asset in free fall aiming at a bounce;
+     no fixed SL (covered by the global circuit breaker + 24h time-stop).
 
-NOTA (proxy de volume): a CMC no nosso plano não expõe volume HORÁRIO, então o
-filtro "vol 1h >= 15% do 24h" da estratégia de momentum é aproximado por
-volume_change_24h_pct (surto de interesse no dia). É uma proxy de "interesse
-subindo", não o 1h exato.
+NOTE (volume proxy): CMC on our plan does not expose HOURLY volume, so the
+"vol 1h >= 15% of 24h" filter of the momentum strategy is approximated by
+volume_change_24h_pct (surge of interest on the day). It is a proxy for "rising
+interest", not the exact 1h.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-# ── Limiares dos gatilhos (proxies/ajustáveis) ───────────────────────────────
-VOL_ACCEL_MIN = 20.0    # momentum: volume_change_24h_pct >= 20% = interesse subindo (proxy do 1h)
-VOL_STABLE_MAX = 40.0   # mean-rev: volume não pode estar EXPLODINDO (range, sem tendência)
-PANIC_FNG = 25          # F&G < 25 = medo extremo → regime de pânico (só DCA opera)
+# ── Trigger thresholds (proxies/tunable) ─────────────────────────────────────
+VOL_ACCEL_MIN = 20.0    # momentum: volume_change_24h_pct >= 20% = rising interest (proxy of the 1h)
+VOL_STABLE_MAX = 40.0   # mean-rev: volume must not be EXPLODING (range, no trend)
+PANIC_FNG = 25          # F&G < 25 = extreme fear → panic regime (only DCA trades)
 
 
 @dataclass(frozen=True)
 class StrategySpec:
-    """Definição de uma estratégia: identidade + parâmetros de SAÍDA.
+    """Definition of a strategy: identity + EXIT parameters.
 
-    stop_pct=0 → SEM SL fixo (depende do disjuntor global). take_profit_pct=0 →
-    sem teto fixo (deixa correr via trailing). trailing_trigger_pct=0 → sem trailing.
-    time_stop_min=0 → usa o time-stop global do config. band 999 → time-stop por
-    TEMPO puro (sai no prazo independente do PnL)."""
+    stop_pct=0 → NO fixed SL (depends on the global circuit breaker). take_profit_pct=0 →
+    no fixed cap (lets it run via trailing). trailing_trigger_pct=0 → no trailing.
+    time_stop_min=0 → uses the global time-stop from config. band 999 → time-stop by
+    pure TIME (exits on schedule regardless of PnL)."""
 
     key: str
     label: str
@@ -48,24 +48,24 @@ class StrategySpec:
 
 
 MOMENTUM = StrategySpec(
-    "momentum", "Momentum/Atenção",
+    "momentum", "Momentum/Attention",
     stop_pct=1.0, take_profit_pct=0.0,
     trailing_trigger_pct=2.5, trailing_pct=1.5,
     time_stop_min=20.0, time_stop_band_pct=0.2,
 )
 
 MEAN_REVERSION = StrategySpec(
-    "mean_reversion", "Reversão à Média",
+    "mean_reversion", "Mean Reversion",
     stop_pct=0.8, take_profit_pct=1.2,
     trailing_trigger_pct=0.0, trailing_pct=0.0,
     time_stop_min=0.0, time_stop_band_pct=0.0,
 )
 
 DCA = StrategySpec(
-    "dca", "DCA/Acumulação",
-    stop_pct=0.0, take_profit_pct=3.0,                 # sem SL fixo; TP +3% no repique
+    "dca", "DCA/Accumulation",
+    stop_pct=0.0, take_profit_pct=3.0,                 # no fixed SL; TP +3% on the bounce
     trailing_trigger_pct=0.0, trailing_pct=0.0,
-    time_stop_min=1440.0, time_stop_band_pct=999.0,    # 24h, por TEMPO puro (band 999 = qualquer PnL)
+    time_stop_min=1440.0, time_stop_band_pct=999.0,    # 24h, by pure TIME (band 999 = any PnL)
 )
 
 ALL = (MOMENTUM, MEAN_REVERSION, DCA)
@@ -77,29 +77,29 @@ def by_key(key: str) -> StrategySpec | None:
 
 
 def select_strategy(fng: int | None, metrics: dict) -> StrategySpec | None:
-    """Roteia para a estratégia ativa pelo REGIME (medo/ganância) + sinais do token.
-    Retorna a StrategySpec cujo gatilho determinístico DISPARA, ou None.
+    """Routes to the active strategy by the REGIME (fear/greed) + token signals.
+    Returns the StrategySpec whose deterministic trigger FIRES, or None.
 
-    Os gatilhos são quase mutuamente exclusivos (1h não pode ser >+2,5% e <-2% ao
-    mesmo tempo). Em PÂNICO, SÓ a DCA opera (scalping seria estopado pela volatilidade)."""
+    The triggers are almost mutually exclusive (1h cannot be >+2.5% and <-2% at
+    the same time). In PANIC, ONLY DCA trades (scalping would be stopped out by volatility)."""
     p1 = metrics.get("percent_change_1h")
     p24 = metrics.get("percent_change_24h")
     if p1 is None or p24 is None:
         return None
     vc = metrics.get("volume_change_24h_pct") or 0.0
 
-    # PÂNICO (medo extremo): proíbe scalping; só DCA em queda livre de ativo sólido.
+    # PANIC (extreme fear): forbids scalping; only DCA on a solid asset in free fall.
     if fng is not None and fng < PANIC_FNG:
         if p24 < -10.0:
             return DCA
         return None
 
-    # MOMENTUM: empuxo jovem (1h forte), alinhado em alta (24h>0), com volume subindo.
+    # MOMENTUM: young thrust (strong 1h), aligned upward (24h>0), with rising volume.
     if p1 > 2.5 and p24 > 0.0 and vc >= VOL_ACCEL_MIN:
         return MOMENTUM
 
-    # MEAN-REVERSION: dip curto (1h<-2%) de um token FORTE no dia (24h>+4%), range
-    # (volume estável, não explodindo = sem tendência).
+    # MEAN-REVERSION: short dip (1h<-2%) of a token STRONG on the day (24h>+4%), range
+    # (stable volume, not exploding = no trend).
     if p1 < -2.0 and p24 > 4.0 and vc <= VOL_STABLE_MAX:
         return MEAN_REVERSION
 
@@ -107,7 +107,7 @@ def select_strategy(fng: int | None, metrics: dict) -> StrategySpec | None:
 
 
 def setup_strength(spec: StrategySpec, metrics: dict) -> float:
-    """Força do setup p/ RANQUEAR candidatos do ciclo (qual avaliar primeiro no Opus)."""
+    """Setup strength to RANK the cycle's candidates (which to evaluate first in Opus)."""
     p1 = metrics.get("percent_change_1h") or 0.0
     p24 = metrics.get("percent_change_24h") or 0.0
     vc = metrics.get("volume_change_24h_pct") or 0.0
@@ -115,4 +115,4 @@ def setup_strength(spec: StrategySpec, metrics: dict) -> float:
         return 50.0 + min(p1, 10.0) * 2.0 + min(max(vc, 0.0), 100.0) * 0.3
     if spec.key == "mean_reversion":
         return 40.0 + min(p24, 20.0) + min(-p1, 10.0)
-    return 30.0 + min(-p24, 40.0)  # dca: quanto mais fundo a queda, maior o repique potencial
+    return 30.0 + min(-p24, 40.0)  # dca: the deeper the drop, the greater the potential bounce

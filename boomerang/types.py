@@ -1,4 +1,4 @@
-"""Tipos compartilhados entre os processos e filtros do Boomerang AI."""
+"""Shared types across the Boomerang AI processes and filters."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -27,19 +27,19 @@ class AgentState(str, Enum):
     SCANNING = "SCANNING"
     IN_POSITION = "IN_POSITION"
     PAUSED = "PAUSED"
-    HALTED = "HALTED"  # circuit breaker disparado — só leitura
+    HALTED = "HALTED"  # circuit breaker tripped — read-only
 
 
 @dataclass
 class Verdict:
-    """Saída do Filtro 1 (cérebro CMC/LLM)."""
+    """Output of Filter 1 (CMC/LLM brain)."""
 
     symbol: str
     confidence_score: int
     action: Action
     rationale: str
-    volatility: str = ""  # tier classificada pelo cérebro: BAIXA | MEDIA | ALTA (p/ SL/TP dinâmico)
-    regime: str = ""      # regime lido pelo cérebro: uptrend | choppy | downtrend (p/ win-rate por regime)
+    volatility: str = ""  # tier classified by the brain: BAIXA | MEDIA | ALTA (for dynamic SL/TP)
+    regime: str = ""      # regime read by the brain: uptrend | choppy | downtrend (for win-rate by regime)
 
     @property
     def is_buy(self) -> bool:
@@ -48,22 +48,22 @@ class Verdict:
 
 @dataclass
 class ValidationResult:
-    """Saída do Filtro 2 (validação on-chain)."""
+    """Output of Filter 2 (on-chain validation)."""
 
     ok: bool
     symbol: str
     token_address: str | None = None
     estimated_slippage_pct: float | None = None
     oracle_divergence_pct: float | None = None
-    expected_out: int | None = None        # em unidades base do token (wei)
-    min_out: int | None = None             # amountOutMin com slippage aplicado
+    expected_out: int | None = None        # in the token's base units (wei)
+    min_out: int | None = None             # amountOutMin with slippage applied
     reason: RejectReason | None = None
     detail: str = ""
 
 
 @dataclass
 class TradeIntent:
-    """Intenção de compra que atravessa a alfândega até o Filtro 3."""
+    """Buy intent that crosses customs through to Filter 3."""
 
     symbol: str
     token_address: str
@@ -75,7 +75,7 @@ class TradeIntent:
 
 @dataclass
 class ExecutionResult:
-    """Saída do Filtro 3 (execução TWAK)."""
+    """Output of Filter 3 (TWAK execution)."""
 
     ok: bool
     symbol: str
@@ -87,7 +87,7 @@ class ExecutionResult:
 
 @dataclass
 class Position:
-    """Posição aberta monitorada pelo motor de risco/execução."""
+    """Open position monitored by the risk/execution engine."""
 
     symbol: str
     token_address: str
@@ -95,18 +95,18 @@ class Position:
     amount_usd: float
     qty: float
     stop_loss_price: float
-    stop_loss_pct: float = 0.0      # SL dinâmico desta posição (0 = usa o fixo do config)
-    take_profit_pct: float = 0.0    # TP dinâmico desta posição (0 = usa o fixo do config)
+    stop_loss_pct: float = 0.0      # dynamic SL for this position (0 = uses the fixed one from config)
+    take_profit_pct: float = 0.0    # dynamic TP for this position (0 = uses the fixed one from config)
     trailing_active: bool = False
     peak_price: float = 0.0
     opened_at: float = 0.0
     tx_hash: str | None = None
-    regime: str = ""                # regime na ENTRADA (uptrend/choppy/downtrend) p/ win-rate por regime
-    strategy: str = ""              # estratégia que abriu: momentum | mean_reversion | dca
-    trailing_trigger_pct: float = 0.0  # lucro p/ ativar trailing (0 = usa o global do config)
-    trailing_pct: float = 0.0       # distância do trailing (0 = usa stop_loss_pct)
-    time_stop_min: float = 0.0      # minutos p/ time-stop (0 = usa o global do config)
-    time_stop_band_pct: float = 0.0  # faixa morta do time-stop (0 = usa o global; 999 = por tempo puro)
+    regime: str = ""                # regime at ENTRY (uptrend/choppy/downtrend) for win-rate by regime
+    strategy: str = ""              # strategy that opened it: momentum | mean_reversion | dca
+    trailing_trigger_pct: float = 0.0  # profit to activate trailing (0 = uses the global one from config)
+    trailing_pct: float = 0.0       # trailing distance (0 = uses stop_loss_pct)
+    time_stop_min: float = 0.0      # minutes for time-stop (0 = uses the global one from config)
+    time_stop_band_pct: float = 0.0  # dead band of the time-stop (0 = uses the global; 999 = pure time)
 
     def __post_init__(self) -> None:
         if self.peak_price == 0.0:

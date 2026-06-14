@@ -1,10 +1,10 @@
-"""Filtro 3 — Execução e custódia via Trust Wallet Agent Kit (twak CLI).
+"""Filter 3 — Execution and custody via Trust Wallet Agent Kit (twak CLI).
 
-Adapter fino sobre o CLI `twak` (v0.17.x). A chave privada fica LOCAL (keystore
-do twak, em ~/.twak), e a assinatura acontece localmente em cada swap → cumpre o
-critério de autocustódia da rubrica do prêmio TWAK.
+Thin adapter over the `twak` CLI (v0.17.x). The private key stays LOCAL (twak
+keystore, in ~/.twak), and the signature happens locally on each swap → it meets the
+self-custody criterion of the TWAK prize rubric.
 
-Comandos reais usados (confirmados via `twak <cmd> --help`):
+Real commands used (confirmed via `twak <cmd> --help`):
   twak wallet create   --password <pw> [--no-keychain] --json
   twak wallet address  --chain bsc --json
   twak wallet portfolio --chains bsc --password <pw> --json
@@ -13,9 +13,9 @@ Comandos reais usados (confirmados via `twak <cmd> --help`):
   twak compete register --password <pw> --json
   twak compete status   --password <pw> --json
 
-A SINTAXE dos comandos é exata. O PARSE dos campos de saída de sucesso (tx hash,
-preço) é tolerante e deve ser confirmado no teste de integração com credenciais —
-está centralizado em _extract_tx_hash / _extract_price para fácil ajuste.
+The command SYNTAX is exact. The PARSING of the success output fields (tx hash,
+price) is tolerant and must be confirmed in the integration test with credentials —
+it is centralized in _extract_tx_hash / _extract_price for easy adjustment.
 """
 from __future__ import annotations
 
@@ -38,16 +38,16 @@ class TwakExecutor:
     def __init__(self, config: Config, logger: logging.Logger | None = None) -> None:
         self._cfg = config
         self._log = logger or logging.getLogger("boomerang.vault.twak")
-        # Permite sobrescrever o binário e o dir do node (útil no Windows / VPS).
+        # Allows overriding the binary and the node dir (useful on Windows / VPS).
         self._twak_bin = os.getenv("TWAK_BIN", "twak")
-        self._node_dir = os.getenv("NODE_DIR")  # ex.: C:\Program Files\nodejs
+        self._node_dir = os.getenv("NODE_DIR")  # e.g.: C:\Program Files\nodejs
         self._chain = "bsc"
         self._base_stable = config.dev_safety["base_stable_symbol"]
 
-    # ── invocação do CLI ─────────────────────────────────────────────────────
+    # ── CLI invocation ───────────────────────────────────────────────────────
     def _run(self, args: list[str], *, timeout: int = 120) -> dict | list:
         cmd = [self._twak_bin, *args, "--json"]
-        if os.name == "nt":  # .cmd precisa do cmd.exe no Windows
+        if os.name == "nt":  # .cmd needs cmd.exe on Windows
             cmd = ["cmd", "/c", *cmd]
 
         env = os.environ.copy()
@@ -58,23 +58,23 @@ class TwakExecutor:
         proc = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=timeout)
         out = (proc.stdout or "").strip()
         if not out:
-            raise TwakError(proc.stderr.strip() or f"twak retornou vazio (exit {proc.returncode}).")
+            raise TwakError(proc.stderr.strip() or f"twak returned empty (exit {proc.returncode}).")
         try:
             data = json.loads(out)
         except json.JSONDecodeError:
-            # alguns comandos podem emitir banner antes do JSON — pega o último bloco {...}/[...]
+            # some commands may emit a banner before the JSON — grab the last {...}/[...] block
             data = json.loads(out[out.index("{") :]) if "{" in out else {"error": out}
         if isinstance(data, dict) and data.get("error"):
-            # Log do payload de erro COMPLETO (todos os campos: reason/route/amountOut/
-            # minOut/decoded) — o str(error) sozinho costuma vir truncado ("0x...").
+            # Log the FULL error payload (all fields: reason/route/amountOut/
+            # minOut/decoded) — str(error) alone usually comes truncated ("0x...").
             try:
-                self._log.warning("twak erro bruto: %s", json.dumps(data)[:800])
+                self._log.warning("twak raw error: %s", json.dumps(data)[:800])
             except Exception:  # noqa: BLE001
                 pass
             raise TwakError(str(data["error"]), data.get("errorCode"))
         return data
 
-    # ── carteira / autocustódia ──────────────────────────────────────────────
+    # ── wallet / self-custody ────────────────────────────────────────────────
     def create_wallet(self, password: str, *, keychain: bool = True) -> dict:
         args = ["wallet", "create", "--password", password]
         if not keychain:
@@ -84,18 +84,18 @@ class TwakExecutor:
     def get_address(self, chain: str | None = None) -> str:
         data = self._run(["wallet", "address", "--chain", chain or self._chain,
                           "--password", self._password_or_env()])
-        # campo provável: "address"; tolerante a variações
+        # likely field: "address"; tolerant of variations
         if isinstance(data, dict):
             return str(data.get("address") or data.get("value") or data)
         return str(data)
 
     def portfolio_usd(self, password: str, chains: str | None = None) -> float:
-        """Patrimônio total em USD (equity) — base do circuit breaker de drawdown."""
+        """Total net worth in USD (equity) — basis of the drawdown circuit breaker."""
         data = self._run(["wallet", "portfolio", "--chains", chains or self._chain,
                           "--password", password])
         return self._extract_total_usd(data)
 
-    # ── execução de swaps ────────────────────────────────────────────────────
+    # ── swap execution ───────────────────────────────────────────────────────
     def quote_swap(self, from_token: str, to_token: str, amount_usd: float,
                    slippage_pct: float | None = None) -> dict:
         slip = slippage_pct if slippage_pct is not None else self._cfg.max_slippage_pct
@@ -105,11 +105,11 @@ class TwakExecutor:
 
     def quote(self, from_token: str, to_token: str, amount_usd: float,
               slippage_pct: float | None = None) -> dict:
-        """Cotação estruturada via agregador do TWAK (varre V2+V3+outros DEX).
+        """Structured quote via the TWAK aggregator (scans V2+V3+other DEXs).
 
-        Retorna {out: float, price_impact: float|None, raw: dict}. NÃO gasta nada
-        (usa --quote-only). É a fonte de verdade do Filtro 2: reflete exatamente a
-        rota que a execução vai usar. `from`/`to` podem ser símbolo OU endereço 0x.
+        Returns {out: float, price_impact: float|None, raw: dict}. Spends NOTHING
+        (uses --quote-only). It is the source of truth for Filter 2: it reflects exactly the
+        route execution will use. `from`/`to` can be a symbol OR a 0x address.
         """
         data = self.quote_swap(from_token, to_token, amount_usd, slippage_pct)
         out = self._extract_qty(data) or 0.0
@@ -123,7 +123,7 @@ class TwakExecutor:
 
     def buy(self, *, to_token: str, amount_usd: float, password: str,
             slippage_pct: float | None = None) -> ExecutionResult:
-        """Compra `to_token` gastando `amount_usd` da stable base (ex.: USDT)."""
+        """Buys `to_token` spending `amount_usd` of the base stable (e.g.: USDT)."""
         slip = slippage_pct if slippage_pct is not None else self._cfg.max_slippage_pct
         try:
             data = self._run(["swap", self._base_stable, to_token, "--usd", str(amount_usd),
@@ -138,7 +138,7 @@ class TwakExecutor:
 
     def sell_all(self, *, token: str, amount: float, password: str,
                  slippage_pct: float | None = None) -> ExecutionResult:
-        """Vende `amount` de `token` de volta para a stable base (saída/stop)."""
+        """Sells `amount` of `token` back to the base stable (exit/stop)."""
         slip = slippage_pct if slippage_pct is not None else self._cfg.max_slippage_pct
         try:
             data = self._run(["swap", str(amount), token, self._base_stable,
@@ -148,28 +148,28 @@ class TwakExecutor:
             return ExecutionResult(False, token, error=str(exc))
         return ExecutionResult(True, token, tx_hash=self._extract_tx_hash(data))
 
-    # ── boomerang / saque com trava de destino ───────────────────────────────
+    # ── boomerang / withdrawal with destination lock ─────────────────────────
     def transfer_to_owner(self, *, to: str, amount: float, token: str, password: str,
                           max_usd: float | None = None) -> dict:
-        """Transfere para a carteira pessoal do dono, com --confirm-to (anti-drenagem)."""
+        """Transfers to the owner's personal wallet, with --confirm-to (anti-drain)."""
         args = ["transfer", "--to", to, "--amount", str(amount), "--token", token,
                 "--confirm-to", to, "--password", password]
         if max_usd is not None:
             args += ["--max-usd", str(max_usd)]
         return self._run(args)  # type: ignore[return-value]
 
-    # ── x402: pagar endpoints (dados da CMC) com a carteira do agente ─────────
+    # ── x402: pay endpoints (CMC data) with the agent's wallet ────────────────
     def x402_request(self, url: str, *, method: str = "POST", body: dict | None = None,
                      max_payment_atomic: str = "10000", prefer_network: str = "base",
                      prefer_asset: str | None = None, timeout: int = 60) -> dict | list:
-        """Faz uma requisição a um endpoint x402, assinando o pagamento se exigido.
+        """Makes a request to an x402 endpoint, signing the payment if required.
 
-        max_payment_atomic: teto de auto-aprovação em unidades atômicas
-        (10000 = 0.01 USDC com 6 casas). Usa a carteira do agente na Base.
+        max_payment_atomic: auto-approval cap in atomic units
+        (10000 = 0.01 USDC with 6 places). Uses the agent's wallet on Base.
 
-        Obs.: NÃO filtramos por --prefer-asset por padrão. O nome ofertado pela
-        CMC é "USD Coin" (não casa com a substring "USDC"); deixar o twak escolher
-        o ativo ofertado na rede preferida, limitado por --max-payment, é o robusto.
+        Note: we do NOT filter by --prefer-asset by default. The name offered by
+        CMC is "USD Coin" (does not match the substring "USDC"); letting twak choose
+        the asset offered on the preferred network, capped by --max-payment, is the robust approach.
         """
         args = ["x402", "request", url, "--method", method,
                 "--max-payment", max_payment_atomic,
@@ -184,14 +184,14 @@ class TwakExecutor:
     def _password_or_env(self) -> str:
         return os.getenv("WALLET_PASSWORD", "")
 
-    # ── registro na competição (rodar UMA vez antes de 22/jun) ────────────────
+    # ── competition registration (run ONCE before Jun 22) ─────────────────────
     def register_competition(self, password: str) -> dict:
         return self._run(["compete", "register", "--password", password])  # type: ignore[return-value]
 
     def competition_status(self, password: str) -> dict:
         return self._run(["compete", "status", "--password", password])  # type: ignore[return-value]
 
-    # ── parsers tolerantes (CONFIRMAR campos no teste com credenciais) ────────
+    # ── tolerant parsers (CONFIRM fields in the test with credentials) ────────
     @staticmethod
     def _extract_tx_hash(data: dict | list) -> str | None:
         if isinstance(data, dict):
@@ -213,7 +213,7 @@ class TwakExecutor:
 
     @staticmethod
     def _extract_qty(data: dict | list) -> float | None:
-        # Formato real do twak swap: "output": "0.996 USDC" (número + símbolo).
+        # Real twak swap format: "output": "0.996 USDC" (number + symbol).
         if isinstance(data, dict):
             for k in ("output", "amountOut", "toAmount", "received", "outputAmount"):
                 v = data.get(k)
@@ -226,7 +226,7 @@ class TwakExecutor:
 
     @staticmethod
     def _extract_total_usd(data: dict | list) -> float:
-        """Soma o valor USD do portfólio. Tolerante a formatos comuns."""
+        """Sums the portfolio's USD value. Tolerant of common formats."""
         if isinstance(data, dict):
             for k in ("totalUsd", "totalUSD", "total_value_usd", "totalValueUsd"):
                 if data.get(k) is not None:

@@ -1,14 +1,14 @@
-"""Persistência de estado do agente — sobrevive a reinício na semana ao vivo.
+"""Agent state persistence — survives a restart during the live week.
 
-Salva posições, pico de patrimônio, último trade, contagem diária e config do
-usuário em state/agent_state.json. Sem isso, um restart perderia o rastreio de
-drawdown e o mínimo de trades — risco de desclassificação.
+Saves positions, peak equity, last trade, daily count and the user's config in
+state/agent_state.json. Without this, a restart would lose the drawdown tracking
+and the minimum number of trades — risk of disqualification.
 
-O diretório de estado é configurável via a variável de ambiente
-``BOOMERANG_STATE_DIR`` (default: "state" na raiz do projeto). Os scripts de
-teste apontam essa variável para um diretório temporário para NÃO sobrescrever o
-estado real de produção. Os paths são resolvidos a cada chamada, então basta a
-variável estar setada antes de chamar as funções (a ordem de import não importa).
+The state directory is configurable via the ``BOOMERANG_STATE_DIR`` environment
+variable (default: "state" at the project root). The test scripts point this
+variable at a temporary directory so as NOT to overwrite the real production
+state. The paths are resolved on every call, so it is enough for the variable to
+be set before calling the functions (import order does not matter).
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def save_state(data: dict) -> None:
     state_file.parent.mkdir(parents=True, exist_ok=True)
     tmp = state_file.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    tmp.replace(state_file)  # escrita atômica
+    tmp.replace(state_file)  # atomic write
 
 
 def load_state() -> dict | None:
@@ -50,7 +50,7 @@ def load_state() -> dict | None:
 
 
 def append_trade(record: dict) -> None:
-    """Acrescenta um evento de trade ao histórico (para o dashboard)."""
+    """Appends a trade event to the history (for the dashboard)."""
     trades = load_trades()
     trades.append(record)
     trades_file = _trades_file()

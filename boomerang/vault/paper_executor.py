@@ -1,13 +1,13 @@
-"""PaperExecutor — execução SIMULADA (modo paper), risco e custo de trade zero.
+"""PaperExecutor — SIMULATED execution (paper mode), zero risk and zero trade cost.
 
-Duck-type do TwakExecutor: o agente usa exatamente a mesma interface. A diferença:
-  - buy/sell/transfer são SIMULADOS num livro-caixa interno (sem tx on-chain).
-  - portfolio_usd vem do livro-caixa + preços REAIS on-chain (via BNBValidator).
-  - x402_request é DELEGADO ao executor real (pagar dados da CMC é barato e
-    necessário para sinais reais). Assim: dados/decisão REAIS, execução SIMULADA.
+Duck-type of TwakExecutor: the agent uses exactly the same interface. The difference:
+  - buy/sell/transfer are SIMULATED in an internal cash ledger (no on-chain tx).
+  - portfolio_usd comes from the cash ledger + REAL on-chain prices (via BNBValidator).
+  - x402_request is DELEGATED to the real executor (paying for CMC data is cheap and
+    necessary for real signals). So: REAL data/decision, SIMULATED execution.
 
-Ideal para validar toda a lógica antes de arriscar a banca de trade. Só precisa
-de um pouco de USDC na Base (dados), nada de USDT/BNB de trade.
+Ideal for validating all the logic before risking the trading bankroll. It only needs
+a bit of USDC on Base (data), no trading USDT/BNB.
 """
 from __future__ import annotations
 
@@ -22,9 +22,9 @@ class PaperExecutor:
                  real_executor=None, logger: logging.Logger | None = None) -> None:  # noqa: ANN001
         self._cfg = config
         self._log = logger or logging.getLogger("boomerang.vault.paper")
-        self._validator = validator            # para preços reais on-chain
-        self._real = real_executor             # para x402 (dados CMC) reais
-        self._cash = float(starting_cash_usd)  # stable simulada (USDT)
+        self._validator = validator            # for real on-chain prices
+        self._real = real_executor             # for real x402 (CMC data)
+        self._cash = float(starting_cash_usd)  # simulated stable (USDT)
         self._holdings: dict[str, float] = {}  # token_address -> qty
         self._tx = 0
 
@@ -35,7 +35,7 @@ class PaperExecutor:
     def _price(self, token: str) -> float:
         return self._validator.onchain_price_usd(token)
 
-    # ── interface compatível com TwakExecutor ────────────────────────────────
+    # ── interface compatible with TwakExecutor ───────────────────────────────
     def portfolio_usd(self, password: str | None = None) -> float:
         total = self._cash
         for token, qty in self._holdings.items():
@@ -49,7 +49,7 @@ class PaperExecutor:
     def buy(self, *, to_token: str, amount_usd: float, password: str | None = None,
             slippage_pct: float | None = None) -> ExecutionResult:
         if amount_usd > self._cash:
-            return ExecutionResult(False, to_token, error="Paper: stable insuficiente.")
+            return ExecutionResult(False, to_token, error="Paper: insufficient stable.")
         price = self._price(to_token)
         qty = amount_usd / price
         self._cash -= amount_usd
@@ -75,13 +75,13 @@ class PaperExecutor:
         return {"txHash": self._next_tx("WD"), "to": to, "amount": sent, "paper": True}
 
     def register_competition(self, password: str | None = None) -> dict:
-        return {"paper": True, "note": "registro simulado (modo paper)"}
+        return {"paper": True, "note": "simulated registration (paper mode)"}
 
     def competition_status(self, password: str | None = None) -> dict:
         return {"paper": True, "registered": False}
 
-    # x402 (dados CMC): delega ao executor real se houver; senão, indisponível.
+    # x402 (CMC data): delegates to the real executor if there is one; otherwise, unavailable.
     def x402_request(self, url: str, **kwargs):  # noqa: ANN003, ANN201
         if self._real is None:
-            raise RuntimeError("PaperExecutor sem executor real para x402 (dados CMC).")
+            raise RuntimeError("PaperExecutor without a real executor for x402 (CMC data).")
         return self._real.x402_request(url, **kwargs)

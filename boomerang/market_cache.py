@@ -1,8 +1,8 @@
-"""Cache em-processo das cotações REAIS que o agente (Track 1) já busca na CMC.
+"""In-process cache of the REAL quotes the agent (Track 1) already fetches from CMC.
 
-A thread do agente escreve aqui a cada ciclo; a thread do site (demo) lê — mesmo
-processo, mesmo objeto de módulo. Assim a demo opera sobre o MERCADO REAL (preços e
-variações de verdade) SEM nenhuma chamada extra à CoinMarketCap (custo zero).
+The agent thread writes here every cycle; the site (demo) thread reads — same
+process, same module object. This way the demo operates on the REAL MARKET (real
+prices and changes) WITHOUT any extra call to CoinMarketCap (zero cost).
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ _data: dict = {"quotes": {}, "btc_24h": None, "fng": None, "ts": 0.0}
 
 
 def put(quotes: dict, btc_24h, fng=None) -> None:  # noqa: ANN001
-    """O agente publica as cotações reais (quotes = {symbol: metrics}) + BTC 24h + sentimento."""
+    """The agent publishes the real quotes (quotes = {symbol: metrics}) + BTC 24h + sentiment."""
     if quotes:
         _data["quotes"] = quotes
         _data["btc_24h"] = btc_24h
@@ -21,7 +21,7 @@ def put(quotes: dict, btc_24h, fng=None) -> None:  # noqa: ANN001
 
 
 def get() -> dict:
-    """Snapshot do mercado real mais recente (vazio até o 1º ciclo do agente)."""
+    """Snapshot of the most recent real market (empty until the agent's 1st cycle)."""
     return _data
 
 

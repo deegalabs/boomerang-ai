@@ -1,19 +1,19 @@
-"""Motor de risco do Boomerang AI.
+"""Boomerang AI risk engine.
 
-REGRA DE OURO: nada aqui depende da IA. São travas matemáticas determinísticas
-que protegem o capital e impedem a desclassificação no hackathon.
+GOLDEN RULE: nothing here depends on the AI. These are deterministic mathematical
+locks that protect capital and prevent disqualification in the hackathon.
 
-Responsabilidades:
-  - Circuit breaker de drawdown global (sobre o pico de patrimônio).
-  - Dimensionamento de posição (position sizing).
-  - Mutex anti-loop (uma operação por vez).
-  - Cooldown entre trades.
-  - Stop-loss por trade + trailing stop.
-  - Heartbeat (garante o mínimo de trades/dia do regulamento).
+Responsibilities:
+  - Global drawdown circuit breaker (over peak equity).
+  - Position sizing.
+  - Anti-loop mutex (one operation at a time).
+  - Cooldown between trades.
+  - Per-trade stop-loss + trailing stop.
+  - Heartbeat (ensures the minimum trades/day from the rules).
 
-Matemática anti-DQ: com posição de 5% e stop de 5%, cada perda custa ~0,25%
-da banca. Para chegar ao gatilho de segurança (~23%) seriam dezenas de perdas
-seguidas — praticamente impossível. O circuit breaker é a última linha.
+Anti-DQ math: with a 5% position and a 5% stop, each loss costs ~0.25%
+of the bankroll. To reach the safety trigger (~23%) would take dozens of losses
+in a row — practically impossible. The circuit breaker is the last line.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ class ExitSignal(str, Enum):
     SELL_STOP_LOSS = "SELL_STOP_LOSS"
     SELL_TRAILING = "SELL_TRAILING"
     SELL_TAKE_PROFIT = "SELL_TAKE_PROFIT"
-    SELL_TIME_STALE = "SELL_TIME_STALE"  # capital parado: sem progresso há tempo demais
+    SELL_TIME_STALE = "SELL_TIME_STALE"  # idle capital: no progress for too long
 
 
 @dataclass
@@ -42,23 +42,23 @@ class RiskDecision:
 
 
 class RiskEngine:
-    """Estado de risco do agente. Thread-safe para o loop de monitoramento."""
+    """Agent risk state. Thread-safe for the monitoring loop."""
 
     def __init__(self, config: Config, initial_equity_usd: float) -> None:
         self._cfg = config
         self._peak_equity = max(initial_equity_usd, 0.0)
         self._last_trade_ts: float = 0.0
-        self._trade_lock = threading.Lock()  # mutex de execução (anti-loop)
+        self._trade_lock = threading.Lock()  # execution mutex (anti-loop)
         self._halted = False
-        self._day_anchor_equity = max(initial_equity_usd, 0.0)  # patrimônio no início do dia (UTC)
-        self._day_anchor_idx: int | None = None                 # bucket de dia atual
+        self._day_anchor_equity = max(initial_equity_usd, 0.0)  # equity at the start of the day (UTC)
+        self._day_anchor_idx: int | None = None                 # current day bucket
 
-    # ── Patrimônio / drawdown ────────────────────────────────────────────────
+    # ── Equity / drawdown ────────────────────────────────────────────────────
     def update_equity(self, current_equity_usd: float, now_ts: float = 0.0) -> None:
-        """Atualiza o pico histórico (peak equity) e a âncora diária (daily loss cap).
+        """Updates the all-time peak equity and the daily anchor (daily loss cap).
 
-        A âncora diária reseta quando vira o dia (UTC): a partir daí, o cap de
-        perda diária mede a queda em relação a este patrimônio de abertura.
+        The daily anchor resets when the day rolls over (UTC): from then on, the daily
+        loss cap measures the drop relative to this opening equity.
         """
         if current_equity_usd > self._peak_equity:
             self._peak_equity = current_equity_usd
@@ -74,25 +74,25 @@ class RiskEngine:
         return max(dd, 0.0)
 
     def circuit_breaker_tripped(self, current_equity_usd: float) -> bool:
-        """True se o drawdown atingiu o gatilho de segurança (antes do DQ).
+        """True if the drawdown reached the safety trigger (before the DQ).
 
-        Usa epsilon: num disjuntor de segurança, é melhor disparar um instante
-        ANTES do limite do que depois (erro de ponto flutuante na borda exata).
+        Uses an epsilon: in a safety circuit breaker, it is better to trip an instant
+        BEFORE the limit than after (floating-point error at the exact edge).
         """
         return self.current_drawdown_pct(current_equity_usd) >= self._cfg.drawdown_safety_pct - 1e-9
 
     def daily_drawdown_pct(self, current_equity_usd: float) -> float:
-        """Queda (%) em relação ao patrimônio de abertura do dia (UTC)."""
+        """Drop (%) relative to the day's opening equity (UTC)."""
         if self._day_anchor_equity <= 0:
             return 0.0
         dd = (self._day_anchor_equity - current_equity_usd) / self._day_anchor_equity * 100.0
         return max(dd, 0.0)
 
     def daily_loss_tripped(self, current_equity_usd: float) -> bool:
-        """True se a perda DO DIA atingiu o limite (cap intradiário). 0 = desativado.
+        """True if the loss FOR THE DAY reached the limit (intraday cap). 0 = disabled.
 
-        Complementa o disjuntor de pico histórico: pega um único dia ruim que ainda
-        não chegou ao gatilho global de 23% sobre o pico de todos os tempos.
+        Complements the all-time-peak circuit breaker: catches a single bad day that has
+        not yet reached the global 23% trigger over the all-time peak.
         """
         cap = self._cfg.daily_loss_cap_pct
         if cap <= 0:
@@ -108,7 +108,7 @@ class RiskEngine:
         return self._last_trade_ts
 
     def restore_state(self, peak_equity: float, last_trade_ts: float) -> None:
-        """Restaura pico/último trade após reinício (persistência)."""
+        """Restores peak/last trade after a restart (persistence)."""
         if peak_equity and peak_equity > 0:
             self._peak_equity = peak_equity
         if last_trade_ts:
@@ -119,28 +119,28 @@ class RiskEngine:
         return self._halted
 
     def halt(self) -> None:
-        """Marca o agente como travado (após liquidação flash)."""
+        """Marks the agent as halted (after a flash liquidation)."""
         self._halted = True
 
     def clear_halt(self) -> None:
-        """Destrava (reinício consciente do dono via /reiniciar). Limpa o circuit breaker."""
+        """Unhalts (deliberate owner restart via /reiniciar). Clears the circuit breaker."""
         self._halted = False
 
-    # ── Dimensionamento de posição ───────────────────────────────────────────
+    # ── Position sizing ──────────────────────────────────────────────────────
     def position_size_usd(self, current_equity_usd: float, available_stable_usd: float,
                           override_pct: float | None = None) -> float:
-        """Tamanho do trade, amigável a banca pequena.
+        """Trade size, friendly to a small bankroll.
 
-        Automático: = % da banca (position_size_pct), com PISO operacional
-        (min_position_usd) para não fazer trade "poeira" que o gás come, e TETO
-        (max_position_pct) para não concentrar demais. Limitado pelo stable disponível.
+        Automatic: = % of the bankroll (position_size_pct), with an operational FLOOR
+        (min_position_usd) so as not to make a "dust" trade eaten by gas, and a CAP
+        (max_position_pct) so as not to concentrate too much. Limited by the available stable.
 
-        Manual (override_pct): o dono escolhe o tamanho explicitamente (até 100% =
-        all-in), via confirmação no Telegram. Aqui o TETO automático NÃO se aplica
-        (é decisão consciente); o piso e o stable disponível continuam valendo, e o
-        disjuntor de drawdown segue ativo em can_open_position().
+        Manual (override_pct): the owner explicitly chooses the size (up to 100% =
+        all-in), via confirmation on Telegram. Here the automatic CAP does NOT apply
+        (it is a deliberate decision); the floor and the available stable still hold, and the
+        drawdown circuit breaker remains active in can_open_position().
 
-        Retorna 0.0 se nem o piso couber.
+        Returns 0.0 if not even the floor fits.
         """
         floor = self._cfg.min_position_usd
         if override_pct is not None:
@@ -149,15 +149,15 @@ class RiskEngine:
         else:
             target = max(current_equity_usd * (self._cfg.position_size_pct / 100.0), floor)
             target = min(target, current_equity_usd * (self._cfg.max_position_pct / 100.0))
-        # BUFFER: nunca gastar 100% do stable. Trocar o saldo exato reverte com
-        # "BEP20: transfer amount exceeds balance" por arredondamento/wobble de preço
-        # entre a leitura e o swap. Deixa 3% de folga.
+        # BUFFER: never spend 100% of the stable. Swapping the exact balance reverts with
+        # "BEP20: transfer amount exceeds balance" due to rounding/price wobble
+        # between the read and the swap. Leaves 3% of slack.
         size = min(target, available_stable_usd * 0.97)
         if size < floor:
             return 0.0
         return round(size, 6)
 
-    # ── Permissão para abrir posição ─────────────────────────────────────────
+    # ── Permission to open a position ────────────────────────────────────────
     def can_open_position(
         self,
         *,
@@ -167,63 +167,63 @@ class RiskEngine:
         now_ts: float,
     ) -> RiskDecision:
         if self._halted:
-            return RiskDecision(False, RejectReason.RISK_BLOCKED, "Agente travado (circuit breaker).")
+            return RiskDecision(False, RejectReason.RISK_BLOCKED, "Agent halted (circuit breaker).")
 
         if current_equity_usd <= self._cfg.min_portfolio_usd:
-            return RiskDecision(False, RejectReason.RISK_BLOCKED, "Patrimônio abaixo do mínimo.")
+            return RiskDecision(False, RejectReason.RISK_BLOCKED, "Equity below the minimum.")
 
         if self.circuit_breaker_tripped(current_equity_usd):
-            return RiskDecision(False, RejectReason.RISK_BLOCKED, "Drawdown no gatilho de segurança.")
+            return RiskDecision(False, RejectReason.RISK_BLOCKED, "Drawdown at the safety trigger.")
 
         if open_positions >= self._cfg.max_concurrent_positions:
-            return RiskDecision(False, RejectReason.MAX_POSITIONS, "Máximo de posições simultâneas.")
+            return RiskDecision(False, RejectReason.MAX_POSITIONS, "Maximum simultaneous positions.")
 
         if now_ts - self._last_trade_ts < self._cfg.trade_cooldown_seconds:
             restante = self._cfg.trade_cooldown_seconds - (now_ts - self._last_trade_ts)
-            return RiskDecision(False, RejectReason.COOLDOWN, f"Cooldown: faltam {restante:.0f}s.")
+            return RiskDecision(False, RejectReason.COOLDOWN, f"Cooldown: {restante:.0f}s remaining.")
 
         if self.position_size_usd(current_equity_usd, available_stable_usd) <= 0.0:
-            return RiskDecision(False, RejectReason.RISK_BLOCKED, "Stable insuficiente p/ tamanho mínimo.")
+            return RiskDecision(False, RejectReason.RISK_BLOCKED, "Insufficient stable for minimum size.")
 
         return RiskDecision(True)
 
     def record_trade(self, now_ts: float) -> None:
         self._last_trade_ts = now_ts
 
-    # ── Mutex de execução (anti-loop / race condition) ───────────────────────
+    # ── Execution mutex (anti-loop / race condition) ─────────────────────────
     @property
     def trade_lock(self) -> threading.Lock:
         return self._trade_lock
 
-    # ── Stop-loss inicial de uma posição ─────────────────────────────────────
+    # ── Initial stop-loss of a position ──────────────────────────────────────
     def initial_stop_price(self, entry_price: float) -> float:
         return entry_price * (1.0 - self._cfg.user_stop_loss_pct / 100.0)
 
     def take_profit_price(self, entry_price: float) -> float:
-        """Preço-alvo de lucro (0.0 se o lucro-alvo estiver desativado)."""
+        """Target profit price (0.0 if the take-profit is disabled)."""
         tp = self._cfg.user_take_profit_pct
         return entry_price * (1.0 + tp / 100.0) if tp > 0 else 0.0
 
-    # ── Avaliação contínua de uma posição (loop de 2s) ───────────────────────
+    # ── Continuous evaluation of a position (2s loop) ────────────────────────
     def evaluate_position(self, pos: Position, current_price: float, tighten: bool = False) -> ExitSignal:
-        """Decide se mantém ou sai, com os parâmetros DA ESTRATÉGIA da posição.
+        """Decides whether to hold or exit, with the position's STRATEGY parameters.
 
-        tighten=True (GANÂNCIA EXTREMA no mercado): aperta o trailing — ativa mais cedo e
-        segue mais perto — p/ TRAVAR o lucro antes da reversão do topo eufórico. É o lado
-        simétrico do F&G: "tenha medo quando todos têm ganância" (protege o ganho no topo).
-        Atualiza pico/trailing in-place. Cada campo cai no global do config se = 0
-        (compras manuais/legado), então o comportamento antigo é preservado.
+        tighten=True (EXTREME GREED in the market): tightens the trailing — activates earlier and
+        follows closer — to LOCK the profit before the reversal of the euphoric top. It is the
+        symmetric side of F&G: "be fearful when everyone is greedy" (protects the gain at the top).
+        Updates peak/trailing in-place. Each field falls back to the config global if = 0
+        (manual/legacy buys), so the old behavior is preserved.
 
-        Ordem: TP fixo → trailing (gatilho/ratchet) → SL → time-stop.
-          • TP fixo (mean-rev/dca): vende ao bater a meta.
-          • Trailing (momentum): após o gatilho, move o stop p/ break-even e segue o pico.
-          • SL: só dispara se houver stop_loss_price (DCA = sem SL fixo → 0 → ignorado).
-          • Time-stop: por faixa-morta (momentum 20min) ou por TEMPO puro (dca 24h, band 999).
+        Order: fixed TP → trailing (trigger/ratchet) → SL → time-stop.
+          • Fixed TP (mean-rev/dca): sells when it hits the target.
+          • Trailing (momentum): after the trigger, moves the stop to break-even and follows the peak.
+          • SL: only fires if there is a stop_loss_price (DCA = no fixed SL → 0 → ignored).
+          • Time-stop: by dead band (momentum 20min) or by pure TIME (dca 24h, band 999).
         """
         if current_price > pos.peak_price:
             pos.peak_price = current_price
 
-        # Parâmetros DESTA posição (0 = fallback p/ o global do config).
+        # Parameters of THIS position (0 = fallback to the config global).
         stop_pct = pos.stop_loss_pct if pos.stop_loss_pct > 0 else self._cfg.user_stop_loss_pct
         tp = pos.take_profit_pct if pos.take_profit_pct > 0 else (
             0.0 if pos.stop_loss_pct > 0 else self._cfg.user_take_profit_pct)
@@ -231,14 +231,14 @@ class RiskEngine:
                          else self._cfg.trailing_trigger_pct)
         trail_dist = pos.trailing_pct if pos.trailing_pct > 0 else stop_pct
         if tighten and trail_trigger > 0:
-            trail_trigger *= 0.5   # ativa o trailing com metade do lucro (trava mais cedo)
-            trail_dist = max(trail_dist * 0.6, 0.5)  # segue mais perto do pico (piso 0,5%)
+            trail_trigger *= 0.5   # activates the trailing with half the profit (locks earlier)
+            trail_dist = max(trail_dist * 0.6, 0.5)  # follows closer to the peak (floor 0.5%)
 
-        # 1) Lucro-alvo FIXO: bateu a meta → realiza.
+        # 1) FIXED take-profit: hit the target → realize.
         if tp > 0 and current_price >= pos.entry_price * (1.0 + tp / 100.0):
             return ExitSignal.SELL_TAKE_PROFIT
 
-        # 2) Trailing: ao cruzar o gatilho de lucro, sobe o stop p/ break-even e segue o pico.
+        # 2) Trailing: on crossing the profit trigger, raises the stop to break-even and follows the peak.
         if trail_trigger > 0:
             if not pos.trailing_active and current_price >= pos.entry_price * (1.0 + trail_trigger / 100.0):
                 pos.trailing_active = True
@@ -247,12 +247,12 @@ class RiskEngine:
                 trailed = pos.peak_price * (1.0 - trail_dist / 100.0)
                 pos.stop_loss_price = max(pos.stop_loss_price, trailed)
 
-        # 3) Stop-loss: só se houver stop (DCA abre sem SL → stop_loss_price = 0 → pulado).
+        # 3) Stop-loss: only if there is a stop (DCA opens without SL → stop_loss_price = 0 → skipped).
         if pos.stop_loss_price > 0 and current_price <= pos.stop_loss_price:
             return ExitSignal.SELL_TRAILING if pos.trailing_active else ExitSignal.SELL_STOP_LOSS
 
-        # 4) Time-stop: posição SEM trailing ativo, aberta há tempo demais. Por faixa-morta
-        # (capital parado) OU por tempo puro (DCA: band 999 → sai no prazo qualquer que seja o PnL).
+        # 4) Time-stop: position WITHOUT active trailing, open for too long. By dead band
+        # (idle capital) OR by pure time (DCA: band 999 → exits on schedule whatever the PnL).
         ts_min = pos.time_stop_min if pos.time_stop_min > 0 else self._cfg.max_hold_hours * 60.0
         ts_band = pos.time_stop_band_pct if pos.time_stop_band_pct > 0 else self._cfg.stale_pnl_band_pct
         if (not pos.trailing_active and ts_min > 0 and pos.opened_at
@@ -263,25 +263,25 @@ class RiskEngine:
 
         return ExitSignal.HOLD
 
-    # ── Heartbeat (mínimo de trades do regulamento) ──────────────────────────
+    # ── Heartbeat (minimum trades from the rules) ────────────────────────────
     def needs_heartbeat(self, now_ts: float) -> bool:
-        """True se passou tempo demais sem operar e precisamos de um trade de manutenção."""
+        """True if too much time has passed without trading and we need a maintenance trade."""
         if self._last_trade_ts == 0.0:
-            return False  # ainda não começou a operar nesta sessão
+            return False  # has not started trading in this session yet
         horas = (now_ts - self._last_trade_ts) / 3600.0
         return horas >= self._cfg.heartbeat_after_hours
 
 
-# ── SL/TP dinâmico por volatilidade (determinístico; R:R sempre >= 1:2) ───────
+# ── Dynamic SL/TP by volatility (deterministic; R:R always >= 1:2) ────────────
 def dynamic_sl_tp(tier: str, var24h_abs: float) -> tuple[float, float]:
-    """Stop-loss e take-profit (%) calibrados pela VOLATILIDADE do ativo na entrada.
+    """Stop-loss and take-profit (%) calibrated by the asset's VOLATILITY at entry.
 
-    O cérebro classifica a tier (BAIXA/MEDIA/ALTA); a MATEMÁTICA é feita AQUI (LLM não
-    faz conta). Relação Risco:Retorno travada em >= 1:2. var24h_abs = |percent_change_24h|.
+    The brain classifies the tier (BAIXA/MEDIA/ALTA); the MATH is done HERE (the LLM does
+    not do arithmetic). Risk:Reward locked at >= 1:2. var24h_abs = |percent_change_24h|.
 
       BAIXA  (|24h| <= 3%):  SL 2.0%            TP 4.0%   (1:2)
       MEDIA  (3-8%):         SL max(|24h|*.75, 3)  TP SL*2.0
-      ALTA   (8-15%):        SL min(|24h|*.85, 7)  TP SL*2.5  (prêmio maior pelo risco)
+      ALTA   (8-15%):        SL min(|24h|*.85, 7)  TP SL*2.5  (larger premium for the risk)
     """
     t = (tier or "").strip().upper()
     if t in ("ALTA", "ALTO", "HIGH"):
@@ -290,16 +290,16 @@ def dynamic_sl_tp(tier: str, var24h_abs: float) -> tuple[float, float]:
     elif t in ("MEDIA", "MÉDIA", "MEDIO", "MÉDIO", "MEDIUM", "MED"):
         sl = max(var24h_abs * 0.75, 3.0)
         tp = sl * 2.0
-    else:  # BAIXA / LOW / desconhecido → conservador
+    else:  # BAIXA / LOW / unknown → conservative
         sl, tp = 2.0, 4.0
-    # Garante R:R >= 1:2 mesmo após arredondar.
+    # Ensures R:R >= 1:2 even after rounding.
     sl = round(sl, 2)
     tp = round(max(tp, sl * 2.0), 2)
     return sl, tp
 
 
 def tier_from_var(var24h_abs: float) -> str:
-    """Fallback determinístico da tier a partir de |Var24h| (se o cérebro não classificar)."""
+    """Deterministic fallback of the tier from |Var24h| (if the brain does not classify)."""
     if var24h_abs <= 3.0:
         return "BAIXA"
     if var24h_abs <= 8.0:
@@ -307,20 +307,20 @@ def tier_from_var(var24h_abs: float) -> str:
     return "ALTA"
 
 
-# ── SKILL: Adaptação por regime (a postura muda com o mercado) ────────────────
+# ── SKILL: Adaptation by regime (the stance changes with the market) ──────────
 def market_regime(btc_24h: float | None, fng: int | None = None,
                   funding: float | None = None) -> tuple[str, int]:
-    """Lê o REGIME do mercado e devolve (rótulo, ajuste-de-corte). O ajuste desloca a
-    barra de entrada: BULL abaixa (mais agressivo); DEFENSIVO sobe (mais seletivo).
+    """Reads the market REGIME and returns (label, cutoff-adjustment). The adjustment shifts the
+    entry bar: BULL lowers it (more aggressive); DEFENSIVO raises it (more selective).
 
-    Combina TRÊS leituras:
-      • PREÇO (BTC 24h): >= +3% → BULL (-5) · <= -2% → DEFENSIVO (+8) · senão NEUTRO.
-      • SENTIMENTO (Fear & Greed 0-100): ganância extrema (>=78) sobe a barra (+5, evita
-        o topo eufórico); medo extremo (<=22) sobe a barra (+4, risk-off).
-      • ALAVANCAGEM (funding rate do BTC perp, por 8h): >= +0.05% → longs sobre-alavancados,
-        risco de flush → sobe a barra (+6, defensivo); <= -0.02% → shorts aglomerados,
-        viés de squeeze pra cima → abaixa levemente (-3, leve risk-on contrarian).
-      Os extremos pedem mais cautela — alinhado com a proteção de capital."""
+    Combines THREE readings:
+      • PRICE (BTC 24h): >= +3% → BULL (-5) · <= -2% → DEFENSIVO (+8) · otherwise NEUTRO.
+      • SENTIMENT (Fear & Greed 0-100): extreme greed (>=78) raises the bar (+5, avoids
+        the euphoric top); extreme fear (<=22) raises the bar (+4, risk-off).
+      • LEVERAGE (BTC perp funding rate, per 8h): >= +0.05% → over-leveraged longs,
+        flush risk → raises the bar (+6, defensive); <= -0.02% → crowded shorts,
+        upward squeeze bias → lowers it slightly (-3, mild contrarian risk-on).
+      The extremes call for more caution — aligned with capital protection."""
     if btc_24h is None:
         label, adj = "NEUTRO", 0
     elif btc_24h >= 3.0:
@@ -342,34 +342,34 @@ def market_regime(btc_24h: float | None, fng: int | None = None,
     return label, adj
 
 
-# ── TRAVA anti-topo: amortece o tamanho quando o ativo já subiu demais ────────
+# ── Anti-top LOCK: dampens the size when the asset has already risen too much ──
 def overextension_factor(ch24h: float) -> float:
-    """Fator 0,5–1,0 que REDUZ o tamanho quando o 24h já esticou (risco de topo).
-    Determinístico (não depende do LLM): até +10% não mexe; de +10% a +25% cai linear
-    até a metade. Acima do teto (max_entry_24h_pct) a entrada é RECUSADA no agente."""
+    """Factor 0.5–1.0 that REDUCES the size when the 24h has already overextended (top risk).
+    Deterministic (does not depend on the LLM): up to +10% it does nothing; from +10% to +25% it
+    falls linearly to half. Above the cap (max_entry_24h_pct) the entry is REFUSED in the agent."""
     if ch24h <= 10.0:
         return 1.0
     return max(0.5, 1.0 - (ch24h - 10.0) / 30.0)
 
 
-# ── SKILL: Sizing por convicção (aposta escala com o confidence_score) ────────
+# ── SKILL: Conviction sizing (the bet scales with the confidence_score) ───────
 def conviction_size_pct(base_pct: float, score: int, max_pct: float = 50.0) -> float:
-    """Escala o tamanho da posição pela CONVICÇÃO do cérebro (confidence_score).
-    Ancora no base_pct por volta do score 62 (corte típico); cresce +3%/ponto acima e
-    encolhe abaixo, limitado entre 0,6x e 2,0x — e nunca acima do teto (max_pct).
-    Concentra capital na vantagem real, sem virar all-in."""
+    """Scales the position size by the brain's CONVICTION (confidence_score).
+    Anchors at base_pct around score 62 (typical cutoff); grows +3%/point above and
+    shrinks below, capped between 0.6x and 2.0x — and never above the cap (max_pct).
+    Concentrates capital on the real edge, without becoming all-in."""
     mult = 1.0 + (score - 62) * 0.03
     mult = max(0.6, min(mult, 2.0))
     return round(min(base_pct * mult, max_pct), 2)
 
 
-# ── Integridade da leitura de equity (anti falso-disjuntor) ───────────────────
+# ── Integrity of the equity reading (anti false-circuit-breaker) ──────────────
 def equity_reading_reliable(holdings: list, position_symbols) -> bool:
-    """True se TODA posição aberta aparece PRECIFICADA (value_usd > 0) no breakdown.
+    """True if EVERY open position appears PRICED (value_usd > 0) in the breakdown.
 
-    Se uma posição que sabemos ter não foi precificada (RPC limitado / sem rota de preço),
-    a equity volta DEFLACIONADA e NÃO pode disparar o disjuntor de drawdown — senão um
-    soluço de preço liquidaria a carteira por engano."""
+    If a position we know we hold was not priced (limited RPC / no price route),
+    the equity comes back DEFLATED and MUST NOT trip the drawdown circuit breaker — otherwise a
+    price hiccup would liquidate the wallet by mistake."""
     priced = {str(h.get("symbol", "")).upper()
               for h in holdings if (h.get("value_usd") or 0) > 0}
     return all(str(s).upper() in priced for s in position_symbols)

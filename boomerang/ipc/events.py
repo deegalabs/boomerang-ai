@@ -1,4 +1,4 @@
-"""Eventos/alertas emitidos pelo agente e consumidos pela interface."""
+"""Events/alerts emitted by the agent and consumed by the interface."""
 from __future__ import annotations
 
 import inspect
@@ -17,8 +17,8 @@ class AlertType(str, Enum):
     HEARTBEAT = "HEARTBEAT"
     WITHDRAWN = "WITHDRAWN"
     ERROR = "ERROR"
-    SCAN = "SCAN"            # resumo de cada ciclo de varredura
-    DATA_ERROR = "DATA_ERROR"  # falha ao obter dados de mercado (CMC/x402)
+    SCAN = "SCAN"            # summary of each scan cycle
+    DATA_ERROR = "DATA_ERROR"  # failure to fetch market data (CMC/x402)
 
 
 @dataclass
@@ -33,7 +33,7 @@ Subscriber = Callable[[Alert], Awaitable[None] | None]
 
 
 class AlertBus:
-    """Pub/sub assíncrono simples. Inscritos podem ser sync ou async."""
+    """Simple async pub/sub. Subscribers can be sync or async."""
 
     def __init__(self) -> None:
         self._subs: list[Subscriber] = []

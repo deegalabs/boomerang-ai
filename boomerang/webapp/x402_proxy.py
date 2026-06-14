@@ -1,21 +1,21 @@
-"""Proxy x402 deployável: injeta o header Accept que o MCP da CMC exige.
+"""Deployable x402 proxy: injects the Accept header that the CMC MCP requires.
 
-Por que existe: o cliente x402 do twak não envia `Accept: application/json,
-text/event-stream` (o MCP da CMC exige) e não aceita header customizado -> 400; e
-o twak recusa endereços privados/loopback, exigindo um endpoint PÚBLICO. Na VPS,
-este proxy roda em loopback ATRÁS de um reverse proxy (Caddy/nginx) que termina o
-TLS num domínio público. O twak chama o domínio público; o reverse proxy repassa
-pra cá; aqui injetamos o header e encaminhamos pra CMC (com a assinatura de
-pagamento). Assim a carteira de trade paga x402 sem expor chave nem precisar de VPS
-dedicada só pra isso.
+Why it exists: twak's x402 client does not send `Accept: application/json,
+text/event-stream` (which the CMC MCP requires) and does not accept a custom header -> 400; and
+twak refuses private/loopback addresses, requiring a PUBLIC endpoint. On the VPS,
+this proxy runs on loopback BEHIND a reverse proxy (Caddy/nginx) that terminates
+TLS on a public domain. twak calls the public domain; the reverse proxy forwards
+here; here we inject the header and forward to CMC (with the payment
+signature). This way the trading wallet pays x402 without exposing a key or needing a VPS
+dedicated just for this.
 
-Config por ambiente:
-  X402_PROXY_HOST   (padrão 127.0.0.1)   bind do proxy (loopback atrás do reverse proxy)
-  X402_PROXY_PORT   (padrão 8402)
-  X402_TARGET       (padrão MCP x402 da CMC)
-  X402_PROXY_CERT / X402_PROXY_KEY  (opcional) habilita HTTPS direto (uso standalone)
+Per-environment config:
+  X402_PROXY_HOST   (default 127.0.0.1)   proxy bind (loopback behind the reverse proxy)
+  X402_PROXY_PORT   (default 8402)
+  X402_TARGET       (default CMC x402 MCP)
+  X402_PROXY_CERT / X402_PROXY_KEY  (optional) enables direct HTTPS (standalone use)
 
-Uso na VPS:   python -m boomerang.webapp.x402_proxy
+Usage on the VPS:   python -m boomerang.webapp.x402_proxy
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ import urllib.request
 TARGET = os.getenv("X402_TARGET", "https://mcp.coinmarketcap.com/x402/mcp")
 HOST = os.getenv("X402_PROXY_HOST", "127.0.0.1")
 PORT = int(os.getenv("X402_PROXY_PORT", "8402"))
-# headers do twak que precisam chegar à CMC (assinatura de pagamento etc.)
+# twak headers that need to reach CMC (payment signature, etc.)
 FORWARD = ("payment-signature", "x-payment", "x-payment-signature", "mcp-protocol-version")
 
 
@@ -63,7 +63,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     do_GET = _relay
     do_POST = _relay
 
-    def log_message(self, fmt, *args):  # log enxuto
+    def log_message(self, fmt, *args):  # lean log
         sys.stdout.write("[x402-proxy] " + (fmt % args) + "\n")
         sys.stdout.flush()
 
@@ -78,7 +78,7 @@ def main() -> None:
             ctx.load_cert_chain(cert, key)
             srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
             scheme = "https"
-        print(f"x402 proxy ({scheme}) em {scheme}://{HOST}:{PORT}/  ->  {TARGET}", flush=True)
+        print(f"x402 proxy ({scheme}) on {scheme}://{HOST}:{PORT}/  ->  {TARGET}", flush=True)
         try:
             srv.serve_forever()
         except KeyboardInterrupt:

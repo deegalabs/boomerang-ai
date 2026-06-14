@@ -1,4 +1,4 @@
-"""Logging central. Nunca loga segredos; mascara chaves/seeds por precaução."""
+"""Central logging. Never logs secrets; masks keys/seeds as a precaution."""
 from __future__ import annotations
 
 import logging
@@ -7,18 +7,18 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-# Chaves privadas cruas (32 bytes) e tokens de bot do Telegram (id:segredo).
+# Raw private keys (32 bytes) and Telegram bot tokens (id:secret).
 _SECRET_PATTERNS = [
     re.compile(r"0x[a-fA-F0-9]{64}"),
     re.compile(r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b"),
 ]
-# Bibliotecas que logam URLs/headers com segredos (o httpx loga a URL do Telegram
-# com o token). Mantemos em WARNING para não vazar nada nos logs.
+# Libraries that log URLs/headers with secrets (httpx logs the Telegram URL
+# with the token). We keep them at WARNING so nothing leaks into the logs.
 _NOISY = ("httpx", "httpcore", "telegram", "telegram.ext", "urllib3", "web3", "anthropic")
 
 
 class _SecretMaskingFilter(logging.Filter):
-    """Mascara chaves privadas e tokens que por acaso entrem na mensagem."""
+    """Masks private keys and tokens that may end up in the message."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.msg, str):
@@ -28,12 +28,12 @@ class _SecretMaskingFilter(logging.Filter):
 
 
 def setup_logging(name: str = "boomerang", level: int = logging.INFO) -> logging.Logger:
-    # Silencia bibliotecas que vazam segredos na URL/headers (sempre, idempotente).
+    # Silence libraries that leak secrets in the URL/headers (always, idempotent).
     for noisy in _NOISY:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     logger = logging.getLogger(name)
-    if logger.handlers:  # idempotente
+    if logger.handlers:  # idempotent
         return logger
     logger.setLevel(level)
 

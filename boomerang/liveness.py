@@ -1,10 +1,10 @@
-"""Sinal de vida do agente (liveness), compartilhado em-processo entre a thread do
-agente e a thread do site (mesmo processo → mesmo objeto de módulo).
+"""Agent liveness signal, shared in-process between the agent thread and the
+site thread (same process → same module object).
 
-O agente bate (`beat()`) periodicamente no seu event loop; o `/healthz` lê a idade
-(`age_seconds()`). Se ficar velho, o agente travou/morreu → o /healthz devolve 503 e
-a Railway reinicia o container. Cobre o caso de DEADLOCK (sem exceção), que o loop de
-restart do railway_start não pega.
+The agent beats (`beat()`) periodically in its event loop; `/healthz` reads the age
+(`age_seconds()`). If it gets stale, the agent hung/died → `/healthz` returns 503 and
+Railway restarts the container. Covers the DEADLOCK case (no exception), which the
+railway_start restart loop does not catch.
 """
 from __future__ import annotations
 
@@ -14,11 +14,11 @@ _last_beat: float = time.time()
 
 
 def beat() -> None:
-    """Marca o agente como vivo agora. Chamado periodicamente pelo event loop do agente."""
+    """Marks the agent as alive now. Called periodically by the agent's event loop."""
     global _last_beat
     _last_beat = time.time()
 
 
 def age_seconds() -> float:
-    """Segundos desde o último beat. Cresce sem limite se o agente parar de bater."""
+    """Seconds since the last beat. Grows without bound if the agent stops beating."""
     return time.time() - _last_beat

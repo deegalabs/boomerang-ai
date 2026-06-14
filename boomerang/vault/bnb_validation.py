@@ -1,17 +1,17 @@
-"""Filtro 2 — Validação física on-chain na BNB Smart Chain.
+"""Filter 2 — On-chain physical validation on the BNB Smart Chain.
 
-Recebe um sinal aprovado pelo Filtro 1 e, ANTES de qualquer assinatura, valida:
-  1. Whitelist  — token pertence aos 149 elegíveis? (senão não conta no PnL)
-  2. Liquidez/Slippage — simula a compra na PancakeSwap (getAmountsOut, só leitura)
-  3. Taxa oculta — heurística round-trip detecta token com fee-on-transfer/burn
-  4. Dessincronização de oráculo — preço on-chain vs preço da CMC
+Receives a signal approved by Filter 1 and, BEFORE any signature, validates:
+  1. Whitelist  — does the token belong to the 149 eligible ones? (otherwise it doesn't count in PnL)
+  2. Liquidity/Slippage — simulates the buy on PancakeSwap (getAmountsOut, read-only)
+  3. Hidden tax — round-trip heuristic detects a token with fee-on-transfer/burn
+  4. Oracle desync — on-chain price vs CMC price
 
-Tudo via chamadas `view` (eth_call) → custo ZERO de gás. Falha fecha o trade.
+All via `view` calls (eth_call) → ZERO gas cost. A failure closes the trade.
 
-Limites conhecidos (v1): a checagem round-trip pega fee-on-transfer/tax via
-matemática de reservas; um honeypot que REVERTE na venda real precisa de
-simulação de swap com state-override (endurecimento futuro). Como o foco é em
-tokens blue-chip líquidos, o risco residual é baixo.
+Known limits (v1): the round-trip check catches fee-on-transfer/tax via
+reserve math; a honeypot that REVERTS on the real sell needs a swap
+simulation with state-override (future hardening). Since the focus is on
+liquid blue-chip tokens, the residual risk is low.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from boomerang.types import RejectReason, ValidationResult
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
-# ABIs mínimas (só o necessário) ──────────────────────────────────────────────
+# Minimal ABIs (only what is needed) ──────────────────────────────────────────
 _ROUTER_ABI = json.loads(
     '[{"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},'
     '{"internalType":"address[]","name":"path","type":"address[]"}],'
@@ -43,7 +43,7 @@ _ERC20_ABI = json.loads(
     '"outputs":[{"internalType":"uint256","name":"","type":"uint256"}],'
     '"stateMutability":"view","type":"function"}]'
 )
-# PancakeSwap V2 Factory — getPair p/ medir a profundidade (liquidez) do pool token/WBNB.
+# PancakeSwap V2 Factory — getPair to measure the depth (liquidity) of the token/WBNB pool.
 _V2_FACTORY = "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73"
 _FACTORY_ABI = json.loads(
     '[{"inputs":[{"internalType":"address","name":"","type":"address"},'
@@ -60,9 +60,9 @@ _PAIR_ABI = json.loads(
     '{"inputs":[],"name":"token0","outputs":[{"internalType":"address","name":"","type":"address"}],'
     '"stateMutability":"view","type":"function"}]'
 )
-# PancakeSwap V3 — QuoterV2 (preço/liquidez na V3, que o roteador V2 não enxerga).
+# PancakeSwap V3 — QuoterV2 (price/liquidity on V3, which the V2 router cannot see).
 _V3_QUOTER = "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997"
-_V3_FEE_TIERS = (500, 2500, 100, 10000)  # ordem por probabilidade de ter pool
+_V3_FEE_TIERS = (500, 2500, 100, 10000)  # ordered by probability of having a pool
 _V3_QUOTER_ABI = json.loads(
     '[{"inputs":[{"components":[{"internalType":"address","name":"tokenIn","type":"address"},'
     '{"internalType":"address","name":"tokenOut","type":"address"},'
@@ -77,15 +77,15 @@ _V3_QUOTER_ABI = json.loads(
     '{"internalType":"uint256","name":"gasEstimate","type":"uint256"}],'
     '"stateMutability":"nonpayable","type":"function"}]'
 )
-# Round-trip (comprar+vender) deve reter >= isto; abaixo = ilíquido/honeypot/taxa.
+# A round-trip (buy+sell) must retain >= this; below = illiquid/honeypot/tax.
 _MIN_ROUNDTRIP = 0.97
 
-# Fee da PancakeSwap V2 por hop = 0,25% → fator de retenção por hop.
+# PancakeSwap V2 fee per hop = 0.25% → retention factor per hop.
 _PCS_FEE_PER_HOP = 0.0025
 
-# WBNB (wrapped BNB) — usado só para precificar o saldo NATIVO de gás (BNB) em USDT.
+# WBNB (wrapped BNB) — used only to price the NATIVE gas balance (BNB) in USDT.
 _WBNB = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
-# Saldos abaixo deste valor em USD são ignorados (poeira/arredondamento).
+# Balances below this value in USD are ignored (dust/rounding).
 _DUST_USD = 0.01
 
 
@@ -105,7 +105,7 @@ class BNBValidator:
         self._factory = self.w3.eth.contract(
             address=Web3.to_checksum_address(_V2_FACTORY), abi=_FACTORY_ABI,
         )
-        self._executor = None  # cotador de agregador (TWAK); injetado via set_quoter()
+        self._executor = None  # aggregator quoter (TWAK); injected via set_quoter()
         self._usdt = Web3.to_checksum_address(config.network["usdt_bsc_address"])
         self._wbnb = Web3.to_checksum_address(_WBNB)
         try:
@@ -114,14 +114,14 @@ class BNBValidator:
             self._usdc = None
         self._decimals_cache: dict[str, int] = {}
         self._whitelist = self._load_whitelist()
-        self._token_map = self._load_token_map()  # symbol -> endereço (só tokens, sem base)
+        self._token_map = self._load_token_map()  # symbol -> address (tokens only, no base)
 
-    # ── conectividade ────────────────────────────────────────────────────────
+    # ── connectivity ─────────────────────────────────────────────────────────
     def is_connected(self) -> bool:
         try:
             return self.w3.is_connected() and self.w3.eth.chain_id == int(self._cfg.network["bsc_chain_id"])
         except Exception as exc:  # noqa: BLE001
-            self._log.error("Falha de conexão RPC: %s", exc)
+            self._log.error("RPC connection failure: %s", exc)
             return False
 
     # ── whitelist ────────────────────────────────────────────────────────────
@@ -130,22 +130,22 @@ class BNBValidator:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except FileNotFoundError:
-            self._log.warning("eligible_tokens.json não encontrado — whitelist vazia (fecha tudo).")
+            self._log.warning("eligible_tokens.json not found — empty whitelist (closes everything).")
             return set()
         addrs = {Web3.to_checksum_address(a) for a in data.get("tokens", {}).values()}
         if not addrs:
-            self._log.warning("Whitelist VAZIA — popular os 149 tokens na Fase 0. Trades bloqueados.")
+            self._log.warning("Whitelist EMPTY — populate the 149 tokens in Phase 0. Trades blocked.")
         return addrs
 
     def _load_token_map(self) -> dict[str, str]:
-        """symbol -> endereço (checksum) dos tokens-foco (sem a base stable)."""
+        """symbol -> address (checksum) of the focus tokens (without the base stable)."""
         path = ROOT / self._cfg.hackathon["eligible_tokens_file"]
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return {}
         out: dict[str, str] = {}
-        bases = {"USDC", "USDT"}  # stables base entram como 'stable'; não duplicar como 'token'
+        bases = {"USDC", "USDT"}  # base stables enter as 'stable'; don't duplicate as 'token'
         for sym, addr in data.get("tokens", {}).items():
             if sym.upper() in bases:
                 continue
@@ -158,7 +158,7 @@ class BNBValidator:
     def is_whitelisted(self, token_address: str) -> bool:
         return Web3.to_checksum_address(token_address) in self._whitelist
 
-    # ── helpers on-chain ─────────────────────────────────────────────────────
+    # ── on-chain helpers ─────────────────────────────────────────────────────
     def _decimals(self, token_address: str) -> int:
         addr = Web3.to_checksum_address(token_address)
         if addr not in self._decimals_cache:
@@ -171,10 +171,10 @@ class BNBValidator:
         return self._router.functions.getAmountsOut(amount_in, checksum_path).call()
 
     def set_quoter(self, executor) -> None:  # noqa: ANN001
-        """Injeta o executor TWAK para o Filtro 2 validar pela rota REAL (agregador)."""
+        """Injects the TWAK executor so Filter 2 validates via the REAL route (aggregator)."""
         self._executor = executor
 
-    # ── cotação V3 (single-hop, melhor fee tier) ─────────────────────────────
+    # ── V3 quote (single-hop, best fee tier) ─────────────────────────────────
     def _v3_out(self, token_in: str, token_out: str, amount_in: int) -> int:
         ti = Web3.to_checksum_address(token_in)
         to = Web3.to_checksum_address(token_out)
@@ -185,15 +185,15 @@ class BNBValidator:
                     (ti, to, int(amount_in), fee, 0)).call()[0]
                 if out > best:
                     best = out
-            except Exception:  # noqa: BLE001 — sem pool nesse tier reverte
+            except Exception:  # noqa: BLE001 — no pool in this tier reverts
                 continue
         return best
 
     def _route_out(self, token_in: str, token_out: str, amount_in: int) -> int:
-        """Melhor saída entre V2 (direto/via WBNB) e V3 (direto/via WBNB).
+        """Best output between V2 (direct/via WBNB) and V3 (direct/via WBNB).
 
-        Para na 1ª rota com liquidez (sondagem é pequena → preço ~igual em qualquer
-        pool). Cobre tokens cuja liquidez migrou para a V3 que a V2 não enxerga.
+        Stops at the 1st route with liquidity (the probe is small → price ~equal in any
+        pool). Covers tokens whose liquidity migrated to V3 that V2 cannot see.
         """
         ti = Web3.to_checksum_address(token_in)
         to = Web3.to_checksum_address(token_out)
@@ -228,34 +228,34 @@ class BNBValidator:
                         return leg
         return 0
 
-    # ── preço spot on-chain (USD por 1 token) — agora cobre V2 E V3 ──────────
+    # ── on-chain spot price (USD per 1 token) — now covers V2 AND V3 ─────────
     def onchain_price_usd(self, token_address: str) -> float:
-        """Preço de 1 token em USD, sondando com ~1 USDT (impacto ~0), via V2 ou V3.
+        """Price of 1 token in USD, probing with ~1 USDT (impact ~0), via V2 or V3.
 
-        Sonda 'quantos tokens por 1 USDT' e inverte → robusto para tokens caros e
-        baratos. Levanta ValueError se nenhuma rota tiver liquidez."""
+        Probes 'how many tokens per 1 USDT' and inverts → robust for expensive and
+        cheap tokens. Raises ValueError if no route has liquidity."""
         token = Web3.to_checksum_address(token_address)
         usdt_dec = self._decimals(self._usdt)
         probe = 10 ** usdt_dec  # ~1 USDT
         tokens_raw = self._route_out(self._usdt, token, probe)
         if tokens_raw <= 0:
-            raise ValueError(f"Sem rota de preço (V2/V3) para {token}.")
+            raise ValueError(f"No price route (V2/V3) for {token}.")
         tokens = tokens_raw / (10 ** self._decimals(token))
         price = 1.0 / tokens if tokens > 0 else 0.0
-        # Sanidade: a sonda direta V2/V3 dá preço-lixo em token de liquidez fina
-        # (ex.: ATOM saiu $5927; em alguns nós, milhões), inflando equity e risco.
-        # Nenhum token elegível passa de ~$2k (ETH). Acima de $5k = sonda quebrada:
-        # trata como SEM preço (o wallet_breakdown ignora; não entra na equity).
+        # Sanity: the direct V2/V3 probe gives garbage prices on thin-liquidity tokens
+        # (e.g., ATOM came out at $5927; on some nodes, millions), inflating equity and risk.
+        # No eligible token exceeds ~$2k (ETH). Above $5k = broken probe:
+        # treat as NO price (wallet_breakdown ignores it; it doesn't enter equity).
         if price <= 0 or price > 5000:
-            raise ValueError(f"Preço on-chain implausível para {token}: ${price:.2f}")
+            raise ValueError(f"Implausible on-chain price for {token}: ${price:.2f}")
         return price
 
     def wbnb_pool_liquidity_usd(self, token_address: str) -> float:
-        """SKILL Tamanho por liquidez: profundidade do pool token/WBNB (V2) em USD.
+        """SKILL Size by liquidity: depth of the token/WBNB pool (V2) in USD.
 
-        Lê as reservas do par na PancakeSwap V2 e converte o lado WBNB em USD. É a
-        medida direta de quão fundo/seguro é o mercado on-chain do token. Retorna 0.0
-        se não há par (ou em erro) — o chamador trata como ilíquido."""
+        Reads the pair reserves on PancakeSwap V2 and converts the WBNB side to USD. It is
+        the direct measure of how deep/safe the token's on-chain market is. Returns 0.0
+        if there is no pair (or on error) — the caller treats it as illiquid."""
         try:
             token = Web3.to_checksum_address(token_address)
             pair = self._factory.functions.getPair(token, self._wbnb).call()
@@ -265,10 +265,10 @@ class BNBValidator:
             r0, r1, _ = c.functions.getReserves().call()
             token0 = Web3.to_checksum_address(c.functions.token0().call())
             wbnb_reserve = (r0 if token0 == self._wbnb else r1) / 1e18
-            bnb_price = self._price_via([self._wbnb, self._usdt])  # USDT por 1 BNB
+            bnb_price = self._price_via([self._wbnb, self._usdt])  # USDT per 1 BNB
             return wbnb_reserve * bnb_price
         except Exception as exc:  # noqa: BLE001
-            self._log.debug("Liquidez do pool indisponível p/ %s: %s", token_address, exc)
+            self._log.debug("Pool liquidity unavailable for %s: %s", token_address, exc)
             return 0.0
 
     def _token_balance(self, token_address: str, holder: str) -> int:
@@ -276,20 +276,20 @@ class BNBValidator:
         return int(erc20.functions.balanceOf(Web3.to_checksum_address(holder)).call())
 
     def _price_via(self, path: list[str]) -> float:
-        """Preço de 1 unidade do 1º token do path em USDT (cotação de tamanho 1)."""
+        """Price of 1 unit of the 1st token in the path in USDT (size-1 quote)."""
         first = Web3.to_checksum_address(path[0])
         one = 10 ** self._decimals(first)
         out = self._amounts_out(one, path)
         return out[-1] / (10 ** self._decimals(self._usdt))
 
-    # ── composição da carteira (saldos reais on-chain → USD) ──────────────────
+    # ── wallet composition (real on-chain balances → USD) ─────────────────────
     def wallet_breakdown(self, address: str) -> dict:
-        """Lê os saldos REAIS da carteira on-chain e converte cada moeda em USD.
+        """Reads the REAL on-chain wallet balances and converts each coin to USD.
 
-        Só leitura (get_balance / balanceOf via eth_call) — custo zero de gás e
-        NÃO toca a chave privada. Retorna:
+        Read-only (get_balance / balanceOf via eth_call) — zero gas cost and
+        does NOT touch the private key. Returns:
             {address, total_usd, holdings:[{symbol, kind, balance, price_usd, value_usd, pct}]}
-        ordenado por valor decrescente, ignorando poeira (< $0.01).
+        sorted by descending value, ignoring dust (< $0.01).
         """
         if not address:
             return {"address": None, "total_usd": 0.0, "holdings": []}
@@ -306,15 +306,15 @@ class BNBValidator:
                              "price_usd": price, "value_usd": value})
             total += value
 
-        # 1) BNB nativo (reserva de gás)
+        # 1) Native BNB (gas reserve)
         try:
             bnb = self.w3.eth.get_balance(holder) / 1e18
             if bnb > 0:
                 add("BNB", "gas", bnb, self._price_via([self._wbnb, self._usdt]))
         except Exception as exc:  # noqa: BLE001
-            self._log.warning("Saldo BNB indisponível: %s", exc)
+            self._log.warning("BNB balance unavailable: %s", exc)
 
-        # 2) Stables (base operacional) — preço fixo $1
+        # 2) Stables (operating base) — fixed price $1
         stables = {"USDT": self._usdt}
         if self._usdc:
             stables["USDC"] = self._usdc
@@ -323,9 +323,9 @@ class BNBValidator:
                 bal = self._token_balance(addr, holder) / (10 ** self._decimals(addr))
                 add(sym, "stable", bal, 1.0)
             except Exception as exc:  # noqa: BLE001
-                self._log.warning("Saldo %s indisponível: %s", sym, exc)
+                self._log.warning("%s balance unavailable: %s", sym, exc)
 
-        # 3) Tokens-foco (whitelist) com saldo > 0
+        # 3) Focus tokens (whitelist) with balance > 0
         for sym, addr in self._token_map.items():
             try:
                 raw = self._token_balance(addr, holder)
@@ -334,14 +334,14 @@ class BNBValidator:
                 bal = raw / (10 ** self._decimals(addr))
                 add(sym, "token", bal, self.onchain_price_usd(addr))
             except Exception as exc:  # noqa: BLE001
-                self._log.debug("Token %s sem cotação/saldo: %s", sym, exc)
+                self._log.debug("Token %s without quote/balance: %s", sym, exc)
 
         for h in holdings:
             h["pct"] = (h["value_usd"] / total * 100.0) if total > 0 else 0.0
         holdings.sort(key=lambda h: h["value_usd"], reverse=True)
         return {"address": holder, "total_usd": total, "holdings": holdings}
 
-    # ── validação completa ───────────────────────────────────────────────────
+    # ── full validation ──────────────────────────────────────────────────────
     def validate(
         self,
         *,
@@ -350,15 +350,15 @@ class BNBValidator:
         amount_usd: float,
         cmc_price_usd: float | None = None,
     ) -> ValidationResult:
-        """Filtro 2. Whitelist (sempre) + checagem de liquidez/saída.
+        """Filter 2. Whitelist (always) + liquidity/output check.
 
-        Se houver cotador de agregador (TWAK) injetado, valida pela ROTA REAL que a
-        execução usará (cobre V2+V3+outros DEX). Senão, cai na simulação V2 (testes).
+        If an aggregator quoter (TWAK) is injected, validates via the REAL ROUTE that
+        execution will use (covers V2+V3+other DEXs). Otherwise falls back to V2 simulation (tests).
         """
         token = Web3.to_checksum_address(token_address)
         if not self.is_whitelisted(token):
             return ValidationResult(False, symbol, token, reason=RejectReason.NOT_WHITELISTED,
-                                    detail="Token fora dos 149 elegíveis.")
+                                    detail="Token outside the 149 eligible ones.")
         if self._executor is not None:
             return self._validate_via_aggregator(
                 symbol=symbol, token=token, amount_usd=amount_usd, cmc_price_usd=cmc_price_usd)
@@ -369,56 +369,56 @@ class BNBValidator:
         self, *, symbol: str, token: str, amount_usd: float,
         cmc_price_usd: float | None = None,
     ) -> ValidationResult:
-        """Valida comprando e revendendo via cotação do TWAK (round-trip real)."""
-        # SKILL Tamanho por liquidez: o pool é fundo o suficiente? Protege contra
-        # mercados rasos/manipuláveis e contra um trade grande demais p/ o pool.
+        """Validates by buying and reselling via the TWAK quote (real round-trip)."""
+        # SKILL Size by liquidity: is the pool deep enough? Protects against
+        # shallow/manipulable markets and against a trade too big for the pool.
         liq = self.wbnb_pool_liquidity_usd(token)
         min_liq = self._cfg.min_pool_liquidity_usd
         if liq < min_liq:
             return ValidationResult(False, symbol, token, reason=RejectReason.NO_LIQUIDITY,
-                                    detail=f"Pool raso (~${liq:,.0f} < mínimo ${min_liq:,.0f}).")
+                                    detail=f"Shallow pool (~${liq:,.0f} < minimum ${min_liq:,.0f}).")
         cap = liq * self._cfg.max_pool_share_pct / 100.0
         if amount_usd > cap:
             return ValidationResult(False, symbol, token, reason=RejectReason.HIGH_SLIPPAGE,
                                     detail=f"Trade ${amount_usd:.2f} > {self._cfg.max_pool_share_pct:.0f}% "
-                                           f"do pool (~${liq:,.0f}); reduza o tamanho.")
-        base = self._cfg.dev_safety["base_stable_symbol"]  # ex.: USDC
+                                           f"of the pool (~${liq:,.0f}); reduce the size.")
+        base = self._cfg.dev_safety["base_stable_symbol"]  # e.g.: USDC
         try:
             buy = self._executor.quote(base, token, amount_usd, self._cfg.max_slippage_pct)
             tokens_out = float(buy.get("out") or 0.0)
             if tokens_out <= 0:
                 return ValidationResult(False, symbol, token, reason=RejectReason.NO_LIQUIDITY,
-                                        detail="Agregador não encontrou rota de compra.")
+                                        detail="Aggregator found no buy route.")
             sell = self._executor.quote(token, base, amount_usd, self._cfg.max_slippage_pct)
             usdc_back = float(sell.get("out") or 0.0)
         except Exception as exc:  # noqa: BLE001
             return ValidationResult(False, symbol, token, reason=RejectReason.NO_LIQUIDITY,
-                                    detail=f"Cotação do agregador falhou: {exc}")
+                                    detail=f"Aggregator quote failed: {exc}")
 
-        # Round-trip: comprou $X e revendeu — quanto voltou? (pega slippage+taxa+iliquidez)
+        # Round-trip: bought $X and resold — how much came back? (captures slippage+tax+illiquidity)
         retention = usdc_back / amount_usd if amount_usd > 0 else 0.0
         if retention < _MIN_ROUNDTRIP:
             perda = (1 - retention) * 100.0
             return ValidationResult(False, symbol, token, reason=RejectReason.BURNING_TAX,
                                     estimated_slippage_pct=perda,
-                                    detail=f"Round-trip retém só {retention*100:.2f}% "
-                                           f"(perda {perda:.2f}%) → ilíquido/taxa.")
+                                    detail=f"Round-trip retains only {retention*100:.2f}% "
+                                           f"(loss {perda:.2f}%) → illiquid/tax.")
 
-        # Oráculo: preço efetivo da rota (USD por token) vs preço CMC.
+        # Oracle: effective route price (USD per token) vs CMC price.
         divergence_pct = None
-        route_price = amount_usd / tokens_out  # USDC gastos por token recebido
+        route_price = amount_usd / tokens_out  # USDC spent per token received
         if cmc_price_usd and cmc_price_usd > 0:
             divergence_pct = abs(route_price - cmc_price_usd) / cmc_price_usd * 100.0
             if divergence_pct > self._cfg.oracle_divergence_max_pct:
                 return ValidationResult(False, symbol, token, oracle_divergence_pct=divergence_pct,
                                         reason=RejectReason.ORACLE_DESYNC,
-                                        detail=f"Divergência {divergence_pct:.2f}% "
-                                               f"(rota {route_price:.6f} vs CMC {cmc_price_usd:.6f}).")
+                                        detail=f"Divergence {divergence_pct:.2f}% "
+                                               f"(route {route_price:.6f} vs CMC {cmc_price_usd:.6f}).")
         impact = buy.get("price_impact")
         slip = float(impact) if impact is not None else (1 - retention) * 100.0
         return ValidationResult(True, symbol, token, estimated_slippage_pct=slip,
                                 oracle_divergence_pct=divergence_pct,
-                                detail=f"Aprovado pelo Filtro 2 (agregador, round-trip {retention*100:.2f}%).")
+                                detail=f"Approved by Filter 2 (aggregator, round-trip {retention*100:.2f}%).")
 
     def _validate_v2(
         self,
@@ -433,43 +433,43 @@ class BNBValidator:
         # 1) Whitelist (fail-closed)
         if not self.is_whitelisted(token):
             return ValidationResult(False, symbol, token, reason=RejectReason.NOT_WHITELISTED,
-                                    detail="Token fora dos 149 elegíveis.")
+                                    detail="Token outside the 149 eligible ones.")
 
         usdt_dec = self._decimals(self._usdt)
         amount_in = int(amount_usd * (10 ** usdt_dec))
 
         try:
-            # 2) Simulação de compra USDT -> token
+            # 2) Buy simulation USDT -> token
             buy = self._amounts_out(amount_in, [self._usdt, token])
             expected_out = buy[-1]
             if expected_out <= 0:
                 return ValidationResult(False, symbol, token, reason=RejectReason.NO_LIQUIDITY,
-                                        detail="Saída zero na simulação.")
+                                        detail="Zero output in the simulation.")
 
-            # impacto de preço: taxa efetiva vs taxa de referência (1 USDT)
+            # price impact: effective rate vs reference rate (1 USDT)
             ref_in = 10 ** usdt_dec
             ref_out = self._amounts_out(ref_in, [self._usdt, token])[-1]
-            rate_ref = ref_out / ref_in            # tokens por unidade base de USDT (sem impacto)
-            rate_eff = expected_out / amount_in     # tokens por unidade base (nossa ordem)
+            rate_ref = ref_out / ref_in            # tokens per base unit of USDT (no impact)
+            rate_eff = expected_out / amount_in     # tokens per base unit (our order)
             price_impact_pct = max((rate_ref - rate_eff) / rate_ref * 100.0, 0.0)
 
             if price_impact_pct > self._cfg.max_slippage_pct:
                 return ValidationResult(False, symbol, token, estimated_slippage_pct=price_impact_pct,
                                         reason=RejectReason.HIGH_SLIPPAGE,
-                                        detail=f"Impacto {price_impact_pct:.3f}% > teto {self._cfg.max_slippage_pct}%.")
+                                        detail=f"Impact {price_impact_pct:.3f}% > cap {self._cfg.max_slippage_pct}%.")
 
-            # 3) Taxa oculta (round-trip): vende de volta e mede retenção
+            # 3) Hidden tax (round-trip): sell back and measure retention
             sell_back = self._amounts_out(expected_out, [token, self._usdt])[-1]
             retention = sell_back / amount_in
-            # esperado sem taxa: duas fees de pool + 2x o impacto de preço
+            # expected without tax: two pool fees + 2x the price impact
             expected_retention = (1 - _PCS_FEE_PER_HOP) ** 2 * (1 - 2 * price_impact_pct / 100.0)
-            # tolerância de 1% para ruído/arredondamento
+            # 1% tolerance for noise/rounding
             if retention < expected_retention - 0.01:
                 perda = (1 - retention) * 100.0
                 return ValidationResult(False, symbol, token, reason=RejectReason.BURNING_TAX,
-                                        detail=f"Round-trip retém só {retention*100:.2f}% (perda {perda:.2f}%) → taxa oculta.")
+                                        detail=f"Round-trip retains only {retention*100:.2f}% (loss {perda:.2f}%) → hidden tax.")
 
-            # 4) Dessincronização de oráculo (se a CMC forneceu preço)
+            # 4) Oracle desync (if CMC provided a price)
             divergence_pct = None
             if cmc_price_usd and cmc_price_usd > 0:
                 onchain = self.onchain_price_usd(token)
@@ -477,15 +477,15 @@ class BNBValidator:
                 if divergence_pct > self._cfg.oracle_divergence_max_pct:
                     return ValidationResult(False, symbol, token, oracle_divergence_pct=divergence_pct,
                                             reason=RejectReason.ORACLE_DESYNC,
-                                            detail=f"Divergência {divergence_pct:.2f}% (on-chain {onchain:.6f} vs CMC {cmc_price_usd:.6f}).")
+                                            detail=f"Divergence {divergence_pct:.2f}% (on-chain {onchain:.6f} vs CMC {cmc_price_usd:.6f}).")
 
             min_out = int(expected_out * (1 - self._cfg.max_slippage_pct / 100.0))
             return ValidationResult(True, symbol, token,
                                     estimated_slippage_pct=price_impact_pct,
                                     oracle_divergence_pct=divergence_pct,
                                     expected_out=expected_out, min_out=min_out,
-                                    detail="Aprovado pelo Filtro 2.")
+                                    detail="Approved by Filter 2.")
 
-        except Exception as exc:  # noqa: BLE001 — pool inexistente / par sem liquidez revertem aqui
+        except Exception as exc:  # noqa: BLE001 — nonexistent pool / pair without liquidity revert here
             return ValidationResult(False, symbol, token, reason=RejectReason.NO_LIQUIDITY,
-                                    detail=f"Erro on-chain (pool inexistente ou sem liquidez): {exc}")
+                                    detail=f"On-chain error (nonexistent pool or no liquidity): {exc}")

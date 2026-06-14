@@ -1,19 +1,19 @@
-"""Cliente x402 real para a CoinMarketCap, com assinatura via BNB AI Agent SDK.
+"""Real x402 client for CoinMarketCap, with signing via the BNB AI Agent SDK.
 
-Por que isto existe e por que o twak não bastava: o endpoint da CMC é MCP e exige
-o header `Accept: application/json, text/event-stream` que o cliente x402 do twak
-não enviava (dava 400). Aqui controlamos o HTTP, então mandamos o header certo,
-recebemos o desafio 402 (`PAYMENT-REQUIRED`), assinamos a autorização de pagamento
-com o `X402Signer` do `bnbagent` e reenviamos com o header `PAYMENT-SIGNATURE`.
+Why this exists and why twak wasn't enough: the CMC endpoint is MCP and requires
+the `Accept: application/json, text/event-stream` header that the twak x402 client
+did not send (it returned 400). Here we control the HTTP, so we send the right header,
+receive the 402 challenge (`PAYMENT-REQUIRED`), sign the payment authorization
+with `bnbagent`'s `X402Signer` and resend with the `PAYMENT-SIGNATURE` header.
 
-O esquema usado é o x402 v2 `exact` com EIP-3009 `TransferWithAuthorization`
-(assinatura off-chain, gasless) em USDC na Base — a opção mais simples e a que já
-temos fundos. A CMC também aceita pagamento em USDC/United Stables na BNB Chain
-(permit2), exposto em `pick_accept(..., prefer_network=...)`.
+The scheme used is x402 v2 `exact` with EIP-3009 `TransferWithAuthorization`
+(off-chain, gasless signature) in USDC on Base — the simplest option and the one we
+already have funds for. CMC also accepts payment in USDC/United Stables on the BNB Chain
+(permit2), exposed in `pick_accept(..., prefer_network=...)`.
 
-Custódia: quem assina é a carteira passada ao `X402Signer` (o SDK exige que
-`message['from']` seja essa carteira). Logo a carteira pagadora precisa de fato
-deter o USDC. Mantemos isso fora deste módulo (o chamador injeta a carteira/signer).
+Custody: the signer is the wallet passed to `X402Signer` (the SDK requires that
+`message['from']` be that wallet). So the paying wallet must in fact
+hold the USDC. We keep that outside this module (the caller injects the wallet/signer).
 """
 from __future__ import annotations
 
@@ -28,18 +28,18 @@ from typing import Any
 CMC_X402_URL = "https://mcp.coinmarketcap.com/x402/mcp"
 _ACCEPT = "application/json, text/event-stream"
 
-# Ativos de pagamento que a CMC aceita (chainId, contrato, decimais). Usados para
-# montar um allowlist ENXUTO na SigningPolicy do bnbagent: o agente só assina
-# pagamentos para estes domínios conhecidos, nunca um contrato arbitrário.
+# Payment assets that CMC accepts (chainId, contract, decimals). Used to
+# build a LEAN allowlist in bnbagent's SigningPolicy: the agent only signs
+# payments to these known domains, never an arbitrary contract.
 USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"   # 6 dec, chainId 8453
 USDC_BSC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d"    # 18 dec, chainId 56
 UNITED_STABLES_BSC = "0xcE24439F2D9C6a2289F741120FE202248B666666"  # 18 dec, chainId 56
 _PAYMENT_DOMAINS = {(8453, USDC_BASE), (56, USDC_BSC), (56, UNITED_STABLES_BSC)}
-# Teto por chamada (base units). Uma chamada custa ~$0.01; capamos bem acima disso
-# para barrar um desafio 402 malicioso com `value` inflado.
+# Cap per call (base units). One call costs ~$0.01; we cap well above that
+# to block a malicious 402 challenge with an inflated `value`.
 _MAX_VALUE = {USDC_BASE: 100_000, USDC_BSC: 10**17, UNITED_STABLES_BSC: 10**17}
 
-# EIP-3009 TransferWithAuthorization (esquema x402 "exact" em EVM).
+# EIP-3009 TransferWithAuthorization (x402 "exact" scheme on EVM).
 _EIP3009_TYPES = {
     "TransferWithAuthorization": [
         {"name": "from", "type": "address"},
@@ -53,14 +53,14 @@ _EIP3009_TYPES = {
 
 
 class X402Error(RuntimeError):
-    """Falha no fluxo de pagamento x402 (desafio, assinatura ou liquidação)."""
+    """Failure in the x402 payment flow (challenge, signature or settlement)."""
 
 
 def signing_policy():
-    """SigningPolicy do bnbagent liberando SÓ os ativos de pagamento da CMC.
+    """bnbagent SigningPolicy allowing ONLY the CMC payment assets.
 
-    Mantém todas as outras defesas (tipo primário, janela de validade); apenas
-    estende o allowlist de domínios para os contratos USDC/United Stables conhecidos.
+    Keeps all other defenses (primary type, validity window); it only
+    extends the domain allowlist to the known USDC/United Stables contracts.
     """
     from web3 import Web3
 
@@ -70,7 +70,7 @@ def signing_policy():
 
 
 def make_signer(wallet):
-    """Embrulha uma carteira bnbagent num X402Signer com teto por chamada."""
+    """Wraps a bnbagent wallet in an X402Signer with a per-call cap."""
     from bnbagent import X402Signer
 
     from web3 import Web3
@@ -79,9 +79,9 @@ def make_signer(wallet):
 
 
 def open_signer(password: str, wallets_dir: str, address: str | None = None):
-    """Abre a carteira pagadora (com a SigningPolicy da CMC) e devolve o X402Signer.
+    """Opens the paying wallet (with the CMC SigningPolicy) and returns the X402Signer.
 
-    A SigningPolicy é aplicada pela própria carteira, então precisa ser passada aqui.
+    The SigningPolicy is applied by the wallet itself, so it must be passed here.
     """
     from bnbagent import EVMWalletProvider
     wallet = EVMWalletProvider(password=password, persist=True, wallets_dir=wallets_dir,
@@ -103,7 +103,7 @@ def _post(payload: dict, extra_headers: dict | None = None) -> tuple[int, dict, 
 
 
 def _parse_mcp(text: str) -> Any:
-    """O endpoint responde JSON ou SSE (event-stream). Extrai o JSON-RPC result."""
+    """The endpoint responds with JSON or SSE (event-stream). Extracts the JSON-RPC result."""
     text = text.strip()
     if text.startswith("{"):
         return json.loads(text)
@@ -117,31 +117,31 @@ def _parse_mcp(text: str) -> Any:
                     return json.loads(chunk)
                 except json.JSONDecodeError:
                     continue
-    raise X402Error(f"Resposta MCP não-parseável: {text[:200]}")
+    raise X402Error(f"Unparseable MCP response: {text[:200]}")
 
 
 def list_tools() -> list[dict]:
-    """Lista os tools do MCP da CMC (gratuito, sem pagamento)."""
+    """Lists the tools of CMC's MCP (free, no payment)."""
     st, _, body = _post({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     if st != 200:
-        raise X402Error(f"tools/list falhou: HTTP {st}")
+        raise X402Error(f"tools/list failed: HTTP {st}")
     data = _parse_mcp(body)
     return data.get("result", {}).get("tools", [])
 
 
 def decode_challenge(headers: dict) -> dict:
-    """Decodifica o header PAYMENT-REQUIRED (base64 JSON) do desafio 402."""
+    """Decodes the PAYMENT-REQUIRED header (base64 JSON) of the 402 challenge."""
     raw = headers.get("PAYMENT-REQUIRED") or headers.get("Payment-Required")
     if not raw:
-        raise X402Error("desafio 402 sem header PAYMENT-REQUIRED")
+        raise X402Error("402 challenge without PAYMENT-REQUIRED header")
     return json.loads(base64.b64decode(raw))
 
 
 def pick_accept(challenge: dict, prefer_network: str = "eip155:8453",
                 method: str = "eip3009") -> dict:
-    """Escolhe a forma de pagamento. Padrão: USDC na Base via EIP-3009 (mais simples).
+    """Chooses the payment method. Default: USDC on Base via EIP-3009 (simplest).
 
-    Cai para a primeira opção compatível com `method` se a rede preferida não existir.
+    Falls back to the first option compatible with `method` if the preferred network doesn't exist.
     """
     accepts = challenge.get("accepts", [])
     for a in accepts:
@@ -152,18 +152,18 @@ def pick_accept(challenge: dict, prefer_network: str = "eip155:8453",
             return a
     if accepts:
         return accepts[0]
-    raise X402Error("desafio 402 sem opções de pagamento (accepts vazio)")
+    raise X402Error("402 challenge without payment options (accepts empty)")
 
 
 def _build_payment_header(signer, challenge: dict, accept: dict, from_addr: str) -> str:
-    """Assina a autorização EIP-3009 e monta o header PAYMENT-SIGNATURE (x402 v2)."""
+    """Signs the EIP-3009 authorization and builds the PAYMENT-SIGNATURE header (x402 v2)."""
     chain_id = int(accept["network"].split(":")[1])
     asset = accept["asset"]
     pay_to = accept["payTo"]
     value = int(accept["amount"])
     extra = accept.get("extra", {})
     now = int(time.time())
-    valid_after = now - 10  # leve folga p/ clock skew; janela curta p/ a SigningPolicy
+    valid_after = now - 10  # slight slack for clock skew; short window for the SigningPolicy
     valid_before = now + int(accept.get("maxTimeoutSeconds", 60)) + 60
     nonce = "0x" + secrets.token_bytes(32).hex()
 
@@ -180,7 +180,7 @@ def _build_payment_header(signer, challenge: dict, accept: dict, from_addr: str)
     if isinstance(signature, str) and not signature.startswith("0x"):
         signature = "0x" + signature
 
-    # x402 v2: top-level `resource` + `accepted` (eco do requisito) + `payload`.
+    # x402 v2: top-level `resource` + `accepted` (echo of the requirement) + `payload`.
     envelope = {
         "x402Version": 2,
         "resource": challenge.get("resource", {}),
@@ -198,10 +198,10 @@ def _build_payment_header(signer, challenge: dict, accept: dict, from_addr: str)
 
 
 def call_tool(name: str, arguments: dict, signer, *, prefer_network: str = "eip155:8453") -> dict:
-    """Chama um tool pago da CMC via x402: tenta -> 402 -> assina -> reenvia.
+    """Calls a paid CMC tool via x402: tries -> 402 -> signs -> resends.
 
-    `signer` é um bnbagent.X402Signer cuja carteira detém o ativo de pagamento.
-    Retorna {paid, status, result|error, amount, network, asset}.
+    `signer` is a bnbagent.X402Signer whose wallet holds the payment asset.
+    Returns {paid, status, result|error, amount, network, asset}.
     """
     rpc = {"jsonrpc": "2.0", "id": 7, "method": "tools/call",
            "params": {"name": name, "arguments": arguments}}
@@ -209,7 +209,7 @@ def call_tool(name: str, arguments: dict, signer, *, prefer_network: str = "eip1
     if st == 200:
         return {"paid": False, "status": 200, "result": _parse_mcp(body)}
     if st != 402:
-        raise X402Error(f"esperava 402, veio HTTP {st}: {body[:200]}")
+        raise X402Error(f"expected 402, got HTTP {st}: {body[:200]}")
 
     challenge = decode_challenge(headers)
     accept = pick_accept(challenge, prefer_network=prefer_network)

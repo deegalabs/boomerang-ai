@@ -1,11 +1,11 @@
-"""Carregamento de configuração (config.json) e segredos (.env).
+"""Loading of configuration (config.json) and secrets (.env).
 
-Separa claramente as três camadas de regras:
-  - user       → ajustável pelo dono via Telegram
-  - dev_safety → leis de segurança imutáveis (código)
-  - hackathon  → regras fixas do evento
+Clearly separates the three layers of rules:
+  - user       → adjustable by the owner via Telegram
+  - dev_safety → immutable safety laws (code)
+  - hackathon  → fixed event rules
 
-Segredos NUNCA vêm do config.json; só do ambiente (.env / variáveis de SO).
+Secrets NEVER come from config.json; only from the environment (.env / OS variables).
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from typing import Any
 
 try:
     from dotenv import load_dotenv
-except ImportError:  # dotenv é opcional em produção (segredos podem vir do SO)
+except ImportError:  # dotenv is optional in production (secrets can come from the OS)
     def load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
         return False
 
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 @dataclass(frozen=True)
 class Secrets:
-    """Segredos vindos do ambiente. Nunca logar nem serializar."""
+    """Secrets coming from the environment. Never log or serialize."""
 
     agent_private_key: str | None
     wallet_password: str | None
@@ -60,7 +60,7 @@ class Secrets:
 
 @dataclass(frozen=True)
 class Config:
-    """Configuração não-secreta carregada de config.json."""
+    """Non-secret configuration loaded from config.json."""
 
     user: dict[str, Any]
     dev_safety: dict[str, Any]
@@ -70,12 +70,12 @@ class Config:
     loop: dict[str, Any]
     secrets: Secrets = field(repr=False)
 
-    # ── Atalhos de leitura usados em todo o projeto ──────────────────────────
+    # ── Read shortcuts used across the whole project ─────────────────────────
     @property
     def position_size_pct(self) -> float:
-        """Tamanho por trade (% da banca). O USUÁRIO escolhe (camada user, via
-        Telegram); na ausência, cai no default seguro do dev_safety. Sempre limitado
-        por max_position_pct e pelo stable disponível, no motor de risco."""
+        """Size per trade (% of the bankroll). The USER chooses (user layer, via
+        Telegram); in its absence, falls back to the safe default from dev_safety. Always
+        limited by max_position_pct and by the available stable, in the risk engine."""
         user_pct = self.user.get("position_size_pct")
         return float(user_pct) if user_pct is not None else float(self.dev_safety["position_size_pct"])
 
@@ -97,19 +97,19 @@ class Config:
 
     @property
     def min_pool_liquidity_usd(self) -> float:
-        """Profundidade mínima do pool (em USD, lado WBNB) p/ operar — protege contra
-        pools rasos/manipuláveis mesmo dentro da whitelist."""
+        """Minimum pool depth (in USD, WBNB side) to trade — protects against
+        shallow/manipulable pools even within the whitelist."""
         return float(self.dev_safety.get("min_pool_liquidity_usd", 15000.0))
 
     @property
     def max_pool_share_pct(self) -> float:
-        """Fração máxima do pool que um trade pode representar (limita impacto de preço)."""
+        """Maximum fraction of the pool a single trade can represent (limits price impact)."""
         return float(self.dev_safety.get("max_pool_share_pct", 1.0))
 
     @property
     def max_entry_24h_pct(self) -> float:
-        """Trava dura anti-topo: recusa ENTRAR num token que já subiu mais que isso em 24h
-        (risco de blow-off top / reversão). Determinístico — não depende do LLM."""
+        """Hard anti-top lock: refuses to ENTER a token that already rose more than this in 24h
+        (blow-off top / reversal risk). Deterministic — does not depend on the LLM."""
         return float(self.dev_safety.get("max_entry_24h_pct", 25.0))
 
     @property
@@ -134,7 +134,7 @@ class Config:
 
     @property
     def min_confidence_score(self) -> int:
-        """Corte de confiança, sensível ao modo escolhido pelo usuário."""
+        """Confidence cutoff, sensitive to the mode chosen by the user."""
         mode = str(self.user.get("mode", "conservative")).lower()
         key = f"min_confidence_score_{mode}"
         return int(self.dev_safety.get(key, self.dev_safety["min_confidence_score"]))
@@ -145,7 +145,7 @@ class Config:
 
     @property
     def user_take_profit_pct(self) -> float:
-        """Lucro-alvo por trade (% acima da entrada). 0 = desativado (deixa o trailing correr)."""
+        """Take-profit per trade (% above entry). 0 = disabled (lets the trailing run)."""
         return float(self.user.get("take_profit_pct", 0.0) or 0.0)
 
     @property
@@ -158,25 +158,25 @@ class Config:
 
     @property
     def daily_loss_cap_pct(self) -> float:
-        """Limite de perda intradiária (% sobre o patrimônio do início do dia, UTC).
-        Complementa o disjuntor de pico histórico: protege de um único dia ruim. 0 = off."""
+        """Intraday loss cap (% over the day's opening equity, UTC).
+        Complements the all-time-peak circuit breaker: protects from a single bad day. 0 = off."""
         return float(self.dev_safety.get("daily_loss_cap_pct", 0.0) or 0.0)
 
     @property
     def max_hold_hours(self) -> float:
-        """Saída por tempo: horas após as quais uma posição parada (sem trailing, PnL na
-        faixa morta) é encerrada p/ liberar capital. 0 = desativado."""
+        """Time-based exit: hours after which a stalled position (no trailing, PnL in the
+        dead band) is closed to free up capital. 0 = disabled."""
         return float(self.dev_safety.get("max_hold_hours", 0.0) or 0.0)
 
     @property
     def stale_pnl_band_pct(self) -> float:
-        """Faixa morta de PnL (±%) que caracteriza 'capital parado' na saída por tempo."""
+        """PnL dead band (±%) that characterizes 'idle capital' in the time-based exit."""
         return float(self.dev_safety.get("stale_pnl_band_pct", 1.5))
 
     @property
     def stable_depeg_bps(self) -> float:
-        """Desvio (em bps) da stable de trade em relação a $1 que dispara o depeg guard
-        (bloqueia novas entradas + alerta). 100 bps = 1%. 0 = desativado."""
+        """Deviation (in bps) of the trade stable from $1 that triggers the depeg guard
+        (blocks new entries + alerts). 100 bps = 1%. 0 = disabled."""
         return float(self.dev_safety.get("stable_depeg_bps", 0.0) or 0.0)
 
     @property
@@ -193,7 +193,7 @@ class Config:
 
 
 def load_config(path: str | Path | None = None) -> Config:
-    """Carrega .env + config.json e devolve um objeto Config validado."""
+    """Loads .env + config.json and returns a validated Config object."""
     load_dotenv(ROOT / ".env")
     cfg_path = Path(path) if path else ROOT / "config.json"
     data = json.loads(cfg_path.read_text(encoding="utf-8"))
