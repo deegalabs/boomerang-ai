@@ -271,7 +271,8 @@ class AttentionAnalyzer:
         "- Interesse/liquidez: volume_24h_usd, volume_change_24h_pct, turnover_24h_pct\n"
         "- Estrutura: market_cap_usd; derivados trend_aligned_up/down, accelerating,\n"
         "  overextended_24h\n"
-        "- Contexto global: btc_dominance_pct, total_market_cap_usd, total_volume_24h_usd\n\n"
+        "- Contexto global: btc_dominance_pct, stablecoin_dominance_pct (alta = risk-off,\n"
+        "  capital fugindo pra stable), total_market_cap_usd, total_volume_24h_usd\n\n"
         "TESE (arbitragem de atencao): favoreca quem tem INTERESSE (volume) subindo e momentum\n"
         "positivo/jovem (ainda nao esticou), em sintonia entre os prazos. Em mercado lateral,\n"
         "o melhor candidato disponivel com volume subindo e leve vies de alta JA e operavel\n"
@@ -334,10 +335,16 @@ class AttentionAnalyzer:
         try:
             d = await self._cmc.rest_global()
             u = d.get("quote", {}).get("USD", {})
+            sc, tot = u.get("stablecoin_market_cap"), u.get("total_market_cap")
+            # Dominância de stablecoin = capital "estacionado" fora de risco. Subindo =
+            # dinheiro fugindo pra stable (risk-off), mesmo com BTC de lado. Sinal macro
+            # que a variação do BTC sozinha não captura.
+            stable_dom = (sc / tot * 100.0) if (sc and tot) else None
             return {
                 "btc_dominance_pct": d.get("btc_dominance"),
                 "eth_dominance_pct": d.get("eth_dominance"),
-                "total_market_cap_usd": u.get("total_market_cap"),
+                "stablecoin_dominance_pct": round(stable_dom, 2) if stable_dom is not None else None,
+                "total_market_cap_usd": tot,
                 "total_volume_24h_usd": u.get("total_volume_24h"),
             }
         except Exception as exc:  # noqa: BLE001
