@@ -153,6 +153,43 @@ def register(
     return card
 
 
+def commit_prediction(pred: dict, *, password: str | None = None) -> dict | None:
+    """SELA o raciocínio de um trade ON-CHAIN (ERC-8004) ANTES da execução — prova
+    anti-fabricação: o porquê é gravado antes do RESULTADO existir. Best-effort e
+    GAS-FREE (paymaster MegaFuel). Nunca interrompe o trade (o chamador não espera).
+
+    pred: {symbol, score, volatility, ch24, rationale, ts}. Retorna {key, hash, tx} ou None.
+    """
+    card = load_card()
+    if not card or not card.get("agent_id"):
+        return None
+    try:
+        import json as _json
+
+        from web3 import Web3
+
+        from bnbagent import ERC8004Agent, EVMWalletProvider
+        pw = password or _password()
+        if not pw:
+            return None
+        # hash keccak256 do raciocínio canônico (igual convenção Ethereum/ERC-8004).
+        canonical = "|".join(str(pred.get(k, "")) for k in
+                             ("symbol", "score", "volatility", "ch24", "rationale", "ts"))
+        h = Web3.keccak(text=canonical).hex()
+        wallet = EVMWalletProvider(password=pw, persist=True, wallets_dir=str(IDENTITY_DIR))
+        sdk = ERC8004Agent(wallet_provider=wallet, network=card.get("network", DEFAULT_NETWORK))
+        key = f"pred_{pred.get('ts')}_{pred.get('symbol')}"[:60]
+        value = _json.dumps({"hash": h, "sym": pred.get("symbol"), "dir": "BUY",
+                             "conf": pred.get("score"), "vol": pred.get("volatility"),
+                             "ts": pred.get("ts")}, separators=(",", ":"))[:480]
+        result = sdk.set_metadata(agent_id=card["agent_id"], key=key, value=value)
+        if isinstance(result, dict) and result.get("success"):
+            return {"key": key, "hash": h, "tx": result.get("transactionHash")}
+        return None
+    except Exception:  # noqa: BLE001 — accountability é camada extra; nunca derruba o trade
+        return None
+
+
 def publish_track_record(stats: dict, *, password: str | None = None) -> dict | None:
     """SKILL Reputação on-chain: grava o histórico de performance do agente como
     metadata ERC-8004 verificável (chave 'track_record'). Best-effort — qualquer

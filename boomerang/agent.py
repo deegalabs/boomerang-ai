@@ -653,6 +653,9 @@ class BoomerangAgent:
                 var24 = abs(float(quotes[symbol].get("percent_change_24h") or 0.0))
                 tier = verdict.volatility or tier_from_var(var24)
                 sl_pct, _tp_pct = dynamic_sl_tp(tier, var24)
+                # ERC-8004: SELA o raciocínio on-chain ANTES de executar (não-bloqueante —
+                # dispara e segue; se falhar, o trade acontece igual). Prova anti-fabricação.
+                asyncio.create_task(self._commit_prediction(symbol, verdict, ch24, now))
                 # SKILL Saída assimétrica: corta perda curta (stop dinâmico) mas DEIXA O
                 # VENCEDOR CORRER — tp_pct=0 → sem teto fixo; o trailing protege e acompanha
                 # o pico (ratchet). O brilho do leaderboard vem dos grandes vencedores.
@@ -895,6 +898,23 @@ class BoomerangAgent:
                      + " — seja MAIS seletivo neles.")
         note += " Use isso p/ calibrar conviccao: se vem perdendo, suba a barra; se acertando, confie."
         return note
+
+    async def _commit_prediction(self, symbol: str, verdict, ch24: float, now: float) -> None:
+        """Sela o raciocínio ON-CHAIN antes da execução (anti-fabricação). NÃO-BLOQUEANTE
+        e best-effort: roda em paralelo ao swap; se falhar, o trade acontece igual."""
+        pred = {"symbol": symbol, "score": verdict.confidence_score,
+                "volatility": verdict.volatility, "ch24": round(ch24, 1),
+                "rationale": verdict.rationale[:220], "ts": int(now)}
+        try:
+            res = await asyncio.to_thread(identity.commit_prediction, pred)
+            if res:
+                self._log.info("PRÉ-COMMIT on-chain | %s hash=%s tx=%s",
+                               symbol, res["hash"][:14], res.get("tx"))
+                await self._emit(AlertType.STARTED, "🔒 Raciocínio selado on-chain (pré-execução)",
+                                 f"{symbol}: a tese foi gravada na BNB Chain ANTES do trade — "
+                                 "prova verificável, não dá pra inventar depois.", tx=res.get("tx"))
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("Pré-commit on-chain falhou (ignorado): %s", exc)
 
     async def _publish_reputation(self) -> None:
         """SKILL Reputação on-chain: publica o histórico (trades/win-rate/PnL) como
