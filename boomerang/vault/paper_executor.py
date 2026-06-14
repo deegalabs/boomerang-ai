@@ -12,7 +12,6 @@ de um pouco de USDC na Base (dados), nada de USDT/BNB de trade.
 from __future__ import annotations
 
 import logging
-import time
 
 from boomerang.config import Config
 from boomerang.types import ExecutionResult

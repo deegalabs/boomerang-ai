@@ -1,7 +1,6 @@
 """Eventos/alertas emitidos pelo agente e consumidos pela interface."""
 from __future__ import annotations
 
-import asyncio
 import inspect
 from dataclasses import dataclass, field
 from enum import Enum

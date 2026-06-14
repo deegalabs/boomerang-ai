@@ -23,7 +23,6 @@ import json
 import logging
 import os
 import subprocess
-from pathlib import Path
 
 from boomerang.config import Config
 from boomerang.types import ExecutionResult

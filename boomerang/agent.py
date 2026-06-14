@@ -17,9 +17,9 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from boomerang.brain.cmc_analyzer import AttentionAnalyzer, momentum_prescore, passes_prefilter
+from boomerang.brain.cmc_analyzer import AttentionAnalyzer, momentum_prescore
 from boomerang.risk.risk_engine import (
-    conviction_size_pct, dynamic_sl_tp, market_regime, overextension_factor, tier_from_var)
+    conviction_size_pct, market_regime, overextension_factor)
 from boomerang import market_cache
 from boomerang.config import Config
 from boomerang.identity import bnb_agent as identity
@@ -741,7 +741,7 @@ class BoomerangAgent:
         radar = f" · Radar: +{len(movers)} movers" if movers else ""
         reg = f" · Regime: {regime_label}({cut_adjust:+d})" if regime_label != "NEUTRO" else ""
         detail = (f"Analisei {len(prescores)} tokens (momentum){radar}{reg}. Top: {top_str}. "
-                  f"Candidatos p/ IA: {len(candidates)} · Claude: {claude_calls} chamada(s)."
+                  f"Candidatos p/ IA: {len(fired)} · Claude: {claude_calls} chamada(s)."
                   f"{melhor}{gate_note}{rot_note} Sem entrada.")
         self._log.info("CICLO | %s", detail)  # visibilidade no log do servidor
         await self._emit(AlertType.SCAN, "Ciclo concluído", detail)
@@ -1036,7 +1036,9 @@ class BoomerangAgent:
         if equity <= 0 and not halted_event:
             return
         peak = self._risk.peak_equity
-        to_bps = lambda pct: int(round((pct or 0.0) * 100))  # 1% = 100 bps
+
+        def to_bps(pct: float | None) -> int:  # 1% = 100 bps
+            return int(round((pct or 0.0) * 100))
         state = {
             "peak": round(peak, 2), "equity": round(equity, 2),
             "drawdown_bps": to_bps(self._risk.current_drawdown_pct(equity)),

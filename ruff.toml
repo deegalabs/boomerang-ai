@@ -1,0 +1,11 @@
+# Ruff config — Boomerang AI.
+# Phase 0 baseline: real-error rules (pyflakes + key pycodestyle). Style/idiom
+# rules (imports order, naming, etc.) are expanded in later phases.
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+
+[lint.per-file-ignores]
+"tests/*" = ["E402"]

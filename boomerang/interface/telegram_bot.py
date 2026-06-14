@@ -233,7 +233,8 @@ class TelegramInterface:
         for sym in self._agent._token_addr.keys():  # todas as moedas-foco elegíveis
             line.append(InlineKeyboardButton(sym, callback_data=f"tok_{sym}"))
             if len(line) == 4:
-                rows.append(line); line = []
+                rows.append(line)
+                line = []
         if line:
             rows.append(line)
         await q.edit_message_text(
@@ -279,7 +280,7 @@ class TelegramInterface:
             [InlineKeyboardButton("↩️ Voltar", callback_data="cfg")],
         ])
         await q.edit_message_text(
-            f"⚙️ *Configuração — Passo 4 de 4*\nLucro-alvo definido.\n\n"
+            "⚙️ *Configuração — Passo 4 de 4*\nLucro-alvo definido.\n\n"
             "📊 Qual o *tamanho de cada trade* (quanto da sua banca eu aposto por operação)?\n\n"
             "_Banca pequena pede tamanho maior: trades de 5% somem no gás. "
             "Mesmo apostando mais, o disjuntor de drawdown continua te protegendo._",
@@ -309,7 +310,8 @@ class TelegramInterface:
         for sym in self._agent.token_focus:  # set curado e líquido que você configurou
             line.append(InlineKeyboardButton(sym, callback_data=f"mbuy_{sym}"))
             if len(line) == 4:
-                rows.append(line); line = []
+                rows.append(line)
+                line = []
         if line:
             rows.append(line)
         rows.append([InlineKeyboardButton("↩️ Voltar", callback_data="back_home")])
