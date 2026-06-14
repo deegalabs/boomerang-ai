@@ -361,3 +361,15 @@ def conviction_size_pct(base_pct: float, score: int, max_pct: float = 50.0) -> f
     mult = 1.0 + (score - 62) * 0.03
     mult = max(0.6, min(mult, 2.0))
     return round(min(base_pct * mult, max_pct), 2)
+
+
+# ── Integridade da leitura de equity (anti falso-disjuntor) ───────────────────
+def equity_reading_reliable(holdings: list, position_symbols) -> bool:
+    """True se TODA posição aberta aparece PRECIFICADA (value_usd > 0) no breakdown.
+
+    Se uma posição que sabemos ter não foi precificada (RPC limitado / sem rota de preço),
+    a equity volta DEFLACIONADA e NÃO pode disparar o disjuntor de drawdown — senão um
+    soluço de preço liquidaria a carteira por engano."""
+    priced = {str(h.get("symbol", "")).upper()
+              for h in holdings if (h.get("value_usd") or 0) > 0}
+    return all(str(s).upper() in priced for s in position_symbols)

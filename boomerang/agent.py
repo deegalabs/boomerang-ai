@@ -19,7 +19,7 @@ from pathlib import Path
 
 from boomerang.brain.cmc_analyzer import AttentionAnalyzer, momentum_prescore
 from boomerang.risk.risk_engine import (
-    conviction_size_pct, market_regime, overextension_factor)
+    conviction_size_pct, equity_reading_reliable, market_regime, overextension_factor)
 from boomerang import market_cache
 from boomerang.config import Config
 from boomerang.identity import bnb_agent as identity
@@ -112,13 +112,13 @@ class BoomerangAgent:
         await self._alerts.emit(Alert(type_, title, detail, data))
 
     # ── medição de patrimônio (equity) ───────────────────────────────────────
-    def _equity_usd(self) -> float:
-        """Patrimônio total em USD lido ON-CHAIN (conta BNB + stables + TODOS os
-        tokens, inclusive a posição aberta). É a base correta do drawdown/circuit
-        breaker. Cai no portfolio do TWAK só se a leitura on-chain falhar.
+    def _equity_usd_checked(self) -> tuple[float, bool]:
+        """Patrimônio total em USD lido ON-CHAIN + flag de CONFIABILIDADE.
 
-        Bugfix (8 jun): o portfolio do TWAK não somava o token da posição → equity
-        caía ao abrir trade e inflava o drawdown (disparava o disjuntor por engano).
+        A leitura é NÃO-confiável quando uma posição aberta não pôde ser precificada
+        (RPC limitado / sem rota de preço) — aí a equity vem deflacionada e NÃO deve
+        disparar o disjuntor de drawdown. Cai no portfolio do TWAK (fonte de preço
+        própria, tratada como confiável) só se a leitura on-chain falhar inteira.
         """
         addr = self.agent_address
         if addr:
@@ -126,11 +126,17 @@ class BoomerangAgent:
                 bd = self._validator.wallet_breakdown(addr)
                 total = float(bd.get("total_usd") or 0.0)
                 if total > 0:
-                    self._last_holdings = bd.get("holdings", [])
-                    return total
+                    holdings = bd.get("holdings", [])
+                    self._last_holdings = holdings
+                    reliable = equity_reading_reliable(holdings, [p.symbol for p in self.positions])
+                    return total, reliable
             except Exception as exc:  # noqa: BLE001
                 self._log.warning("Equity on-chain indisponível (%s); usando TWAK.", exc)
-        return self._executor.portfolio_usd(self._password)
+        return self._executor.portfolio_usd(self._password), True
+
+    def _equity_usd(self) -> float:
+        """Patrimônio total em USD (sem a flag — p/ status/saque/heartbeat)."""
+        return self._equity_usd_checked()[0]
 
     def _stable_usd(self) -> float:
         """Saldo da stable de trade (base_stable, ex.: USDC) em USD — o quanto o
@@ -563,9 +569,19 @@ class BoomerangAgent:
         if self.state not in (AgentState.SCANNING, AgentState.IN_POSITION):
             return
         try:
-            equity = await asyncio.to_thread(self._equity_usd)
+            equity, reliable = await asyncio.to_thread(self._equity_usd_checked)
         except TwakError as exc:
             await self._emit(AlertType.ERROR, "Equity indisponível", str(exc))
+            return
+
+        # PROTEÇÃO ANTI FALSO-DISJUNTOR: se a leitura não é íntegra (RPC limitado / posição
+        # sem rota de preço), a equity vem deflacionada. NÃO disparamos o disjuntor nem
+        # operamos neste ciclo — um soluço de preço não pode liquidar a carteira por engano.
+        # O pico/âncora também não se atualizam com dado ruim. Tenta de novo no próximo ciclo.
+        if not reliable:
+            self._log.warning(
+                "Leitura de carteira NÃO-confiável ($%.2f) — ciclo pulado (RPC/preço). "
+                "Disjuntor e trades suspensos até a leitura normalizar.", equity)
             return
 
         self._risk.update_equity(equity, now)
