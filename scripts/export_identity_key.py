@@ -20,12 +20,31 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-try:
-    from dotenv import load_dotenv
 
-    load_dotenv()
-except ImportError:
-    pass
+def _load_env() -> None:
+    """Load ROOT/.env into os.environ. Explicit path + manual fallback, so it works
+    even if python-dotenv isn't installed in the running interpreter."""
+    import os
+
+    env_path = ROOT / ".env"
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(env_path)
+    except ImportError:
+        pass
+    if not env_path.exists():
+        return
+    for raw in env_path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key, val = key.strip(), val.strip().strip('"').strip("'")
+        os.environ.setdefault(key, val)  # don't override real env vars
+
+
+_load_env()
 
 from boomerang.identity.bnb_agent import IDENTITY_DIR, _password, load_card  # noqa: E402
 
