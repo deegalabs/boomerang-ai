@@ -1,22 +1,24 @@
-# Boomerang AI — dependências
-# Núcleo on-chain (Filtro 2 / validação BSC)
-web3==7.*
+# Boomerang AI — runtime dependencies (exact pins for reproducible builds).
+# Full transitive snapshot lives in requirements.lock; dev/test tools in requirements-dev.txt.
 
-# Identidade do agente on-chain (ERC-8004) via BNB AI Agent SDK
-bnbagent>=0.3.6
+# On-chain core (Filter 2 / BSC validation)
+web3==7.16.0
 
-# Cérebro / decisão (Filtro 1)
-anthropic>=0.40
-mcp>=1.2            # cliente Model Context Protocol (CMC Agent Hub)
-httpx>=0.27         # chamadas HTTP / x402
+# On-chain agent identity (ERC-8004) via BNB AI Agent SDK
+bnbagent==0.3.6
+
+# Brain / decision (Filter 1)
+anthropic==0.107.0
+mcp==1.27.2            # Model Context Protocol client (CMC Agent Hub)
+httpx==0.28.1          # HTTP calls / x402
 
 # Interface (Process A)
-python-telegram-bot==21.*
+python-telegram-bot==21.11.1
 
-# Dashboard web (só-leitura) + site (landing/docs/console)
-starlette>=0.37
-uvicorn>=0.30
-jinja2>=3.1            # templating server-side (sem build)
+# Web dashboard (read-only) + site (landing/docs/console)
+starlette==1.2.1
+uvicorn==0.49.0
+jinja2==3.1.6          # server-side templating (no build step)
 
 # Infra
-python-dotenv>=1.0
+python-dotenv==1.2.2

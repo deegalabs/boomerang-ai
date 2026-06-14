@@ -1,0 +1,5 @@
+# Boomerang AI — dev/test/lint tools (not installed in production).
+-r requirements.txt
+
+pytest==9.0.3
+ruff==0.15.17
