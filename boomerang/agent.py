@@ -624,7 +624,7 @@ class BoomerangAgent:
         # GATE MACRO: se o BTC despenca (<= -5% em 24h), o mercado está risk-off →
         # não abre posição nova (correção sistêmica). Posições abertas seguem geridas.
         macro = await self._analyzer.gather_macro()
-        btc24, fng = macro.get("btc_24h"), macro.get("fng")
+        btc24, fng, funding = macro.get("btc_24h"), macro.get("fng"), macro.get("funding")
         # Publica o mercado REAL p/ a demo do site reusar (mesmo processo) — custo zero.
         market_cache.put(dict(quotes), btc24, fng)
         systemic = btc24 is not None and btc24 <= -5.0
@@ -635,8 +635,9 @@ class BoomerangAgent:
         if depeg is not None and depeg >= self._cfg.stable_depeg_bps > 0:
             systemic = True
             await self._maybe_alert_depeg(depeg)
-        # SKILL Adaptação por regime: preço (BTC) + SENTIMENTO (medo/ganância) calibram a postura.
-        regime_label, cut_adjust = market_regime(btc24, fng)
+        # SKILL Adaptação por regime: preço (BTC) + SENTIMENTO (medo/ganância) + ALAVANCAGEM
+        # (funding dos perpétuos) calibram a postura.
+        regime_label, cut_adjust = market_regime(btc24, fng, funding)
         gate_note = ""
         if depeg is not None and depeg >= self._cfg.stable_depeg_bps > 0:
             gate_note = f" · Gate DEPEG: stable desviou {depeg/100:.2f}% (risco sistêmico)"

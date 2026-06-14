@@ -447,8 +447,9 @@ class AttentionAnalyzer:
 
     async def gather_macro(self) -> dict:
         """Contexto MACRO p/ calibrar a postura: 24h de BTC/ETH (gate sistêmico) +
-        Índice de Medo & Ganância (sentimento do mercado)."""
+        Medo & Ganância (sentimento) + funding rate (alavancagem dos perpétuos)."""
         out: dict = {"btc_24h": None, "eth_24h": None, "fng": await self._gather_fng(),
+                     "funding": await self._gather_funding(),
                      "usdc_price": None, "usdt_price": None}
         try:
             # BTC=1, ETH=1027, USDC=3408, USDT=825 — tudo no MESMO batch (custo zero extra).
@@ -468,19 +469,53 @@ class AttentionAnalyzer:
     async def _gather_fng(self) -> int | None:
         """Índice de Medo & Ganância do mercado cripto (0-100; <25 = medo extremo,
         >75 = ganância extrema). Termômetro de SENTIMENTO que calibra o regime — em
-        euforia a barra sobe (evita o topo), em pânico também (risk-off). Fonte pública."""
+        euforia a barra sobe (evita o topo), em pânico também (risk-off).
+
+        Fonte PRIMÁRIA: CoinMarketCap (/v3/fear-and-greed, dado oficial). Fallback:
+        alternative.me (público) se a CMC falhar — o sinal nunca depende de uma só fonte."""
         import asyncio
 
         import httpx
 
-        def _go() -> int:
+        def _cmc() -> int:
+            r = httpx.get(f"{_CMC_REST}/v3/fear-and-greed/latest",
+                          headers={"X-CMC_PRO_API_KEY": self._cfg.secrets.cmc_api_key,
+                                   "Accept": "application/json"}, timeout=12)
+            r.raise_for_status()
+            return int(r.json()["data"]["value"])
+
+        def _alt() -> int:
             r = httpx.get("https://api.alternative.me/fng/", timeout=12)
             r.raise_for_status()
             return int(r.json()["data"][0]["value"])
         try:
+            return await asyncio.to_thread(_cmc)
+        except Exception as exc:  # noqa: BLE001
+            self._log.debug("F&G CMC indisponível (%s); tentando alternative.me…", exc)
+            try:
+                return await asyncio.to_thread(_alt)
+            except Exception as exc2:  # noqa: BLE001
+                self._log.debug("Sentimento (F&G) indisponível: %s", exc2)
+                return None
+
+    async def _gather_funding(self) -> float | None:
+        """Funding rate do BTC perp (Binance público, por 8h). Termômetro de ALAVANCAGEM:
+        muito positivo = longs sobre-alavancados (risco de flush/reversão → defensivo);
+        muito negativo = shorts aglomerados (viés de squeeze pra cima). Best-effort —
+        a CMC bloqueia derivativos no nosso plano, então usamos a fonte pública gratuita."""
+        import asyncio
+
+        import httpx
+
+        def _go() -> float:
+            r = httpx.get("https://fapi.binance.com/fapi/v1/premiumIndex",
+                          params={"symbol": "BTCUSDT"}, timeout=12)
+            r.raise_for_status()
+            return float(r.json()["lastFundingRate"])
+        try:
             return await asyncio.to_thread(_go)
         except Exception as exc:  # noqa: BLE001
-            self._log.debug("Sentimento (F&G) indisponível: %s", exc)
+            self._log.debug("Funding (derivativos) indisponível: %s", exc)
             return None
 
     def _effective_cut(self, metrics: dict | None, cut_adjust: int = 0) -> int:

@@ -298,15 +298,19 @@ def tier_from_var(var24h_abs: float) -> str:
 
 
 # ── SKILL: Adaptação por regime (a postura muda com o mercado) ────────────────
-def market_regime(btc_24h: float | None, fng: int | None = None) -> tuple[str, int]:
+def market_regime(btc_24h: float | None, fng: int | None = None,
+                  funding: float | None = None) -> tuple[str, int]:
     """Lê o REGIME do mercado e devolve (rótulo, ajuste-de-corte). O ajuste desloca a
     barra de entrada: BULL abaixa (mais agressivo); DEFENSIVO sobe (mais seletivo).
 
-    Combina duas leituras:
+    Combina TRÊS leituras:
       • PREÇO (BTC 24h): >= +3% → BULL (-5) · <= -2% → DEFENSIVO (+8) · senão NEUTRO.
       • SENTIMENTO (Fear & Greed 0-100): ganância extrema (>=78) sobe a barra (+5, evita
-        o topo eufórico); medo extremo (<=22) sobe a barra (+4, risk-off). Os extremos de
-        sentimento pedem mais cautela — alinhado com a proteção de capital."""
+        o topo eufórico); medo extremo (<=22) sobe a barra (+4, risk-off).
+      • ALAVANCAGEM (funding rate do BTC perp, por 8h): >= +0.05% → longs sobre-alavancados,
+        risco de flush → sobe a barra (+6, defensivo); <= -0.02% → shorts aglomerados,
+        viés de squeeze pra cima → abaixa levemente (-3, leve risk-on contrarian).
+      Os extremos pedem mais cautela — alinhado com a proteção de capital."""
     if btc_24h is None:
         label, adj = "NEUTRO", 0
     elif btc_24h >= 3.0:
@@ -320,6 +324,11 @@ def market_regime(btc_24h: float | None, fng: int | None = None) -> tuple[str, i
             label, adj = f"{label}/GANÂNCIA", adj + 5
         elif fng <= 22:
             label, adj = f"{label}/MEDO", adj + 4
+    if funding is not None:
+        if funding >= 0.0005:
+            label, adj = f"{label}/ALAVANCADO", adj + 6
+        elif funding <= -0.0002:
+            label, adj = f"{label}/SHORTS", adj - 3
     return label, adj
 
 
