@@ -275,6 +275,16 @@ def market_regime(btc_24h: float | None) -> tuple[str, int]:
     return ("NEUTRO", 0)
 
 
+# ── TRAVA anti-topo: amortece o tamanho quando o ativo já subiu demais ────────
+def overextension_factor(ch24h: float) -> float:
+    """Fator 0,5–1,0 que REDUZ o tamanho quando o 24h já esticou (risco de topo).
+    Determinístico (não depende do LLM): até +10% não mexe; de +10% a +25% cai linear
+    até a metade. Acima do teto (max_entry_24h_pct) a entrada é RECUSADA no agente."""
+    if ch24h <= 10.0:
+        return 1.0
+    return max(0.5, 1.0 - (ch24h - 10.0) / 30.0)
+
+
 # ── SKILL: Sizing por convicção (aposta escala com o confidence_score) ────────
 def conviction_size_pct(base_pct: float, score: int, max_pct: float = 50.0) -> float:
     """Escala o tamanho da posição pela CONVICÇÃO do cérebro (confidence_score).

@@ -107,6 +107,12 @@ class Config:
         return float(self.dev_safety.get("max_pool_share_pct", 1.0))
 
     @property
+    def max_entry_24h_pct(self) -> float:
+        """Trava dura anti-topo: recusa ENTRAR num token que já subiu mais que isso em 24h
+        (risco de blow-off top / reversão). Determinístico — não depende do LLM."""
+        return float(self.dev_safety.get("max_entry_24h_pct", 25.0))
+
+    @property
     def oracle_divergence_max_pct(self) -> float:
         return float(self.dev_safety["oracle_divergence_max_pct"])
 

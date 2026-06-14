@@ -19,7 +19,7 @@ from pathlib import Path
 
 from boomerang.brain.cmc_analyzer import AttentionAnalyzer, momentum_prescore, passes_prefilter
 from boomerang.risk.risk_engine import (
-    conviction_size_pct, dynamic_sl_tp, market_regime, tier_from_var)
+    conviction_size_pct, dynamic_sl_tp, market_regime, overextension_factor, tier_from_var)
 from boomerang import market_cache
 from boomerang.config import Config
 from boomerang.identity import bnb_agent as identity
@@ -629,9 +629,17 @@ class BoomerangAgent:
 
             # Tenta do MELHOR pro pior: se Filtro 2 barra OU a execução reverte, cai no próximo.
             for verdict, symbol, addr in sorted(buys, key=lambda b: -b[0].confidence_score):
-                # SKILL Sizing por convicção: aposta escala com o confidence_score.
+                ch24 = float(quotes[symbol].get("percent_change_24h") or 0.0)
+                # TRAVA DURA anti-topo (determinística, independe do LLM): pump extremo
+                # = risco de blow-off top → fica de fora.
+                if ch24 > self._cfg.max_entry_24h_pct:
+                    await self._emit(AlertType.REJECTED, f"Entrada barrada (esticado): {symbol}",
+                                     f"24h {ch24:+.1f}% > {self._cfg.max_entry_24h_pct:.0f}% — risco de topo.")
+                    continue
+                # SKILL Sizing por convicção, AMORTECIDO por esticamento (não aposta grande no topo).
                 conv_pct = conviction_size_pct(self.position_size_pct, verdict.confidence_score,
                                                max_pct=self._cfg.max_position_pct)
+                conv_pct *= overextension_factor(ch24)
                 size = self._risk.position_size_usd(equity, stable, override_pct=conv_pct)
                 val = await asyncio.to_thread(
                     self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size,
@@ -687,6 +695,8 @@ class BoomerangAgent:
         cand = next((s for s in ranked if self._addr(s) and s.upper() not in held), None)
         if not cand:
             return ""
+        if float(quotes.get(cand, {}).get("percent_change_24h") or 0.0) > self._cfg.max_entry_24h_pct:
+            return ""  # trava anti-topo: não rotaciona p/ um token esticado
         verdict = await self._analyzer.evaluate(
             cand, raw_metrics={**global_metrics, **quotes[cand]}, memory=self._performance_digest())
         if not verdict.is_buy or verdict.confidence_score < ROTATION_CUT:
