@@ -32,8 +32,18 @@ def _seed_file(env_key: str, dest: Path, *, only_if_absent: bool = False) -> Non
 
 
 def _bootstrap() -> None:
-    # TWAK's encrypted keystore (same trading wallet). Always materialized.
+    # TWAK's encrypted keystore (the trading wallet). Always materialized.
     _seed_file("TWAK_WALLET_JSON_B64", Path(os.path.expanduser("~/.twak/wallet.json")))
+    # ERC-8004 identity keystore (encrypted; SAME pattern as the trade wallet). Without it,
+    # prod generates a new wallet that isn't the agentId owner and on-chain attestation reverts
+    # "Not authorized". The keystore dir is git-ignored, so it's materialized from a base64 secret.
+    try:
+        from boomerang.identity.bnb_agent import IDENTITY_DIR, load_card
+        addr = (load_card() or {}).get("address")
+        if addr:
+            _seed_file("IDENTITY_WALLET_JSON_B64", IDENTITY_DIR / f"{addr}.json")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("identity keystore seed skipped: %s", exc)
     # Initial state (positions/peak) only the 1st time; afterwards the volume is the source of truth.
     state_dir = Path(os.getenv("BOOMERANG_STATE_DIR", "state"))
     _seed_file("STATE_SEED_B64", state_dir / "agent_state.json", only_if_absent=True)

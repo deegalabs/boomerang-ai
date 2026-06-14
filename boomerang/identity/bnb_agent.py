@@ -43,10 +43,11 @@ def _password() -> str:
 def _wallet_provider(pw: str):
     """Builds the identity wallet provider.
 
-    PRODUCTION: the keystore dir (identity_wallet/) is git-ignored and excluded from the
-    container, so a securely-injected private key (BNB_IDENTITY_PRIVATE_KEY) is used —
-    otherwise the SDK would create a NEW wallet that is NOT the owner of the agentId, and
-    every set_metadata would revert "Not authorized". LOCAL: falls back to the keystore."""
+    The keystore dir (identity_wallet/) is git-ignored, so in PRODUCTION it is materialized
+    from the IDENTITY_WALLET_JSON_B64 secret at startup (railway_start) and loaded here from the
+    keystore — the SAME encrypted pattern as the trade wallet. BNB_IDENTITY_PRIVATE_KEY is an
+    optional raw-key alternative. Either way the wallet must be the agentId OWNER, otherwise
+    set_metadata reverts "Not authorized"."""
     from bnbagent import EVMWalletProvider
     pk = os.getenv("BNB_IDENTITY_PRIVATE_KEY")
     if pk:
