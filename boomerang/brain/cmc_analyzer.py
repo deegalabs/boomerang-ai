@@ -432,18 +432,37 @@ class AttentionAnalyzer:
         return out
 
     async def gather_macro(self) -> dict:
-        """24h de BTC e ETH p/ o GATE SISTÊMICO: se o BTC despenca, o mercado está
-        risk-off e não se abre posição nova (correção sistêmica)."""
+        """Contexto MACRO p/ calibrar a postura: 24h de BTC/ETH (gate sistêmico) +
+        Índice de Medo & Ganância (sentimento do mercado)."""
+        out: dict = {"btc_24h": None, "eth_24h": None, "fng": await self._gather_fng()}
         try:
             data = await self._cmc.rest_quotes_batch([1, 1027])  # BTC=1, ETH=1027
+
+            def chg(cid: int):
+                q = (data.get(str(cid)) or {}).get("quote", {}).get("USD", {})
+                return q.get("percent_change_24h")
+            out["btc_24h"], out["eth_24h"] = chg(1), chg(1027)
         except Exception as exc:  # noqa: BLE001
             self._log.warning("Macro (BTC/ETH) indisponível: %s", exc)
-            return {}
+        return out
 
-        def chg(cid: int):
-            q = (data.get(str(cid)) or {}).get("quote", {}).get("USD", {})
-            return q.get("percent_change_24h")
-        return {"btc_24h": chg(1), "eth_24h": chg(1027)}
+    async def _gather_fng(self) -> int | None:
+        """Índice de Medo & Ganância do mercado cripto (0-100; <25 = medo extremo,
+        >75 = ganância extrema). Termômetro de SENTIMENTO que calibra o regime — em
+        euforia a barra sobe (evita o topo), em pânico também (risk-off). Fonte pública."""
+        import asyncio
+
+        import httpx
+
+        def _go() -> int:
+            r = httpx.get("https://api.alternative.me/fng/", timeout=12)
+            r.raise_for_status()
+            return int(r.json()["data"][0]["value"])
+        try:
+            return await asyncio.to_thread(_go)
+        except Exception as exc:  # noqa: BLE001
+            self._log.debug("Sentimento (F&G) indisponível: %s", exc)
+            return None
 
     def _effective_cut(self, metrics: dict | None, cut_adjust: int = 0) -> int:
         """Corte de confiança ADAPTATIVO. Momentum forte abaixa a barra; o REGIME de mercado

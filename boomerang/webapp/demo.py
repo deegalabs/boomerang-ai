@@ -36,19 +36,19 @@ def _now() -> float:
     return time.time()
 
 
-def _market() -> tuple[dict, float | None, bool]:
-    """Mercado REAL do cache do agente: ({symbol: metrics}, btc_24h, real?).
+def _market() -> tuple[dict, float | None, int | None, bool]:
+    """Mercado REAL do cache do agente: ({symbol: metrics}, btc_24h, fng, real?).
     Fallback simulado se o agente ainda não publicou nada."""
     c = market_cache.get()
     q = c.get("quotes") or {}
     real = {s: m for s, m in q.items() if (m.get("price_usd") or 0) > 0}
     if real:
-        return real, c.get("btc_24h"), True
+        return real, c.get("btc_24h"), c.get("fng"), True
     sim = {s: {"price_usd": p, "percent_change_24h": random.uniform(-6, 6),
                "percent_change_1h": random.uniform(-1, 1), "percent_change_7d": random.uniform(-10, 10),
                "volume_24h_usd": 1e8, "volume_change_24h_pct": random.uniform(-20, 40),
                "market_cap_usd": 1e9} for s, p in _FALLBACK.items()}
-    return sim, random.uniform(-2.0, 3.0), False
+    return sim, random.uniform(-2.0, 3.0), random.randint(20, 75), False
 
 
 def _agent(addr: str) -> dict:
@@ -81,7 +81,7 @@ def _equity(a: dict, market: dict) -> float:
 def start(addr: str) -> tuple[bool, str]:
     a = _agent(addr)
     a["running"], a["paused"] = True, False
-    _, _, real = _market()
+    _, _, _, real = _market()
     fonte = "mercado REAL (CoinMarketCap)" if real else "mercado simulado (agente ainda aquecendo)"
     _log(a, "sys", f"🚀 Agente autônomo ATIVADO — lendo {fonte}, 3 escudos online.")
     return True, "Agente autônomo ativado."
@@ -113,7 +113,7 @@ def _close(a: dict, market: dict, pos: dict, reason: str) -> float:
 
 def withdraw(addr: str) -> tuple[bool, str]:
     a = _agent(addr)
-    market, _, _ = _market()
+    market, _, _, _ = _market()
     for p in list(a["positions"]):
         _close(a, market, p, "saque")
     a["paused"], a["running"] = True, False
@@ -122,7 +122,7 @@ def withdraw(addr: str) -> tuple[bool, str]:
 
 def panic(addr: str) -> tuple[bool, str]:
     a = _agent(addr)
-    market, _, _ = _market()
+    market, _, _, _ = _market()
     for p in list(a["positions"]):
         _close(a, market, p, "pânico (liquidação)")
     a["paused"], a["running"] = True, False
@@ -136,7 +136,7 @@ def tick(addr: str) -> dict:
     if not a["running"] or a["paused"]:
         return snapshot(addr)
     a["tick"] += 1
-    market, btc24, real = _market()
+    market, btc24, fng, real = _market()
     a["real"] = real
 
     # micro-wobble por token (só vivacidade — PEQUENO p/ não estourar os stops curtos)
@@ -144,7 +144,7 @@ def tick(addr: str) -> dict:
         w = a["wob"].get(sym, 0.0)
         a["wob"][sym] = max(-0.6, min(w * 0.85 + random.uniform(-0.16, 0.16), 0.6))
 
-    regime_lbl, cut_adj = market_regime(btc24)
+    regime_lbl, cut_adj = market_regime(btc24, fng)
 
     # SAÍDA ASSIMÉTRICA: corta perda curta, deixa o ganho correr (trailing)
     for pos in list(a["positions"]):
@@ -222,7 +222,7 @@ def tick(addr: str) -> dict:
 
 def snapshot(addr: str) -> dict:
     a = _agent(addr)
-    market, btc24, real = _market()
+    market, btc24, fng, real = _market()
     positions, holdings = [], []
     pos_val = 0.0
     for p in a["positions"]:
@@ -252,7 +252,7 @@ def snapshot(addr: str) -> dict:
             "state": state, "equity_usd": equity, "drawdown_pct": dd, "peak_equity": a["peak"],
             "agent_address": addr, "holdings": holdings, "positions": positions,
             "running": a["running"], "paused": a["paused"],
-            "regime": market_regime(btc24)[0], "btc_24h": round(btc24 or 0.0, 1),
+            "regime": market_regime(btc24, fng)[0], "btc_24h": round(btc24 or 0.0, 1), "fng": fng,
             "data_real": real,
         },
         "feed": a["feed"],

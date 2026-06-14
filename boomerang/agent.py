@@ -596,12 +596,12 @@ class BoomerangAgent:
         # GATE MACRO: se o BTC despenca (<= -5% em 24h), o mercado está risk-off →
         # não abre posição nova (correção sistêmica). Posições abertas seguem geridas.
         macro = await self._analyzer.gather_macro()
-        btc24 = macro.get("btc_24h")
-        # Publica as cotações REAIS p/ a demo do site reusar (mesmo processo) — custo zero.
-        market_cache.put(dict(quotes), btc24)
+        btc24, fng = macro.get("btc_24h"), macro.get("fng")
+        # Publica o mercado REAL p/ a demo do site reusar (mesmo processo) — custo zero.
+        market_cache.put(dict(quotes), btc24, fng)
         systemic = btc24 is not None and btc24 <= -5.0
-        # SKILL Adaptação por regime: a postura (barra de entrada) muda com o mercado.
-        regime_label, cut_adjust = market_regime(btc24)
+        # SKILL Adaptação por regime: preço (BTC) + SENTIMENTO (medo/ganância) calibram a postura.
+        regime_label, cut_adjust = market_regime(btc24, fng)
         gate_note = ""
         if systemic:
             gate_note = f" · Gate MACRO: BTC {btc24:+.1f}%/24h (risco sistêmico)"

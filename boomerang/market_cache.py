@@ -8,14 +8,15 @@ from __future__ import annotations
 
 import time
 
-_data: dict = {"quotes": {}, "btc_24h": None, "ts": 0.0}
+_data: dict = {"quotes": {}, "btc_24h": None, "fng": None, "ts": 0.0}
 
 
-def put(quotes: dict, btc_24h) -> None:  # noqa: ANN001
-    """O agente publica as cotações reais (quotes = {symbol: metrics}) + BTC 24h."""
+def put(quotes: dict, btc_24h, fng=None) -> None:  # noqa: ANN001
+    """O agente publica as cotações reais (quotes = {symbol: metrics}) + BTC 24h + sentimento."""
     if quotes:
         _data["quotes"] = quotes
         _data["btc_24h"] = btc_24h
+        _data["fng"] = fng
         _data["ts"] = time.time()
 
 
