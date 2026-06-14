@@ -72,11 +72,17 @@ def momentum_prescore(m: dict | None) -> int:
     p1 = m.get("percent_change_1h") or 0.0
     p24 = m.get("percent_change_24h") or 0.0
     score = 0.0
-    score += max(min(vc, 100.0), 0.0) * 0.5      # interesse/volume subindo
-    score += max(min(p24, 20.0), 0.0) * 1.5      # momentum 24h (cap 20)
-    score += max(min(p1, 5.0), 0.0) * 2.0        # momentum recente
-    if p24 > 25:                                  # esticado/tarde
-        score -= 20
+    score += max(min(vc, 100.0), 0.0) * 0.5      # interesse/volume subindo (sinal primário)
+    # Momentum 24h: premia movimento JOVEM (até ~8%). Acima disso já disparou — NÃO premia
+    # mais a altura (evita ranquear entrada tardia no topo do candle).
+    score += max(min(p24, 8.0), 0.0) * 2.0       # cap em 8% (não recompensa quem já voou)
+    score += max(min(p1, 4.0), 0.0) * 2.5        # empuxo recente (a barra começando agora)
+    # FRESCOR: 1h acima do ritmo médio do 24h = movimento acelerando AGORA (entrada cedo).
+    if p1 > 0 and p1 > p24 / 24.0:
+        score += 8
+    # ESTICAMENTO progressivo: penaliza a partir de +12% (entrada tardia), e forte acima.
+    if p24 > 12.0:
+        score -= (p24 - 12.0) * 1.5
     if vc < 0 or p24 < 0:                         # sem interesse / preço caindo
         score = min(score, 20.0)
     return int(max(0.0, min(score, 100.0)))
@@ -260,12 +266,14 @@ class AttentionAnalyzer:
 
     _SYSTEM = (
         "Voce e o nucleo analitico de um agente quantitativo de cripto na BNB Chain.\n"
-        "Pensa como um trader sistematico de curto prazo, de postura OPORTUNISTA: a cada\n"
+        "Pensa como um trader sistematico de curto prazo, OPORTUNISTA mas SELETIVO: a cada\n"
         "ciclo voce avalia os MELHORES candidatos ja ranqueados e escolhe a melhor\n"
-        "oportunidade RELATIVA disponivel AGORA. Ficar parado tem custo (o agente precisa\n"
-        "operar com regularidade); entao, quando o melhor setup do momento tem interesse de\n"
-        "volume positivo e risco/retorno aceitavel, prefira AGIR com stop curto a esperar a\n"
-        "oportunidade perfeita. So evite operar quando o cenario e genuinamente ruim.\n\n"
+        "oportunidade RELATIVA — SE ela for boa. Operar tem CUSTO (taxas + slippage), e\n"
+        "operar o 'melhor relativo' num lateral sem direcao SANGRA o capital aos poucos.\n"
+        "Entao: quando ha interesse de volume CLARAMENTE subindo + vies de alta com R/R\n"
+        "aceitavel, AJA com stop curto; quando o melhor candidato e so 'ok' num mercado sem\n"
+        "tendencia, ESPERAR (HOLD) e uma decisao valida e frequentemente a melhor. Qualidade\n"
+        "da entrada > frequencia. (O minimo de trades/dia do regulamento e cuidado por fora.)\n\n"
         "Recebe SOMENTE metricas numericas da CoinMarketCap (sem texto livre):\n"
         "- Momentum (multi-prazo): percent_change_1h, _24h, _7d, _30d\n"
         "- Interesse/liquidez: volume_24h_usd, volume_change_24h_pct, turnover_24h_pct\n"
@@ -274,9 +282,9 @@ class AttentionAnalyzer:
         "- Contexto global: btc_dominance_pct, stablecoin_dominance_pct (alta = risk-off,\n"
         "  capital fugindo pra stable), total_market_cap_usd, total_volume_24h_usd\n\n"
         "TESE (arbitragem de atencao): favoreca quem tem INTERESSE (volume) subindo e momentum\n"
-        "positivo/jovem (ainda nao esticou), em sintonia entre os prazos. Em mercado lateral,\n"
-        "o melhor candidato disponivel com volume subindo e leve vies de alta JA e operavel\n"
-        "(entrada com stop curto), nao precisa de uma alta explosiva.\n\n"
+        "JOVEM (ainda nao esticou) e em sintonia entre os prazos (trend_aligned_up). Em mercado\n"
+        "lateral SEM volume subindo nem vies de alta, ESPERE — nao force entrada so pra operar.\n"
+        "Nao precisa de alta explosiva, mas precisa de um SINAL real (interesse + direcao).\n\n"
         "COMO RACIOCINAR (nesta ordem):\n"
         "1. REGIME: alta, lateral ou queda? Em QUEDA clara a barra sobe muito; em LATERAL,\n"
         "   ainda se opera o melhor relativo com risco controlado.\n"
@@ -285,14 +293,13 @@ class AttentionAnalyzer:
         "3. RISCO/RETORNO: o stop curto cobre o risco e o retorno plausivel compensa?\n\n"
         "PONTUACAO (confidence_score 0-100) — calibre assim, seja DECISIVO:\n"
         "- 75-90: interesse subindo forte + momentum jovem alinhado + acelerando + nao esticado.\n"
-        "- 55-74: setup DECENTE e operavel — volume positivo/subindo e vies de alta (ou base\n"
-        "  solida) com R/R aceitavel, MESMO em mercado calmo. Esta e a faixa do dia a dia:\n"
-        "  o melhor candidato disponivel agora, com stop curto, cai aqui.\n"
-        "- 45-54: fraco/misto — pouca conviccao, mas nao proibido.\n"
+        "- 55-74: setup DECENTE e operavel — volume subindo + vies de alta (ou base solida\n"
+        "  rompendo) com R/R aceitavel. Exige um SINAL real, nao so 'o menos ruim do ciclo'.\n"
+        "- 45-54: fraco/misto — pouca conviccao; num lateral sem direcao, isto e HOLD.\n"
         "- <45: EVITE — momentum negativo (downtrend), volume CAINDO, ou esticado demais.\n\n"
-        "Reserve HOLD para cenarios genuinamente desfavoraveis (queda clara, volume caindo,\n"
-        "ou esticamento perigoso). Nao puna um setup so por ser calmo: calmo com volume e\n"
-        "leve alta = operavel.\n\n"
+        "HOLD e uma resposta legitima e esperada quando nao ha sinal real (lateral sem volume,\n"
+        "queda, ou esticamento). Calmo COM volume subindo e leve alta = operavel; calmo SEM\n"
+        "isso = ESPERE. Nao rebaixe a barra so para nao ficar parado.\n\n"
         "VOLATILIDADE (classifique a tier — o CODIGO calcula o stop/alvo a partir dela):\n"
         "- BAIXA: |percent_change_24h| ate ~3% (ativo calmo).\n"
         "- MEDIA: |percent_change_24h| ~3-8% (oscilacao normal).\n"
@@ -479,10 +486,19 @@ class AttentionAnalyzer:
     def _effective_cut(self, metrics: dict | None, cut_adjust: int = 0) -> int:
         """Corte de confiança ADAPTATIVO. Momentum forte abaixa a barra; o REGIME de mercado
         (cut_adjust: BULL abaixa, DEFENSIVO sobe) desloca-a também. Determinístico; nunca
-        abaixo de 48 (não opera puro ruído)."""
+        abaixo de 52 (não opera puro ruído num lateral sem direção)."""
         base = self._cfg.min_confidence_score
         bonus = min(int(momentum_prescore(metrics) * 0.18), 15)  # tendência forte: -até 15 pts
-        return max(base - bonus + cut_adjust, 48)
+        cut = base - bonus + cut_adjust
+        # SELETIVIDADE NO CHOP (dados do mercado mostram que lateral sem tendência sangra):
+        # sem alta consistente entre prazos, a barra SOBE; faca caindo (alinhada p/ baixo)
+        # sobe muito mais. Determinístico, sobre os sinais derivados.
+        m = metrics or {}
+        if m.get("trend_aligned_down"):
+            cut += 8
+        elif not m.get("trend_aligned_up") and not m.get("accelerating"):
+            cut += 4
+        return max(cut, 52)
 
     @staticmethod
     def _derive(m: dict) -> dict:
@@ -544,7 +560,7 @@ class AttentionAnalyzer:
                 rationale = str(data.get("rationale", ""))
                 if regime:
                     rationale = f"[{regime}] {rationale}"
-                return Verdict(symbol, score, action, rationale, volatility=volatility)
+                return Verdict(symbol, score, action, rationale, volatility=volatility, regime=regime)
         return Verdict(symbol, 0, Action.HOLD, "Sem veredito estruturado do LLM.")
 
     # ── SKILL: Saída Inteligente (cérebro reavalia a posição aberta) ──────────

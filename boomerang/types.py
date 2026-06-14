@@ -39,6 +39,7 @@ class Verdict:
     action: Action
     rationale: str
     volatility: str = ""  # tier classificada pelo cérebro: BAIXA | MEDIA | ALTA (p/ SL/TP dinâmico)
+    regime: str = ""      # regime lido pelo cérebro: uptrend | choppy | downtrend (p/ win-rate por regime)
 
     @property
     def is_buy(self) -> bool:
@@ -100,6 +101,7 @@ class Position:
     peak_price: float = 0.0
     opened_at: float = 0.0
     tx_hash: str | None = None
+    regime: str = ""                # regime na ENTRADA (uptrend/choppy/downtrend) p/ win-rate por regime
 
     def __post_init__(self) -> None:
         if self.peak_price == 0.0:

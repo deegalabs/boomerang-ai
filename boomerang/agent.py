@@ -697,7 +697,7 @@ class BoomerangAgent:
                 # VENCEDOR CORRER — tp_pct=0 → sem teto fixo; o trailing protege e acompanha
                 # o pico (ratchet). O brilho do leaderboard vem dos grandes vencedores.
                 if await self._open(symbol, addr, size, verdict.rationale, now,
-                                    stop_pct=sl_pct, tp_pct=0.0):
+                                    stop_pct=sl_pct, tp_pct=0.0, regime=verdict.regime):
                     opened = True
                     break
                 # Execução falhou (ex.: revert por liquidez): cooldown e tenta o próximo.
@@ -766,7 +766,7 @@ class BoomerangAgent:
         return f" · 🔁 Rotação: {weakest.symbol}→{cand}({verdict.confidence_score})"
 
     async def _open(self, symbol: str, addr: str, size_usd: float, rationale: str, now: float,
-                    *, stop_pct: float = 0.0, tp_pct: float = 0.0) -> bool:
+                    *, stop_pct: float = 0.0, tp_pct: float = 0.0, regime: str = "") -> bool:
         """Abre a posição (swap real). Retorna True se abriu, False se a execução falhou.
 
         stop_pct/tp_pct: SL/TP DINÂMICO desta posição (calibrado pela volatilidade). 0 =
@@ -797,7 +797,7 @@ class BoomerangAgent:
         pos = Position(symbol=symbol, token_address=addr, entry_price=entry, amount_usd=size_usd,
                        qty=res.qty or 0.0, stop_loss_price=stop_price,
                        stop_loss_pct=stop_pct, take_profit_pct=tp_pct,
-                       opened_at=now, tx_hash=res.tx_hash)
+                       opened_at=now, tx_hash=res.tx_hash, regime=regime)
         self.positions.append(pos)
         self.state = AgentState.IN_POSITION
         self._risk.record_trade(now)
@@ -805,7 +805,7 @@ class BoomerangAgent:
         self._log.info("TRADE ABERTO | %s $%.2f @ %.8g%s | tx=%s",
                        symbol, size_usd, entry, vol_note, res.tx_hash)
         append_trade({"type": "open", "symbol": symbol, "amount_usd": size_usd,
-                      "entry_price": entry, "tx": res.tx_hash, "ts": now})
+                      "entry_price": entry, "tx": res.tx_hash, "ts": now, "regime": regime})
         await self._emit(AlertType.TRADE_OPENED, f"Posição aberta: {symbol}",
                          rationale, amount_usd=size_usd, entry=entry,
                          stop=stop_price, take_profit=tp_price,
@@ -902,7 +902,8 @@ class BoomerangAgent:
         self._log.info("TRADE FECHADO | %s motivo=%s | tx=%s", pos.symbol, reason, res.tx_hash)
         pnl_pct = ((exit_price - pos.entry_price) / pos.entry_price * 100.0) if exit_price else None
         append_trade({"type": "close", "symbol": pos.symbol, "reason": reason,
-                      "pnl_pct": pnl_pct, "tx": res.tx_hash, "ts": time.time()})
+                      "pnl_pct": pnl_pct, "tx": res.tx_hash, "ts": time.time(),
+                      "regime": pos.regime})
         await self._emit(AlertType.TRADE_CLOSED, f"Posição encerrada: {pos.symbol}",
                          "", reason=reason, pnl_pct=pnl_pct,
                          entry=pos.entry_price, exit=exit_price, amount_usd=pos.amount_usd,
@@ -929,6 +930,19 @@ class BoomerangAgent:
                          if len(v) >= 2 and sum(v) / len(v) < -1.0), key=lambda x: x[1])[:3]
         note = (f"SEU HISTORICO ({len(recent)} trades): {wr:.0f}% de acerto, PnL medio "
                 f"{avg:+.1f}%, ultimos 5: {last5}.")
+        # WIN-RATE POR REGIME: mostra ao cérebro ONDE ele ganha e onde sangra (ex.: chop).
+        by_reg: dict[str, list] = defaultdict(list)
+        for t in recent:
+            r = (t.get("regime") or "").strip().lower()
+            if r:
+                by_reg[r].append(t["pnl_pct"])
+        reg_parts = [f"{r} {sum(1 for x in v if x>0)/len(v)*100:.0f}%% ({len(v)})"
+                     for r, v in by_reg.items() if len(v) >= 2]
+        if reg_parts:
+            note += " Por REGIME: " + ", ".join(reg_parts).replace("%%", "%") + "."
+            chop = by_reg.get("choppy", [])
+            if len(chop) >= 3 and sum(1 for x in chop if x > 0) / len(chop) < 0.4:
+                note += " Voce PERDE no choppy — seja bem mais seletivo (ou ESPERE) no lateral."
         if sangra:
             note += (" Tokens que te sangraram: "
                      + ", ".join(f"{s}({a:+.0f}%)" for s, a in sangra)
