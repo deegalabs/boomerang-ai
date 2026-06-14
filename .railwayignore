@@ -1,0 +1,26 @@
+# Controla o que o `railway up` SOBE no build. Mantém o upload mínimo e garante que
+# segredos/dados locais NUNCA vão para os servidores de build da Railway.
+# (As dependências entram no build via requirements.txt + npm no Dockerfile.)
+
+# Segredos e estado (chegam via env var / volume em runtime — nunca no build):
+.env
+.env.*
+identity_wallet/
+state/
+~/.twak/
+
+# Artefatos locais pesados / desnecessários no build:
+tools/
+.venv/
+venv/
+node_modules/
+.git/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+logs/
+*.log
+.idea/
+.vscode/
