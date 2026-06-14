@@ -542,12 +542,15 @@ class BoomerangAgent:
             await self._emit(AlertType.ERROR, "Equity indisponível", str(exc))
             return
 
-        self._risk.update_equity(equity)
+        self._risk.update_equity(equity, now)
         self._last_equity = equity  # cache p/ dashboard
         await self._reconcile_positions()  # sincroniza tracking↔on-chain (limpa poeira de teste)
         stable = self._stable_usd()  # USDC real disponível p/ comprar (não a equity total)
         if self._risk.circuit_breaker_tripped(equity):
             await self.panic(f"Drawdown {self._risk.current_drawdown_pct(equity):.1f}% atingiu o gatilho.")
+            return
+        if self._risk.daily_loss_tripped(equity):
+            await self.panic(f"Perda diária {self._risk.daily_drawdown_pct(equity):.1f}% atingiu o limite do dia.")
             return
 
         if self._risk.needs_heartbeat(now):

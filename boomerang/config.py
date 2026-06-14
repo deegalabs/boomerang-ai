@@ -157,6 +157,12 @@ class Config:
         return float(self.hackathon["global_drawdown_dq_pct"])
 
     @property
+    def daily_loss_cap_pct(self) -> float:
+        """Limite de perda intradiária (% sobre o patrimônio do início do dia, UTC).
+        Complementa o disjuntor de pico histórico: protege de um único dia ruim. 0 = off."""
+        return float(self.dev_safety.get("daily_loss_cap_pct", 0.0) or 0.0)
+
+    @property
     def heartbeat_after_hours(self) -> float:
         return float(self.hackathon["heartbeat_after_hours"])
 

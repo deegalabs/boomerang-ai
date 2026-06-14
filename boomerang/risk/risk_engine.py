@@ -18,6 +18,7 @@ seguidas — praticamente impossível. O circuit breaker é a última linha.
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass
 from enum import Enum
 
@@ -48,12 +49,22 @@ class RiskEngine:
         self._last_trade_ts: float = 0.0
         self._trade_lock = threading.Lock()  # mutex de execução (anti-loop)
         self._halted = False
+        self._day_anchor_equity = max(initial_equity_usd, 0.0)  # patrimônio no início do dia (UTC)
+        self._day_anchor_idx: int | None = None                 # bucket de dia atual
 
     # ── Patrimônio / drawdown ────────────────────────────────────────────────
-    def update_equity(self, current_equity_usd: float) -> None:
-        """Atualiza o pico histórico (peak equity)."""
+    def update_equity(self, current_equity_usd: float, now_ts: float = 0.0) -> None:
+        """Atualiza o pico histórico (peak equity) e a âncora diária (daily loss cap).
+
+        A âncora diária reseta quando vira o dia (UTC): a partir daí, o cap de
+        perda diária mede a queda em relação a este patrimônio de abertura.
+        """
         if current_equity_usd > self._peak_equity:
             self._peak_equity = current_equity_usd
+        day = int((now_ts or time.time()) // 86400)
+        if day != self._day_anchor_idx:
+            self._day_anchor_idx = day
+            self._day_anchor_equity = max(current_equity_usd, 0.0)
 
     def current_drawdown_pct(self, current_equity_usd: float) -> float:
         if self._peak_equity <= 0:
@@ -68,6 +79,24 @@ class RiskEngine:
         ANTES do limite do que depois (erro de ponto flutuante na borda exata).
         """
         return self.current_drawdown_pct(current_equity_usd) >= self._cfg.drawdown_safety_pct - 1e-9
+
+    def daily_drawdown_pct(self, current_equity_usd: float) -> float:
+        """Queda (%) em relação ao patrimônio de abertura do dia (UTC)."""
+        if self._day_anchor_equity <= 0:
+            return 0.0
+        dd = (self._day_anchor_equity - current_equity_usd) / self._day_anchor_equity * 100.0
+        return max(dd, 0.0)
+
+    def daily_loss_tripped(self, current_equity_usd: float) -> bool:
+        """True se a perda DO DIA atingiu o limite (cap intradiário). 0 = desativado.
+
+        Complementa o disjuntor de pico histórico: pega um único dia ruim que ainda
+        não chegou ao gatilho global de 23% sobre o pico de todos os tempos.
+        """
+        cap = self._cfg.daily_loss_cap_pct
+        if cap <= 0:
+            return False
+        return self.daily_drawdown_pct(current_equity_usd) >= cap - 1e-9
 
     @property
     def peak_equity(self) -> float:
