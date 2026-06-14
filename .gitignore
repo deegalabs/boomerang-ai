@@ -34,3 +34,6 @@ data/runtime/
 Thumbs.db
 .idea/
 .vscode/
+
+# Auditoria de concorrentes (clones locais — NUNCA versionar)
+_competitor_audit/

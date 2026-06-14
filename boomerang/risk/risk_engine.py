@@ -31,6 +31,7 @@ class ExitSignal(str, Enum):
     SELL_STOP_LOSS = "SELL_STOP_LOSS"
     SELL_TRAILING = "SELL_TRAILING"
     SELL_TAKE_PROFIT = "SELL_TAKE_PROFIT"
+    SELL_TIME_STALE = "SELL_TIME_STALE"  # capital parado: sem progresso há tempo demais
 
 
 @dataclass
@@ -240,6 +241,15 @@ class RiskEngine:
 
         if current_price <= pos.stop_loss_price:
             return ExitSignal.SELL_TRAILING if pos.trailing_active else ExitSignal.SELL_STOP_LOSS
+
+        # SAÍDA POR TEMPO (capital parado): posição SEM trailing (não é vencedora correndo),
+        # aberta há mais que o teto, com PnL na faixa morta → libera o capital p/ a próxima
+        # oportunidade em vez de apodrecer parada. Não toca vencedores (trailing ativo).
+        if (not pos.trailing_active and self._cfg.max_hold_hours > 0 and pos.opened_at
+                and (time.time() - pos.opened_at) / 3600.0 >= self._cfg.max_hold_hours):
+            pnl = ((current_price - pos.entry_price) / pos.entry_price * 100.0) if pos.entry_price else 0.0
+            if abs(pnl) <= self._cfg.stale_pnl_band_pct:
+                return ExitSignal.SELL_TIME_STALE
 
         return ExitSignal.HOLD
 

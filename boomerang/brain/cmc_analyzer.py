@@ -441,16 +441,21 @@ class AttentionAnalyzer:
     async def gather_macro(self) -> dict:
         """Contexto MACRO p/ calibrar a postura: 24h de BTC/ETH (gate sistêmico) +
         Índice de Medo & Ganância (sentimento do mercado)."""
-        out: dict = {"btc_24h": None, "eth_24h": None, "fng": await self._gather_fng()}
+        out: dict = {"btc_24h": None, "eth_24h": None, "fng": await self._gather_fng(),
+                     "usdc_price": None, "usdt_price": None}
         try:
-            data = await self._cmc.rest_quotes_batch([1, 1027])  # BTC=1, ETH=1027
+            # BTC=1, ETH=1027, USDC=3408, USDT=825 — tudo no MESMO batch (custo zero extra).
+            data = await self._cmc.rest_quotes_batch([1, 1027, 3408, 825])
 
-            def chg(cid: int):
-                q = (data.get(str(cid)) or {}).get("quote", {}).get("USD", {})
-                return q.get("percent_change_24h")
-            out["btc_24h"], out["eth_24h"] = chg(1), chg(1027)
+            def usd(cid: int) -> dict:
+                return (data.get(str(cid)) or {}).get("quote", {}).get("USD", {})
+            out["btc_24h"] = usd(1).get("percent_change_24h")
+            out["eth_24h"] = usd(1027).get("percent_change_24h")
+            # DEPEG GUARD: preço da stable em USD (referência externa p/ detectar despeg).
+            out["usdc_price"] = usd(3408).get("price")
+            out["usdt_price"] = usd(825).get("price")
         except Exception as exc:  # noqa: BLE001
-            self._log.warning("Macro (BTC/ETH) indisponível: %s", exc)
+            self._log.warning("Macro (BTC/ETH/stables) indisponível: %s", exc)
         return out
 
     async def _gather_fng(self) -> int | None:

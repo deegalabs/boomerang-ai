@@ -163,6 +163,23 @@ class Config:
         return float(self.dev_safety.get("daily_loss_cap_pct", 0.0) or 0.0)
 
     @property
+    def max_hold_hours(self) -> float:
+        """Saída por tempo: horas após as quais uma posição parada (sem trailing, PnL na
+        faixa morta) é encerrada p/ liberar capital. 0 = desativado."""
+        return float(self.dev_safety.get("max_hold_hours", 0.0) or 0.0)
+
+    @property
+    def stale_pnl_band_pct(self) -> float:
+        """Faixa morta de PnL (±%) que caracteriza 'capital parado' na saída por tempo."""
+        return float(self.dev_safety.get("stale_pnl_band_pct", 1.5))
+
+    @property
+    def stable_depeg_bps(self) -> float:
+        """Desvio (em bps) da stable de trade em relação a $1 que dispara o depeg guard
+        (bloqueia novas entradas + alerta). 100 bps = 1%. 0 = desativado."""
+        return float(self.dev_safety.get("stable_depeg_bps", 0.0) or 0.0)
+
+    @property
     def heartbeat_after_hours(self) -> float:
         return float(self.hackathon["heartbeat_after_hours"])
 

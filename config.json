@@ -25,6 +25,9 @@
     "trailing_stop_trigger_pct": 3.0,
     "max_concurrent_positions": 3,
     "daily_loss_cap_pct": 15.0,
+    "max_hold_hours": 6.0,
+    "stale_pnl_band_pct": 1.5,
+    "stable_depeg_bps": 100.0,
     "trade_cooldown_seconds": 900,
     "base_stable_symbol": "USDC",
     "min_position_usd": 1.0

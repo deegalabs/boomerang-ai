@@ -78,6 +78,8 @@ class BoomerangAgent:
         self._exit_checks: dict[str, float] = {}
         # Skill Reputação on-chain: timestamp da última publicação (throttle ~1x/hora).
         self._last_rep_publish: float = 0.0
+        self._last_risk_publish: float = 0.0
+        self._last_depeg_alert: float = 0.0
         self._last_equity: float = 0.0          # patrimônio mais recente (cache p/ dashboard)
         self._last_holdings: list = []          # composição por moeda (cache p/ painel /live)
         self.agent_address: str | None = None   # endereço da carteira (preenchido no startup)
@@ -138,6 +140,26 @@ class BoomerangAgent:
             if str(h.get("symbol", "")).upper() == base:
                 return float(h.get("value_usd") or 0.0)
         return 0.0
+
+    def _stable_depeg_bps(self, macro: dict) -> float | None:
+        """Desvio (em bps) da stable de TRADE em relação a $1, da referência CMC.
+        None se o preço não veio. base USDC → usdc_price; base USDT → usdt_price."""
+        base = str(self._cfg.dev_safety.get("base_stable_symbol", "USDC")).upper()
+        price = macro.get("usdc_price") if base == "USDC" else macro.get("usdt_price")
+        if not price or price <= 0:
+            return None
+        return abs(price - 1.0) * 10000.0
+
+    async def _maybe_alert_depeg(self, depeg_bps: float) -> None:
+        """Alerta de depeg (throttled ~1x/30min) — não spamma a cada ciclo."""
+        now = time.time()
+        if now - self._last_depeg_alert < 1800:
+            return
+        self._last_depeg_alert = now
+        base = str(self._cfg.dev_safety.get("base_stable_symbol", "USDC")).upper()
+        await self._emit(AlertType.CIRCUIT_BREAKER, "🛡️ Depeg detectado",
+                         f"{base} desviou {depeg_bps/100:.2f}% de $1 — entradas bloqueadas "
+                         f"até reancorar. Capital protegido, sem novas compras.")
 
     async def _reconcile_positions(self) -> None:
         """Sincroniza o tracking com a carteira REAL on-chain, nos dois sentidos:
@@ -370,6 +392,7 @@ class BoomerangAgent:
         await self._liquidate_all()
         self._risk.halt()
         await self._emit(AlertType.PAUSED, "Capital protegido em stablecoin", "Agente travado (READ_ONLY).")
+        await self._publish_risk_state(halted_event=True)  # prova on-chain de que o killswitch disparou
 
     async def _liquidate_all(self) -> None:
         for pos in list(self.positions):
@@ -556,6 +579,8 @@ class BoomerangAgent:
         if self._risk.needs_heartbeat(now):
             await self._heartbeat(now)
 
+        await self._publish_risk_state()  # disjuntor on-chain: atesta o estado ~1x/hora (best-effort)
+
         # ECONOMIA: 1 chamada CMC p/ TODAS as cotações (batch) + 1 global.
         global_metrics = await self._analyzer.gather_global()
         quotes = await self._analyzer.gather_quotes(self.token_focus)
@@ -603,10 +628,19 @@ class BoomerangAgent:
         # Publica o mercado REAL p/ a demo do site reusar (mesmo processo) — custo zero.
         market_cache.put(dict(quotes), btc24, fng)
         systemic = btc24 is not None and btc24 <= -5.0
+        # DEPEG GUARD: se a stable de trade (USDC) desviar de $1 além do limite, o "caixa
+        # seguro" não está seguro → bloqueia novas entradas e alerta o dono (não liquida:
+        # vender token p/ stable quebrada é pior). Determinístico, fora da IA.
+        depeg = self._stable_depeg_bps(macro)
+        if depeg is not None and depeg >= self._cfg.stable_depeg_bps > 0:
+            systemic = True
+            await self._maybe_alert_depeg(depeg)
         # SKILL Adaptação por regime: preço (BTC) + SENTIMENTO (medo/ganância) calibram a postura.
         regime_label, cut_adjust = market_regime(btc24, fng)
         gate_note = ""
-        if systemic:
+        if depeg is not None and depeg >= self._cfg.stable_depeg_bps > 0:
+            gate_note = f" · Gate DEPEG: stable desviou {depeg/100:.2f}% (risco sistêmico)"
+        elif systemic:
             gate_note = f" · Gate MACRO: BTC {btc24:+.1f}%/24h (risco sistêmico)"
         elif not gate.allowed:
             gate_note = f" · Gate BLOQUEOU: {gate.detail}"
@@ -946,6 +980,38 @@ class BoomerangAgent:
                 self._log.info("Reputação on-chain publicada: %s (tx=%s)", stats, res.get("transactionHash"))
         except Exception as exc:  # noqa: BLE001
             self._log.warning("Publicação de reputação falhou (ignorado): %s", exc)
+
+    async def _publish_risk_state(self, *, halted_event: bool = False) -> None:
+        """DISJUNTOR ON-CHAIN: atesta o estado do circuit breaker no ERC-8004 (chave
+        'risk_state'). Throttled ~1x/hora, MAS sempre que o killswitch dispara
+        (halted_event) — aí fica a prova on-chain de que a trava agiu. Best-effort."""
+        now = time.time()
+        if not halted_event and now - self._last_risk_publish < 3600:
+            return
+        equity = self._last_equity or 0.0
+        if equity <= 0 and not halted_event:
+            return
+        peak = self._risk.peak_equity
+        to_bps = lambda pct: int(round((pct or 0.0) * 100))  # 1% = 100 bps
+        state = {
+            "peak": round(peak, 2), "equity": round(equity, 2),
+            "drawdown_bps": to_bps(self._risk.current_drawdown_pct(equity)),
+            "daily_bps": to_bps(self._risk.daily_drawdown_pct(equity)),
+            "max_bps": to_bps(self._cfg.drawdown_safety_pct),
+            "daily_cap_bps": to_bps(self._cfg.daily_loss_cap_pct),
+            "halted": self._risk.halted, "ts": int(now),
+        }
+        try:
+            res = await asyncio.to_thread(identity.publish_risk_state, state)
+            if res:
+                self._last_risk_publish = now
+                self._log.info("Disjuntor atestado on-chain: %s (tx=%s)", state, res.get("transactionHash"))
+                if halted_event:
+                    await self._emit(AlertType.CIRCUIT_BREAKER, "🔒 Disjuntor selado on-chain",
+                                     f"Drawdown {state['drawdown_bps']/100:.1f}% — prova ERC-8004",
+                                     tx=res.get("transactionHash"))
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("Atestação on-chain do disjuntor falhou (ignorado): %s", exc)
 
     # ── heartbeat (mínimo de trades) ─────────────────────────────────────────
     async def _heartbeat(self, now: float) -> None:

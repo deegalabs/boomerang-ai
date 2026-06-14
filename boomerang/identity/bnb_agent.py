@@ -190,6 +190,37 @@ def commit_prediction(pred: dict, *, password: str | None = None) -> dict | None
         return None
 
 
+def publish_risk_state(state: dict, *, password: str | None = None) -> dict | None:
+    """DISJUNTOR ON-CHAIN (atestação ERC-8004): grava o estado do circuit breaker
+    de drawdown como metadata verificável (chave 'risk_state') — pico, equity,
+    drawdown e se está travado. Qualquer auditor lê na cadeia que a trava EXISTE e
+    está ATIVA; num halt, fica a prova on-chain de que o killswitch disparou.
+
+    Espelha o RiskGovernor on-chain (equity keeper) usando nossa infra ERC-8004
+    gas-free (paymaster MegaFuel) — sem contrato novo p/ deployar. Best-effort:
+    qualquer falha retorna None e NUNCA interrompe o trading. Chamar com parcimônia
+    (é uma transação): ~1x/hora no heartbeat, e SEMPRE no evento de halt.
+
+    state: {peak, equity, drawdown_bps, daily_bps, max_bps, daily_cap_bps, halted, ts}.
+    """
+    card = load_card()
+    if not card or not card.get("agent_id"):
+        return None
+    try:
+        from bnbagent import ERC8004Agent, EVMWalletProvider
+
+        pw = password or _password()
+        if not pw:
+            return None
+        wallet = EVMWalletProvider(password=pw, persist=True, wallets_dir=str(IDENTITY_DIR))
+        sdk = ERC8004Agent(wallet_provider=wallet, network=card.get("network", DEFAULT_NETWORK))
+        value = json.dumps(state, separators=(",", ":"))[:480]
+        result = sdk.set_metadata(agent_id=card["agent_id"], key="risk_state", value=value)
+        return result if isinstance(result, dict) and result.get("success") else None
+    except Exception:  # noqa: BLE001 — disjuntor on-chain é prova extra; nunca derruba o agente
+        return None
+
+
 def publish_track_record(stats: dict, *, password: str | None = None) -> dict | None:
     """SKILL Reputação on-chain: grava o histórico de performance do agente como
     metadata ERC-8004 verificável (chave 'track_record'). Best-effort — qualquer
