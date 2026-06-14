@@ -139,10 +139,10 @@ def tick(addr: str) -> dict:
     market, btc24, real = _market()
     a["real"] = real
 
-    # micro-wobble por token (vivacidade entre os updates reais)
+    # micro-wobble por token (só vivacidade — PEQUENO p/ não estourar os stops curtos)
     for sym in market:
         w = a["wob"].get(sym, 0.0)
-        a["wob"][sym] = max(-2.8, min(w * 0.9 + random.uniform(-0.5, 0.5), 2.8))
+        a["wob"][sym] = max(-0.6, min(w * 0.85 + random.uniform(-0.16, 0.16), 0.6))
 
     regime_lbl, cut_adj = market_regime(btc24)
 
@@ -190,7 +190,11 @@ def tick(addr: str) -> dict:
         m = market[cand]
         pre = momentum_prescore(m)
         ch24 = float(m.get("percent_change_24h") or 0.0)
-        score = int(max(40, min(56 + pre * 0.7 + ch24 * 0.9 + random.uniform(-4, 6), 93)))
+        # Mirror do cérebro real: momentum jovem pontua, mas ESTICAMENTO (subiu demais =
+        # risco de topo) PENALIZA — não compra o topo do pump.
+        overext = max(0.0, ch24 - 12.0) * 1.6
+        score = int(max(40, min(56 + pre * 0.7 + min(ch24, 12.0) * 0.6 - overext
+                                 + random.uniform(-4, 5), 90)))
         var24 = round(abs(ch24), 1)
         if score >= cut:
             tier = tier_from_var(var24)
