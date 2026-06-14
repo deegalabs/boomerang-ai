@@ -20,6 +20,7 @@ from pathlib import Path
 from boomerang.brain.cmc_analyzer import AttentionAnalyzer, momentum_prescore, passes_prefilter
 from boomerang.risk.risk_engine import (
     conviction_size_pct, dynamic_sl_tp, market_regime, tier_from_var)
+from boomerang import market_cache
 from boomerang.config import Config
 from boomerang.identity import bnb_agent as identity
 from boomerang.ipc import Alert, AlertBus, AlertType
@@ -596,6 +597,8 @@ class BoomerangAgent:
         # não abre posição nova (correção sistêmica). Posições abertas seguem geridas.
         macro = await self._analyzer.gather_macro()
         btc24 = macro.get("btc_24h")
+        # Publica as cotações REAIS p/ a demo do site reusar (mesmo processo) — custo zero.
+        market_cache.put(dict(quotes), btc24)
         systemic = btc24 is not None and btc24 <= -5.0
         # SKILL Adaptação por regime: a postura (barra de entrada) muda com o mercado.
         regime_label, cut_adjust = market_regime(btc24)

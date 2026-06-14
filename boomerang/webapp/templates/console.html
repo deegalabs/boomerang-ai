@@ -35,7 +35,7 @@
     </div>
   </div>
   <p id="cMsg" class="mono" style="font-size:.82rem;color:var(--gold);min-height:18px;margin-top:8px"></p>
-  <div class="callout callout--warn" style="margin-top:6px"><span class="ico">🧪</span><p>{{ "Demonstração FIEL: o agente decide e opera SOZINHO, com as mesmas regras do robô real (SL/TP dinâmico, convicção, regime, deixa o vencedor correr). Mercado e banca SIMULADOS ($100 fictícios) — nada vai à blockchain. A prova on-chain real está em" if lang=="pt" else "FAITHFUL demo: the agent decides and trades ON ITS OWN, with the same rules as the real bot (dynamic SL/TP, conviction, regime, lets winners run). SIMULATED market and bankroll ($100 fake) — nothing hits the blockchain. The real on-chain proof is at" }} <a href="/live">/live</a>.</p></div>
+  <div class="callout callout--warn" style="margin-top:6px"><span class="ico">📡</span><p>{{ "Demonstração FIEL sobre MERCADO REAL: o agente lê cotações reais da CoinMarketCap (preços, variações 24h, regime do BTC) e decide SOZINHO, com as mesmas regras do robô (SL/TP dinâmico, convicção, regime, deixa o vencedor correr). Só a banca é fictícia ($100) e nada vai à blockchain. A prova on-chain real está em" if lang=="pt" else "FAITHFUL demo on the REAL MARKET: the agent reads live CoinMarketCap quotes (prices, 24h changes, BTC regime) and decides ON ITS OWN, with the same rules as the real bot (dynamic SL/TP, conviction, regime, lets winners run). Only the bankroll is fake ($100) and nothing hits the blockchain. The real on-chain proof is at" }} <a href="/live">/live</a>. <span id="dataBadge" class="mono" style="font-size:.72rem"></span></p></div>
 
   <!-- Overview -->
   <div class="grid cols-4" style="margin-top:14px">
@@ -132,6 +132,8 @@ if (btnLogout) {
     document.getElementById("oDd").textContent     = (Number(s.drawdown_pct||0)).toFixed(1)+"%";
     const reg = s.regime||"·", btc = (s.btc_24h>=0?"+":"")+Number(s.btc_24h||0).toFixed(1)+"%";
     document.getElementById("oRegime").innerHTML = `${reg} <span class="mut mono" style="font-size:.72rem">BTC ${btc}</span>`;
+    const db = document.getElementById("dataBadge");
+    if (db) db.innerHTML = s.data_real ? `<span style="color:var(--up)">● ${LANG=="pt"?"dados reais (CMC)":"live data (CMC)"}</span>` : `<span class="mut">○ ${LANG=="pt"?"agente aquecendo…":"agent warming up…"}</span>`;
 
     // posições (somente leitura — o AGENTE gerencia) com selo das skills
     const pos = s.positions||[];
