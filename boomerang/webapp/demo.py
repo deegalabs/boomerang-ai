@@ -1,126 +1,185 @@
-"""Agente SIMULADO para o Console demo (público).
+"""Agente SIMULADO AUTÔNOMO para o Console demo (público).
 
-Cada carteira conectada ganha um agente próprio, isolado, com banca fictícia.
-Nenhum dinheiro real, nenhuma custódia, nenhuma transação on-chain. Só para os
-juízes/visitantes experimentarem a UX completa do produto com segurança.
+Representa FIELMENTE o agente real: o CÉREBRO decide sozinho e aplica as MESMAS regras
+determinísticas do agente ao vivo — SL/TP dinâmico por volatilidade (R:R 1:2), sizing
+por convicção, adaptação por regime e saída assimétrica (deixa o vencedor correr).
+O usuário ASSISTE o agente operar e raciocinar; não dirige na mão.
 
-Estado em memória por endereço (zera ao reiniciar o servidor — ok para demo).
+Tudo SIMULADO: mercado por random-walk, banca fictícia de $100, zero API/carteira real.
+Estado em memória por sessão (zera ao reiniciar o servidor — ok para demo).
 """
 from __future__ import annotations
 
-import math
+import random
 import time
 
-START_CASH = 100.0  # banca simulada inicial (USDC fictício)
-TRADE_SIZE = 10.0   # tamanho de cada compra simulada
+from boomerang.risk.risk_engine import (
+    conviction_size_pct, dynamic_sl_tp, market_regime, tier_from_var)
 
-# Preços-base aproximados só para a simulação parecer real.
-PRICES = {
-    "ETH": 1700.0, "XRP": 1.17, "DOGE": 0.087, "ADA": 0.167, "LINK": 8.0,
-    "LTC": 43.0, "AVAX": 6.8, "DOT": 1.0, "UNI": 2.5, "AAVE": 64.0,
-    "ATOM": 1.7, "BCH": 208.0, "SHIB": 0.0000095, "FLOKI": 0.000025, "TWT": 0.38,
+START_CASH = 100.0       # banca simulada
+MAX_POSITIONS = 3        # mesmo teto do agente real
+BASE_POS_PCT = 22.0      # âncora do sizing por convicção
+
+# Universo simulado (símbolo → preço-base). Só pra a simulação parecer real.
+_UNIVERSE = {
+    "ETH": 3200.0, "LINK": 18.0, "UNI": 12.0, "ADA": 0.62, "AVAX": 38.0, "DOT": 7.5,
+    "DOGE": 0.16, "SHIB": 0.000022, "FLOKI": 0.00018, "TWT": 1.1, "LTC": 85.0, "XRP": 2.1,
 }
 
-_AGENTS: dict[str, dict] = {}
+_agents: dict[str, dict] = {}
 
 
 def _now() -> float:
     return time.time()
 
 
-def _price(sym: str) -> float:
-    """Preço com leve oscilação no tempo, para o PnL 'respirar'."""
-    base = PRICES.get(sym, 1.0)
-    drift = 0.04 * math.sin(_now() / 25.0 + (abs(hash(sym)) % 100) / 15.0)
-    return base * (1 + drift)
-
-
 def _agent(addr: str) -> dict:
-    a = _AGENTS.get(addr)
-    if a is None:
-        a = {"cash": START_CASH, "positions": [], "trades": [],
-             "config": {"focus": "ALL", "stop": 4, "tp": 10}, "paused": False, "peak": START_CASH}
-        _AGENTS[addr] = a
-    return a
+    if addr not in _agents:
+        mkt = {s: {"price": p, "bias": random.uniform(-0.3, 0.5)} for s, p in _UNIVERSE.items()}
+        _agents[addr] = {
+            "cash": START_CASH, "positions": [], "trades": [], "feed": [],
+            "running": False, "paused": False, "peak": START_CASH, "tick": 0,
+            "market": mkt, "btc_bias": random.uniform(-1.0, 3.0), "regime": "NEUTRO",
+            "config": {"focus": "ALL", "stop": 4, "tp": 0},
+        }
+    return _agents[addr]
 
 
-def configure(addr: str, focus: str, stop: float, tp: float) -> tuple[bool, str]:
+def _log(a: dict, kind: str, text: str) -> None:
+    a["feed"].insert(0, {"kind": kind, "text": text, "ts": _now()})
+    a["feed"] = a["feed"][:40]
+
+
+def _equity(a: dict) -> float:
+    return a["cash"] + sum(p["qty"] * a["market"][p["symbol"]]["price"] for p in a["positions"])
+
+
+# ── controles (o usuário assiste; pode ativar/pausar/parar) ───────────────────
+def start(addr: str) -> tuple[bool, str]:
     a = _agent(addr)
-    a["config"] = {"focus": focus, "stop": stop, "tp": tp}
-    return True, "Configuração salva (simulação)."
+    a["running"], a["paused"] = True, False
+    _log(a, "sys", "🚀 Agente autônomo ATIVADO — 3 escudos online, escaneando o mercado.")
+    return True, "Agente autônomo ativado (simulação)."
 
 
 def pause(addr: str) -> tuple[bool, str]:
     a = _agent(addr)
     a["paused"] = not a["paused"]
-    return True, ("Agente pausado (simulação)." if a["paused"] else "Agente retomado (simulação).")
+    _log(a, "sys", "⏸️ Pausado pelo dono." if a["paused"] else "▶️ Retomado.")
+    return True, ("Pausado (simulação)." if a["paused"] else "Retomado (simulação).")
 
 
-def buy(addr: str, sym: str, amount: float = TRADE_SIZE) -> tuple[bool, str]:
+def configure(addr: str, focus: str, stop: float, tp: float) -> tuple[bool, str]:
     a = _agent(addr)
-    sym = (sym or "").upper()
-    if sym not in PRICES:
-        return False, "Moeda inválida."
-    if a["paused"]:
-        return False, "Agente pausado."
-    try:
-        amount = float(amount)
-    except (TypeError, ValueError):
-        amount = TRADE_SIZE
-    if amount < 1:
-        return False, "Valor mínimo de compra: $1."
-    if a["cash"] < amount:
-        return False, f"Saldo simulado insuficiente (você tem ${a['cash']:.2f})."
-    price = _price(sym)
-    a["cash"] -= amount
-    qty = amount / price
-    pos = next((p for p in a["positions"] if p["symbol"] == sym), None)
-    if pos:  # já tem essa moeda: soma à posição (preço médio)
-        pos["amount_usd"] += amount
-        pos["qty"] += qty
-        pos["entry_price"] = pos["amount_usd"] / pos["qty"]
-        pos["stop_loss_price"] = pos["entry_price"] * (1 - a["config"]["stop"] / 100.0)
-    else:
-        a["positions"].append({
-            "symbol": sym, "entry_price": price, "amount_usd": amount, "qty": qty,
-            "stop_loss_price": price * (1 - a["config"]["stop"] / 100.0), "opened_at": _now(),
-        })
-    a["trades"].append({"type": "open", "symbol": sym, "amount_usd": amount, "ts": _now()})
-    return True, f"Compra simulada de ${amount:.0f} em {sym}."
+    a["config"] = {"focus": focus, "stop": float(stop), "tp": float(tp)}
+    return True, "Preferências salvas — o agente calibra SL/TP sozinho pela volatilidade."
 
 
-def sell(addr: str, sym: str) -> tuple[bool, str]:
-    a = _agent(addr)
-    sym = (sym or "").upper()
-    pos = next((p for p in a["positions"] if p["symbol"] == sym), None)
-    if not pos:
-        return False, "Sem posição nessa moeda."
-    cur = _price(sym)
-    pnl_pct = (cur - pos["entry_price"]) / pos["entry_price"] * 100.0
-    a["cash"] += pos["amount_usd"] * (1 + pnl_pct / 100.0)
+def _close(a: dict, pos: dict, reason: str) -> float:
+    cur = a["market"][pos["symbol"]]["price"]
+    pnl = (cur - pos["entry_price"]) / pos["entry_price"] * 100.0 if pos["entry_price"] else 0.0
+    a["cash"] += pos["qty"] * cur
     a["positions"].remove(pos)
-    a["trades"].append({"type": "close", "symbol": sym, "pnl_pct": pnl_pct, "ts": _now()})
-    return True, f"Venda simulada de {sym} (PnL {pnl_pct:+.1f}%)."
+    a["trades"].append({"type": "close", "symbol": pos["symbol"], "pnl_pct": pnl, "ts": _now()})
+    emo = "🟢" if pnl >= 0 else "🔴"
+    _log(a, "sell", f"{emo} VENDEU {pos['symbol']} — {reason} · PnL {pnl:+.1f}%")
+    return pnl
 
 
 def withdraw(addr: str) -> tuple[bool, str]:
     a = _agent(addr)
     for p in list(a["positions"]):
-        sell(addr, p["symbol"])
-    a["paused"] = True
-    return True, "Saque simulado: tudo voltou ao caixa e o agente pausou."
+        _close(a, p, "saque")
+    a["paused"], a["running"] = True, False
+    _log(a, "sys", "🪃 Saque: tudo de volta ao caixa, agente parado.")
+    return True, "Saque simulado: tudo no caixa e agente parado."
 
 
 def panic(addr: str) -> tuple[bool, str]:
     a = _agent(addr)
     for p in list(a["positions"]):
-        sell(addr, p["symbol"])
-    a["paused"] = True
+        _close(a, p, "pânico (liquidação)")
+    a["paused"], a["running"] = True, False
+    _log(a, "sys", "🚨 PÂNICO: liquidou tudo e travou.")
     return True, "Pânico simulado: liquidou tudo e travou."
 
 
-ACTIONS = {"configure": None, "pause": pause, "buy": None, "sell": None,
-           "withdraw": withdraw, "panic": panic}
+# ── 1 CICLO do agente autônomo (o coração da demo fiel) ───────────────────────
+def tick(addr: str) -> dict:
+    a = _agent(addr)
+    if not a["running"] or a["paused"]:
+        return snapshot(addr)
+    a["tick"] += 1
+
+    # 1) mercado anda (random-walk com REVERSÃO À MÉDIA — moves realistas, sem disparar)
+    for m in a["market"].values():
+        m["bias"] = m["bias"] * 0.88 + random.uniform(-0.22, 0.24)   # decai + ruído
+        m["bias"] = max(-1.2, min(m["bias"], 1.4))
+        m["price"] = max(m["price"] * (1 + (m["bias"] + random.uniform(-0.8, 0.8)) / 100.0), 1e-9)
+    a["btc_bias"] = max(-7.0, min(a["btc_bias"] * 0.9 + random.uniform(-0.7, 0.7), 6.0))
+    regime_lbl, cut_adj = market_regime(a["btc_bias"])
+    a["regime"] = regime_lbl
+
+    # 2) gere as posições — SAÍDA ASSIMÉTRICA: corta perda curta, deixa o ganho correr
+    for pos in list(a["positions"]):
+        cur = a["market"][pos["symbol"]]["price"]
+        pos["peak"] = max(pos.get("peak", pos["entry_price"]), cur)
+        pnl = (cur - pos["entry_price"]) / pos["entry_price"] * 100.0
+        if not pos["trailing"] and pnl >= 3.0:           # ativa o trailing em +3%
+            pos["trailing"] = True
+            pos["stop"] = max(pos["stop"], pos["entry_price"])  # break-even
+            _log(a, "skill", f"📈 {pos['symbol']} +3% → trailing ON (deixando o vencedor correr)")
+        if pos["trailing"]:
+            pos["stop"] = max(pos["stop"], pos["peak"] * (1 - pos["sl_pct"] / 100.0))
+        if cur <= pos["stop"]:
+            _close(a, pos, "trailing (lucro protegido)" if pos["trailing"] else "stop-loss disparado")
+
+    # 3) gate macro: BTC despencando → risk-off, não abre
+    if a["btc_bias"] <= -5.0:
+        _log(a, "scan", f"🛡️ Gate MACRO: BTC {a['btc_bias']:+.1f}%/24h — risk-off, sem novas entradas.")
+        a["peak"] = max(a["peak"], _equity(a))
+        return snapshot(addr)
+
+    # 4) escaneia + o CÉREBRO decide (melhor oportunidade relativa)
+    ranked = sorted(a["market"].items(), key=lambda kv: kv[1]["bias"], reverse=True)
+    held = {p["symbol"] for p in a["positions"]}
+    cand = next((s for s, _ in ranked if s not in held), None)
+    cut = max(58 + cut_adj, 48)  # barra adaptativa (regime desloca)
+
+    if a["cash"] < 5.0 or len(a["positions"]) >= MAX_POSITIONS:
+        # totalmente alocado → mostra a gestão (e rotação ocasional)
+        if a["positions"] and cand and random.random() < 0.18:
+            weak = min(a["positions"], key=lambda p: a["market"][p["symbol"]]["bias"])
+            if a["market"][weak["symbol"]]["bias"] < 0.2 and not weak["trailing"]:
+                _log(a, "skill", f"🔁 Rotação: {weak['symbol']} fraco → liberar capital p/ {cand}")
+                _close(a, weak, "rotação (capital p/ melhor oportunidade)")
+        elif random.random() < 0.3:  # não floodar o feed quando está só gerindo
+            _log(a, "scan", f"🔍 Regime {regime_lbl} · {len(a['positions'])} posições · "
+                            "deixando os vencedores correrem.")
+    elif cand:
+        bias = a["market"][cand]["bias"]
+        score = int(max(40, min(58 + bias * 13 + random.uniform(-5, 7), 93)))
+        var24 = round(abs(bias) * 6.0, 1)  # |Var24h| simulado
+        if score >= cut:
+            tier = tier_from_var(var24)
+            sl, _tp = dynamic_sl_tp(tier, var24)
+            conv = conviction_size_pct(BASE_POS_PCT, score, 40.0)
+            amount = min(a["cash"], a["peak"] * conv / 100.0)
+            price = a["market"][cand]["price"]
+            a["cash"] -= amount
+            a["positions"].append({
+                "symbol": cand, "entry_price": price, "amount_usd": amount, "qty": amount / price,
+                "stop": price * (1 - sl / 100.0), "sl_pct": sl, "peak": price,
+                "trailing": False, "score": score, "tier": tier, "opened_at": _now(),
+            })
+            a["trades"].append({"type": "open", "symbol": cand, "amount_usd": amount, "ts": _now()})
+            _log(a, "buy", f"✅ COMPREI {cand} ${amount:.0f} · score {score} · vol {tier} · "
+                           f"SL {sl:.0f}%/alvo correndo · convicção {conv:.0f}%")
+        else:
+            _log(a, "scan", f"🔍 Regime {regime_lbl} · melhor: {cand} (score {score} < corte {cut}) "
+                            "— sem setup, aguardando.")
+    a["peak"] = max(a["peak"], _equity(a))
+    return snapshot(addr)
 
 
 def snapshot(addr: str) -> dict:
@@ -128,11 +187,16 @@ def snapshot(addr: str) -> dict:
     positions, holdings = [], []
     pos_val = 0.0
     for p in a["positions"]:
-        cur = _price(p["symbol"])
+        cur = a["market"][p["symbol"]]["price"]
         val = p["qty"] * cur
         pos_val += val
         pnl = (cur - p["entry_price"]) / p["entry_price"] * 100.0 if p["entry_price"] else 0.0
-        positions.append({**p, "current_price": cur, "value_usd": val, "pnl_pct": pnl})
+        positions.append({
+            "symbol": p["symbol"], "entry_price": p["entry_price"], "current_price": cur,
+            "amount_usd": p["amount_usd"], "value_usd": val, "pnl_pct": pnl,
+            "sl_pct": p["sl_pct"], "tier": p["tier"], "score": p["score"],
+            "trailing_active": p["trailing"],
+        })
         holdings.append({"symbol": p["symbol"], "kind": "token", "value_usd": val})
     equity = a["cash"] + pos_val
     holdings.insert(0, {"symbol": "USDC", "kind": "stable", "value_usd": a["cash"]})
@@ -141,11 +205,16 @@ def snapshot(addr: str) -> dict:
         h["pct"] = h["value_usd"] / total * 100.0
     a["peak"] = max(a["peak"], equity)
     dd = max((a["peak"] - equity) / a["peak"] * 100.0, 0.0) if a["peak"] > 0 else 0.0
-    state = "PAUSED" if a["paused"] else ("IN_POSITION" if a["positions"] else "SCANNING")
+    state = ("PAUSED" if a["paused"] else
+             ("SCANNING" if a["running"] and not a["positions"] else
+              ("IN_POSITION" if a["positions"] else "READY")))
     return {
-        "state": {"state": state, "equity_usd": equity, "drawdown_pct": dd, "peak_equity": a["peak"],
-                  "agent_address": addr, "holdings": holdings, "positions": positions,
-                  "token_focus": a["config"]["focus"], "stop_loss_pct": a["config"]["stop"],
-                  "take_profit_pct": a["config"]["tp"], "paused": a["paused"]},
+        "state": {
+            "state": state, "equity_usd": equity, "drawdown_pct": dd, "peak_equity": a["peak"],
+            "agent_address": addr, "holdings": holdings, "positions": positions,
+            "running": a["running"], "paused": a["paused"], "regime": a["regime"],
+            "btc_24h": round(a["btc_bias"], 1),
+        },
+        "feed": a["feed"],
         "trades": a["trades"],
     }

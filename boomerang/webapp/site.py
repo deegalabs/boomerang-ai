@@ -158,13 +158,13 @@ async def console_action(request):  # noqa: ANN001 — ações no agente SIMULAD
         body = await request.json()
     except Exception:  # noqa: BLE001
         pass
-    if name == "configure":
+    if name == "start":
+        ok, msg = demo.start(addr)
+    elif name == "tick":  # avança 1 ciclo do agente autônomo simulado
+        return JSONResponse({"ok": True, **demo.tick(addr)})
+    elif name == "configure":
         ok, msg = demo.configure(addr, body.get("token_focus", "ALL"),
                                  body.get("stop_loss_pct", 4), body.get("take_profit_pct", 10))
-    elif name == "buy":
-        ok, msg = demo.buy(addr, body.get("symbol", ""), body.get("amount", 10))
-    elif name == "sell":
-        ok, msg = demo.sell(addr, body.get("symbol", ""))
     elif name == "pause":
         ok, msg = demo.pause(addr)
     elif name == "withdraw":
