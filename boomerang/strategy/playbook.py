@@ -26,6 +26,7 @@ from dataclasses import dataclass
 VOL_ACCEL_MIN = 20.0    # momentum: volume_change_24h_pct >= 20% = rising interest (proxy of the 1h)
 VOL_STABLE_MAX = 40.0   # mean-rev: volume must not be EXPLODING (range, no trend)
 PANIC_FNG = 25          # F&G < 25 = extreme fear → panic regime (only DCA trades)
+DCA_REBOUND_MIN_1H = 0.5  # Crisis Rebound: 1h must be > +0.5% (the bounce STARTED) before buying the panic
 
 
 @dataclass(frozen=True)
@@ -89,8 +90,10 @@ def select_strategy(fng: int | None, metrics: dict) -> StrategySpec | None:
     vc = metrics.get("volume_change_24h_pct") or 0.0
 
     # PANIC (extreme fear): forbids scalping; only DCA on a solid asset in free fall.
+    # CRISIS REBOUND: don't catch the falling knife — only buy once the bounce has STARTED
+    # (price ticking up in the last hour while 24h is deeply negative).
     if fng is not None and fng < PANIC_FNG:
-        if p24 < -10.0:
+        if p24 < -10.0 and p1 > DCA_REBOUND_MIN_1H:
             return DCA
         return None
 
@@ -116,3 +119,59 @@ def setup_strength(spec: StrategySpec, metrics: dict) -> float:
     if spec.key == "mean_reversion":
         return 40.0 + min(p24, 20.0) + min(-p1, 10.0)
     return 30.0 + min(-p24, 40.0)  # dca: the deeper the drop, the greater the potential bounce
+
+
+# ── ACTION MATRIX: the market regime dictates the posture (NEXUS-style) ───────
+@dataclass(frozen=True)
+class Posture:
+    """What the current MARKET regime allows: which strategies, how big, how many.
+
+    size_mult multiplies the conviction-sized position; max_positions caps the concurrent
+    open positions; allowed is the set of strategy keys permitted to OPEN this cycle."""
+
+    label: str
+    size_mult: float
+    max_positions: int
+    allowed: frozenset
+
+
+_RISK_TRADE = frozenset({"momentum", "mean_reversion"})
+
+
+def regime_posture(fng: int | None, btc_24h: float | None, funding: float | None) -> Posture:
+    """Maps the macro regime to a trading posture. The deterministic 'Action Matrix':
+    in panic only DCA (smaller, fewer); in a BTC crash stand fully down; when defensive
+    (BTC soft / extreme greed / overleveraged funding) shrink size and positions."""
+    if fng is not None and fng < PANIC_FNG:
+        return Posture("PANIC", 0.7, 2, frozenset({"dca"}))      # only DCA, modest size
+    if btc_24h is not None and btc_24h <= -5.0:
+        return Posture("RISK_OFF", 0.0, 0, frozenset())          # systemic crash → no entries
+    overleveraged = funding is not None and funding >= 0.0005
+    defensive = ((btc_24h is not None and btc_24h <= -2.0)
+                 or (fng is not None and fng >= 78) or overleveraged)
+    if defensive:
+        return Posture("DEFENSIVE", 0.6, 2, _RISK_TRADE)         # smaller, fewer
+    if btc_24h is not None and btc_24h >= 3.0:
+        return Posture("BULL", 1.0, 3, _RISK_TRADE)              # full weight
+    return Posture("NEUTRAL", 0.85, 3, _RISK_TRADE)
+
+
+# ── STRATEGY ARBITER: deactivate a strategy with negative expectancy ──────────
+def expectancy_disabled(closes: list, *, min_trades: int = 6, min_expectancy: float = -0.5) -> set:
+    """Returns the strategy keys to DEACTIVATE because their recent EXPECTANCY (avg PnL%
+    per trade) is clearly negative — even if the win-rate looks fine (NEXUS's lesson: a
+    67%-WR strategy can still bleed). Needs >= min_trades closed trades per strategy to act;
+    dormant until enough history accrues. Determines from the recorded {strategy, pnl_pct}."""
+    from collections import defaultdict
+    by_strat: dict[str, list] = defaultdict(list)
+    for t in closes:
+        key = (t.get("strategy") or "").strip()
+        pnl = t.get("pnl_pct")
+        if key and pnl is not None:
+            by_strat[key].append(pnl)
+    disabled = set()
+    for key, pnls in by_strat.items():
+        recent = pnls[-20:]
+        if len(recent) >= min_trades and sum(recent) / len(recent) < min_expectancy:
+            disabled.add(key)
+    return disabled

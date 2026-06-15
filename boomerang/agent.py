@@ -27,7 +27,8 @@ from boomerang.ipc import Alert, AlertBus, AlertType
 from boomerang.persistence import append_trade, load_state, load_trades, save_state
 from boomerang.risk import RiskEngine
 from boomerang.risk.risk_engine import ExitSignal
-from boomerang.strategy.playbook import select_strategy, setup_strength
+from boomerang.strategy.playbook import (
+    expectancy_disabled, regime_posture, select_strategy, setup_strength)
 from boomerang.types import AgentState, Position
 from boomerang.vault.bnb_validation import BNBValidator
 from boomerang.vault.twak_executor import TwakError, TwakExecutor
@@ -662,6 +663,13 @@ class BoomerangAgent:
             if spec:
                 fired.append((spec, s, setup_strength(spec, mq)))
         fired.sort(key=lambda x: -x[2])
+        # ACTION MATRIX + ARBITER: the regime dictates which strategies may open + the size/position
+        # posture; a strategy bleeding (negative expectancy) is auto-deactivated from its history.
+        posture = regime_posture(fng, btc24, funding)
+        disabled = expectancy_disabled([t for t in load_trades()
+                                        if t.get("type") == "close" and t.get("pnl_pct") is not None])
+        fired = [(spec, s, st) for (spec, s, st) in fired
+                 if spec.key in posture.allowed and spec.key not in disabled]
         TOP_K = 3
         STRONG = 78  # clearly strong setup: stops spending calls and enters right away
 
@@ -672,6 +680,7 @@ class BoomerangAgent:
         gate = self._risk.can_open_position(
             current_equity_usd=equity, available_stable_usd=stable,
             open_positions=len(self.positions), now_ts=now,
+            max_positions=posture.max_positions,
         )
         # DCA is the PANIC strategy → ignores the BTC-plunging gate (it was MADE for that).
         # Depeg blocks everything; circuit breaker/cap/max-positions (gate) always still apply.
@@ -718,6 +727,7 @@ class BoomerangAgent:
                                                max_pct=self._cfg.max_position_pct)
                 if spec.key == "momentum":
                     conv_pct *= overextension_factor(ch24)
+                conv_pct *= posture.size_mult  # ACTION MATRIX: regime scales the bet (defensive shrinks)
                 size = self._risk.position_size_usd(equity, stable, override_pct=conv_pct)
                 val = await asyncio.to_thread(
                     self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size,
@@ -755,7 +765,9 @@ class BoomerangAgent:
         top_str = " · ".join(f"{s} {sc}" for s, sc in top) or "—"
         melhor = f" · Best rated: {top_eval}" if top_eval else ""
         radar = f" · Radar: +{len(movers)} movers" if movers else ""
-        reg = f" · Regime: {regime_label}({cut_adjust:+d})" if regime_label != "NEUTRO" else ""
+        reg = f" · Regime: {regime_label}({cut_adjust:+d}) · Posture: {posture.label} x{posture.size_mult:g}"
+        if disabled:
+            reg += f" · Disabled: {','.join(sorted(disabled))}"
         detail = (f"Analyzed {len(prescores)} tokens (momentum){radar}{reg}. Top: {top_str}. "
                   f"Candidates for AI: {len(fired)} · Claude: {claude_calls} call(s)."
                   f"{melhor}{gate_note}{rot_note} No entry.")

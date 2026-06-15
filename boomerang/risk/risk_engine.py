@@ -165,6 +165,7 @@ class RiskEngine:
         available_stable_usd: float,
         open_positions: int,
         now_ts: float,
+        max_positions: int | None = None,
     ) -> RiskDecision:
         if self._halted:
             return RiskDecision(False, RejectReason.RISK_BLOCKED, "Agent halted (circuit breaker).")
@@ -175,7 +176,11 @@ class RiskEngine:
         if self.circuit_breaker_tripped(current_equity_usd):
             return RiskDecision(False, RejectReason.RISK_BLOCKED, "Drawdown at the safety trigger.")
 
-        if open_positions >= self._cfg.max_concurrent_positions:
+        # The regime posture may tighten the cap below the config max (never above).
+        cap = self._cfg.max_concurrent_positions
+        if max_positions is not None:
+            cap = min(cap, max_positions)
+        if open_positions >= cap:
             return RiskDecision(False, RejectReason.MAX_POSITIONS, "Maximum simultaneous positions.")
 
         if now_ts - self._last_trade_ts < self._cfg.trade_cooldown_seconds:
