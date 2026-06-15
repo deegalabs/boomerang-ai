@@ -80,32 +80,19 @@ negative — even at high win-rate.
 
 ### The "customs" pipeline — every cycle, three filters in series
 
-```
-            ┌──────────────────────────────────────────────────────────────┐
- each       │ 🛡️  RISK ENGINE (pre-check, deterministic)                    │
- cycle  →   │   equity (on-chain) · drawdown ≥23% → PANIC · daily cap 15%   │
-            │   depeg guard · cooldown · #positions · stable balance        │
-            │   skip-cycle on an unreliable equity reading (no false flush) │
-            └───────────────────────────┬──────────────────────────────────┘
-                                         │ ok
-   ┌─────────────────────────────────────▼─────────────────────────────────┐
-   │ 1️⃣  FILTER 1 — Brain (brain/cmc_analyzer.py)                          │
-   │   CMC metrics (REST) + x402-paid derivatives (in-loop) → SANITIZE     │
-   │   (anti prompt-injection) → Claude (forced tool) → {score, action,    │
-   │   invalidation}.  Deterministic adaptive cutoff (≈58 conservative).   │
-   └─────────────────────────────────────┬──────────────────────────────────┘
-                                          │ BUY
-   ┌──────────────────────────────────────▼────────────────────────────────┐
-   │ 2️⃣  FILTER 2 — On-chain validation (vault/bnb_validation.py)         │
-   │   liquidity (V2+V3) · round-trip hidden-tax check · slippage (≤1.5%)  │
-   │   · oracle divergence (CMC × pool) — read-only, zero gas              │
-   └──────────────────────────────────────┬────────────────────────────────┘
-                                           │ approved
-   ┌───────────────────────────────────────▼───────────────────────────────┐
-   │ 3️⃣  FILTER 3 — Execution (vault/twak_executor.py)                     │
-   │   under a mutex: TWAK swap USDC→token (agent-side signing) → open      │
-   │   position. A 2s monitor runs trailing / TP / time-stop.              │
-   └─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Start([each cycle]) --> A
+
+    A["🛡️ <b>RISK ENGINE</b> — pre-check · deterministic<br/>equity on-chain · drawdown ≥23% → PANIC · daily cap 15%<br/>depeg guard · cooldown · #positions · stable balance<br/>skip-cycle on unreliable equity reading — no false flush"]
+    A -->|ok| B["1️⃣ <b>FILTER 1 · Brain</b> — brain/cmc_analyzer.py<br/>CMC metrics REST + x402-paid derivatives in-loop<br/>→ SANITIZE anti prompt-injection → Claude forced-tool<br/>→ score · action · invalidation · adaptive cutoff ≈58"]
+    B -->|BUY| C["2️⃣ <b>FILTER 2 · On-chain validation</b> — vault/bnb_validation.py<br/>liquidity V2+V3 · round-trip hidden-tax check<br/>slippage ≤1.5% · oracle divergence CMC × pool<br/>read-only · zero gas"]
+    C -->|approved| D["3️⃣ <b>FILTER 3 · Execution</b> — vault/twak_executor.py<br/>under a mutex: TWAK swap USDC→token · agent-side signing<br/>→ open position · 2s monitor: trailing / TP / time-stop"]
+
+    classDef risk fill:#1e293b,stroke:#f3ba2f,stroke-width:1.5px,color:#e2e8f0;
+    classDef filter fill:#0b0f19,stroke:#334155,stroke-width:1px,color:#e2e8f0;
+    class A risk;
+    class B,C,D filter;
 ```
 
 Before executing, the agent **seals its reasoning + the invalidation condition on-chain**
