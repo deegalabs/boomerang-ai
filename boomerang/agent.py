@@ -82,6 +82,8 @@ class BoomerangAgent:
         self._last_rep_publish: float = 0.0
         self._last_risk_publish: float = 0.0
         self._last_depeg_alert: float = 0.0
+        self._last_x402: float = 0.0          # throttle for the in-loop x402 derivatives payment (~1x/hour)
+        self._x402_deriv: dict = {}           # latest CMC derivatives fetched via x402 (fed to the brain)
         self._extreme_greed: bool = False     # F&G >= 78 → tightens exits (locks profit at the top)
         self._fng_ema: float | None = None    # smoothed F&G average to read the DIRECTION (fear easing vs cooling)
         self._last_equity: float = 0.0          # most recent equity (cache for dashboard)
@@ -623,6 +625,16 @@ class BoomerangAgent:
         # MACRO FIRST (the strategy selector needs F&G to route panic→DCA).
         macro = await self._analyzer.gather_macro()
         btc24, fng, funding = macro.get("btc_24h"), macro.get("fng"), macro.get("funding")
+        # x402 IN THE TRADE LOOP (load-bearing, ~1x/hour): pays a real micropayment on Base
+        # (signed locally via twak) for CMC Agent Hub derivatives our REST plan blocks. The
+        # data is fed to the brain below; on any failure we keep the Binance funding proxy.
+        if now - self._last_x402 >= 3600:
+            self._last_x402 = now
+            deriv = await self._analyzer.gather_x402_derivatives()
+            if deriv:
+                self._x402_deriv = deriv if isinstance(deriv, dict) else {"cmc_derivatives": deriv}
+                await self._emit(AlertType.STARTED, "💸 x402 paid in-loop (CMC derivatives)",
+                                 "Self-custody micropayment on Base via TWAK — settles on-chain.")
         # Publishes the REAL market for the site demo to reuse (same process) — zero cost.
         market_cache.put(dict(quotes), btc24, fng)
         systemic = btc24 is not None and btc24 <= -5.0
@@ -704,7 +716,7 @@ class BoomerangAgent:
                 # the response to the regime). The brain CONFIRMS the setup in the active strategy's frame.
                 ca = cut_adjust if spec.key == "momentum" else 0
                 verdict = await self._analyzer.evaluate(
-                    symbol, raw_metrics={**global_metrics, **quotes[symbol]},
+                    symbol, raw_metrics={**global_metrics, **self._x402_deriv, **quotes[symbol]},
                     memory=memory, cut_adjust=ca, strategy=spec.key)
                 claude_calls += 1
                 if verdict.confidence_score > best_score:
@@ -791,7 +803,8 @@ class BoomerangAgent:
         if float(quotes.get(cand, {}).get("percent_change_24h") or 0.0) > self._cfg.max_entry_24h_pct:
             return ""  # anti-top lock: doesn't rotate into an overextended token
         verdict = await self._analyzer.evaluate(
-            cand, raw_metrics={**global_metrics, **quotes[cand]}, memory=self._performance_digest())
+            cand, raw_metrics={**global_metrics, **self._x402_deriv, **quotes[cand]},
+            memory=self._performance_digest())
         if not verdict.is_buy or verdict.confidence_score < ROTATION_CUT:
             return ""
         # weakest holding that is NOT a winner on a run (preserves the winners!)
