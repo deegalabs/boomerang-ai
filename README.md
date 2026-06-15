@@ -27,7 +27,7 @@ The full lifecycle is proven on-chain: **buy → sell → return to owner**, plu
 
 ## The thesis
 
-**Attention arbitrage.** Exploit the lag between a spike in retail attention on CoinMarketCap (searches, trending, sentiment, momentum) and the liquidity arriving on-chain on BNB Smart Chain. Directional **spot** entries on liquid tokens, with deterministic risk management. No leverage, no derivatives.
+**Attention arbitrage + regime-routed strategies.** The core edge is exploiting the lag between a spike in retail attention on CoinMarketCap (searches, trending, sentiment, momentum) and the liquidity arriving on-chain on BNB Smart Chain. A regime router runs the right play for the market — **Momentum** in uptrends, **Mean-Reversion** in ranges, **DCA** in panic — where a deterministic trigger selects the setup and the Claude brain confirms it. Directional **spot** only, with deterministic risk management. No leverage; derivatives data (funding rate) is read as a signal, never traded.
 
 ---
 
@@ -64,7 +64,7 @@ Every scan cycle runs three filters in series. A single rejection aborts the tra
    └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Risk engine** (`risk/risk_engine.py`, cross-cutting): global drawdown circuit breaker, position sizing capped by the **real stable balance**, anti-loop mutex, trade cooldown, activity heartbeat, position reconciliation against the wallet.
+**Risk engine** (`risk/risk_engine.py`, cross-cutting): global drawdown circuit breaker (23%) + intraday daily-loss cap (15%), dynamic SL/TP + trailing, time-stop, position sizing capped by the **real stable balance**, stablecoin-depeg guard, anti-loop mutex, trade cooldown, activity heartbeat, position reconciliation, and an anti-false-trip guard that **skips the cycle on an unreliable equity reading** (RPC/price glitch) instead of liquidating on bad data.
 
 ---
 
@@ -107,7 +107,9 @@ Two **logical** layers, one **physical** container:
 - Accept commands from anyone but the owner (`TELEGRAM_MASTER_USER_ID` pinning).
 - Let the AI decide risk — guardrails are deterministic code.
 
-**Self-custody:** the wallet is the agent's own (non-custodial — not held on an exchange). The private key is stored **encrypted** in the agent's runtime environment and never appears in the browser, the site, or the code. Signing happens agent-side; the user-facing layer (bot/site) has no access to the key.
+**Self-custody:** the wallet is the agent's own (non-custodial — not held on an exchange). The private key is stored **encrypted** in the agent's runtime environment and never appears in the browser, the site, or the code. Signing happens agent-side; the user-facing layer (bot/site) has no access to the key. A **separate, fund-less** identity wallet signs the on-chain ERC-8004 proofs, so its key (used frequently) can never move money.
+
+> For a frank account of **what's real, what's a showcase, and the limitations**, see [`REVIEW.md`](REVIEW.md).
 
 | Threat | Defense |
 |---|---|
