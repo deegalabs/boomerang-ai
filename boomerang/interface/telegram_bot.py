@@ -383,6 +383,9 @@ class TelegramInterface:
             f"💰 Equity: *{eq}*  ·  Drawdown: {dd}",
             f"⚙️ Stop -{s['stop_loss_pct']:.0f}% · 🎯 {tp_txt} · mode {self._agent.mode}",
         ]
+        idn = s.get("identity") or {}
+        if idn.get("registered") and idn.get("explorer"):
+            lines.append(f"⛓️ On-chain ID *#{idn.get('agent_id')}* · [proof on BscScan]({idn['explorer']})")
         det = s.get("positions_detail") or []
         if det:
             lines.append("\n*📌 Open positions:*")

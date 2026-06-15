@@ -94,6 +94,10 @@ TR: dict[str, dict[str, str]] = {
         "lv_id_sub": "Registered on BNB Chain via the BNB AI Agent SDK. Gas-free, verifiable by anyone.",
         "lv_id_wallet": "Identity wallet", "lv_id_proof": "Proof on BscScan",
         "lv_id_registry": "Registry", "lv_id_unreg": "not registered yet",
+        "lv_now": "Now", "lv_target": "Target", "lv_trailing": "trailing",
+        "lv_mode": "Mode", "lv_size": "Size", "lv_universe": "Watching", "lv_tokens": "tokens monitored",
+        "lv_engine": "Posture & engine",
+        "lv_explain": "An autonomous agent on BNB Chain. It scans CoinMarketCap attention, decides with AI under deterministic risk rules, and signs its own self-custody swaps. Read-only, updating live.",
     },
     "pt": {
         "tagline": "Agente de trading autônomo na BNB Chain",
@@ -171,6 +175,10 @@ TR: dict[str, dict[str, str]] = {
         "lv_id_sub": "Registrada na BNB Chain via BNB AI Agent SDK. Gas-free, verificável por qualquer um.",
         "lv_id_wallet": "Carteira de identidade", "lv_id_proof": "Prova na BscScan",
         "lv_id_registry": "Registro", "lv_id_unreg": "ainda não registrada",
+        "lv_now": "Agora", "lv_target": "Alvo", "lv_trailing": "trailing",
+        "lv_mode": "Modo", "lv_size": "Tamanho", "lv_universe": "Vigiando", "lv_tokens": "tokens monitorados",
+        "lv_engine": "Postura & motor",
+        "lv_explain": "Um agente autônomo na BNB Chain. Lê a atenção da CoinMarketCap, decide com IA sob regras determinísticas de risco, e assina seus próprios swaps em autocustódia. Só leitura, atualizando ao vivo.",
     },
 }
 

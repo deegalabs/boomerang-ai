@@ -7,6 +7,7 @@
     {{ t.lv_title }} <span id="lvState" class="pill pill--gold" style="vertical-align:middle;font-size:12px">·</span>
   </h1>
   <p class="lead" style="font-size:1.02rem">{{ t.lv_sub }}</p>
+  <p class="mut" style="font-size:.92rem;max-width:68ch;margin-top:8px">{{ t.lv_explain }}</p>
   <div id="lvAddr" class="mono" style="font-size:.8rem;color:var(--faint);margin-top:10px">·</div>
 
   <div class="card card--glow" id="lvIdCard" style="margin-top:18px;display:none">
@@ -49,6 +50,12 @@
     <div class="card stat"><span class="card__lbl">{{ t.lv_positions }}</span><span class="v" id="lvPosN">·</span></div>
   </div>
 
+  <div class="card" style="margin-top:18px">
+    <span class="card__lbl">{{ t.lv_engine }}</span>
+    <div id="lvEngine" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><span class="mut">·</span></div>
+    <div id="lvUniverse" style="margin-top:12px"></div>
+  </div>
+
   <div class="card" style="margin-top:18px"><span class="card__lbl">{{ t.lv_composition }}</span><div id="lvComp" style="margin-top:12px"><span class="mut">·</span></div></div>
   <div class="card" style="margin-top:18px"><span class="card__lbl">{{ t.lv_positions }}</span><div id="lvPos" style="margin-top:12px"><span class="mut">{{ t.lv_none }}</span></div></div>
   <div class="card" style="margin-top:18px"><span class="card__lbl">{{ t.lv_history }}</span><div id="lvHist" style="margin-top:12px"><span class="mut">{{ t.lv_no_trades }}</span></div></div>
@@ -63,6 +70,8 @@ const L = {
   type: "{{ t.lv_type }}", buy: "{{ t.lv_buy }}", sell: "{{ t.lv_sell }}", tx: "{{ t.lv_tx }}",
   token: "{{ t.th_token }}", pnl: "{{ t.th_pnl }}", updated: "{{ t.lv_updated }}",
   idProof: "{{ t.lv_id_proof }}", idRegistry: "{{ t.lv_id_registry }}",
+  now: "{{ t.lv_now }}", target: "{{ t.lv_target }}", trailing: "{{ t.lv_trailing }}",
+  mode: "{{ t.lv_mode }}", size: "{{ t.lv_size }}", watching: "{{ t.lv_universe }}", tokensWord: "{{ t.lv_tokens }}",
 };
 const SCAN = "https://bscscan.com";
 const usd = v => v==null ? "·" : "$"+Number(v).toFixed(2);
@@ -106,6 +115,19 @@ async function tick(){
   const pos = s.positions || [];
   document.getElementById("lvPosN").textContent = pos.length;
 
+  // Posture & engine (mode, global settings, watched universe)
+  const tpG = Number(s.take_profit_pct||0);
+  document.getElementById("lvEngine").innerHTML =
+    `<span class="pill pill--gold" style="font-size:11px">${L.mode}: ${s.mode||'—'}</span>`+
+    `<span class="pill" style="font-size:11px">stop -${Number(s.stop_loss_pct||0).toFixed(0)}%</span>`+
+    `<span class="pill" style="font-size:11px">${tpG>0?('TP +'+tpG.toFixed(0)+'%'):'TP: '+L.trailing}</span>`+
+    `<span class="pill" style="font-size:11px">${L.size}: ${Number(s.position_size_pct||0).toFixed(0)}%</span>`;
+  const uni = s.token_focus || [];
+  document.getElementById("lvUniverse").innerHTML = uni.length
+    ? `<span class="mut" style="font-size:.78rem">${L.watching} ${uni.length} ${L.tokensWord}:</span><br>`+
+      uni.map(t=>`<span class="pill" style="font-size:10px;margin:3px 3px 0 0">${t}</span>`).join("")
+    : "";
+
   // Composition
   const h = s.holdings || [];
   document.getElementById("lvComp").innerHTML = h.length
@@ -113,10 +135,22 @@ async function tick(){
       h.map(x=>{ const k=KIND[x.kind]||["",""]; return `<tr><td><b>${x.symbol}</b> <span class="pill" style="color:${k[1]};font-size:10px">${k[0]}</span></td><td class="mono">${usd(x.value_usd)}</td><td class="mono mut">${(x.pct||0).toFixed(1)}%</td></tr>`; }).join("")+`</table>`
     : `<span class="mut">·</span>`;
 
-  // Positions
+  // Positions — entry → now, live PnL, target, stop (parity with Telegram)
   document.getElementById("lvPos").innerHTML = pos.length
-    ? `<table class="tbl"><tr><th>${L.token}</th><th>${L.entry}</th><th>${L.amount}</th><th>${L.stop}</th></tr>`+
-      pos.map(p=>`<tr><td><b>${p.symbol}</b></td><td class="mono">${px(p.entry_price)}</td><td class="mono">${usd(p.amount_usd)}</td><td class="mono">${px(p.stop_loss_price)}</td></tr>`).join("")+`</table>`
+    ? `<table class="tbl"><tr><th>${L.token}</th><th>${L.entry} → ${L.now}</th><th>${L.pnl}</th><th>${L.target}</th><th>${L.stop}</th></tr>`+
+      pos.map(p=>{
+        const tp = Number(p.take_profit_pct)||0;
+        const tgt = tp>0 ? px(Number(p.entry_price)*(1+tp/100)) : L.trailing;
+        const now = p.last_price ? px(p.last_price) : "·";
+        const pv = p.last_pnl_pct;
+        const pnl = pv==null ? `<span class="mut">·</span>`
+          : `<span class="${pv>=0?'pos':'neg'}">${pv>=0?'+':''}${Number(pv).toFixed(2)}%</span>`;
+        const trail = p.trailing_active ? ` <span class="pill pill--up" style="font-size:9px">📈 ${L.trailing}</span>` : "";
+        const sub = [p.strategy, usd(p.amount_usd)].filter(Boolean).join(" · ");
+        return `<tr><td><b>${p.symbol}</b>${trail}<br><span class="mut" style="font-size:.7rem">${sub}</span></td>`+
+               `<td class="mono">${px(p.entry_price)} → ${now}</td><td class="mono">${pnl}</td>`+
+               `<td class="mono">${tgt}</td><td class="mono">${px(p.stop_loss_price)}</td></tr>`;
+      }).join("")+`</table>`
     : `<span class="mut">${L.none}</span>`;
 
   // History

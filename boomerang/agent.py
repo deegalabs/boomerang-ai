@@ -88,6 +88,7 @@ class BoomerangAgent:
         self._fng_ema: float | None = None    # smoothed F&G average to read the DIRECTION (fear easing vs cooling)
         self._last_equity: float = 0.0          # most recent equity (cache for dashboard)
         self._last_holdings: list = []          # composition per coin (cache for /live panel)
+        self._last_mon_save: float = 0.0        # throttle for monitor-driven state saves (live PnL)
         self.agent_address: str | None = None   # wallet address (filled in at startup)
 
     # ── loading of eligible addresses ────────────────────────────────────────
@@ -470,6 +471,7 @@ class BoomerangAgent:
             "stop_loss_pct": self.stop_loss_pct,
             "take_profit_pct": self.take_profit_pct,
             "position_size_pct": self.position_size_pct,
+            "identity": identity.summary(),
         }
 
     # ── manual buy (validation / owner override) ─────────────────────────────
@@ -896,6 +898,10 @@ class BoomerangAgent:
             except Exception as exc:  # noqa: BLE001
                 self._log.warning("price unavailable %s: %s", pos.symbol, exc)
                 continue
+            # Record the live price/PnL so the public /live panel shows it (parity with Telegram).
+            pos.last_price = price
+            pos.last_pnl_pct = (((price - pos.entry_price) / pos.entry_price * 100.0)
+                                if pos.entry_price else None)
             signal = self._risk.evaluate_position(pos, price, tighten=self._extreme_greed)
             if signal != ExitSignal.HOLD:
                 await self._sell(pos, reason=signal.value, exit_price=price)
@@ -903,6 +909,12 @@ class BoomerangAgent:
                 # Smart Exit SKILL: if the mechanical check says HOLD, the brain re-evaluates the
                 # thesis (every ~5min) and may exit early — protect profit / cut a reversal.
                 await self._smart_exit_check(pos, price)
+        # Persist the refreshed live PnL (throttled) so /live stays fresh without flogging the disk.
+        if self.positions:
+            now = time.time()
+            if now - self._last_mon_save >= 10:
+                self._last_mon_save = now
+                self._save()
         if not self.positions and self.state == AgentState.IN_POSITION:
             self.state = AgentState.SCANNING
 
