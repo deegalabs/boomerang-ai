@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# Run pytest from the repo root so `import boomerang` resolves without an install step
+# (CI runs `pytest tests/` on a bare checkout).
+pythonpath = ["."]
+testpaths = ["tests"]
