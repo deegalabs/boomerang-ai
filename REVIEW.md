@@ -53,16 +53,20 @@ an attacker could only write fake metadata — **not move a cent**.
 - **Capital-protection stack** (deterministic): entry validation → dynamic SL/TP & trailing →
   drawdown circuit breaker (23%) → daily loss cap (15%), plus a depeg guard and an
   **anti-false-trip** guard that skips the cycle on an unreliable equity reading instead of
-  liquidating on bad data.
-- **Test coverage + CI:** 44 tests over the critical pure logic (risk engine, sanitizer, config,
-  strategy router, equity-reliability, log redaction); lint + tests run on every push.
+  liquidating on bad data. On top: a regime **Action Matrix** (allowed strategies + size +
+  position cap) and an **expectancy arbiter** that auto-disables a bleeding strategy.
+- **x402 load-bearing in the loop:** the agent pays a real USDC-on-Base micropayment (~$0.01,
+  signed locally via twak, EIP-3009) ~1x/hour for CMC Agent Hub derivatives — confirmed
+  settling in production (a 402→200 on the `/x402` proxy). Best-effort with a Binance fallback.
+- **Test coverage + CI:** 52 tests over the critical pure logic (risk engine, sanitizer, config,
+  strategy router/action-matrix/arbiter, equity-reliability, log redaction); lint + tests on every push.
 
 ## 3. What is a SHOWCASE (honest)
 
-- **`boomerang/payments/x402_cmc.py`** — a clean, SDK-signed x402 client exercised by
-  `scripts/x402_pay.py` for a real end-to-end paid call. It is **not** the runtime data path:
-  the brain reads market data over the **CMC REST API**, and runtime x402, when used, goes
-  through the `twak x402` CLI.
+- **`boomerang/payments/x402_cmc.py`** — a clean, SDK-signed x402 client (signs with the identity
+  wallet) exercised by `scripts/x402_pay.py` for a standalone proof call. Note: the **runtime**
+  x402 is the load-bearing one above (paid via `twak`, self-custody); this module is the
+  alternative SDK-signed path, kept as a reference proof.
 - **The public demo Console** is **simulated and ephemeral** — a fictional $100 wallet per
   session, in-memory, reset on restart. It reads the agent's real market data but **never
   touches real funds**. Real control is owner-only via Telegram.

@@ -4,7 +4,7 @@
 
 ## Railway (official deployment)
 
-Real architecture: **a single Railway service** runs the **public site + the 24/7 agent** in the same container ([`Dockerfile`](Dockerfile): Python 3.12 + Node 20 + the TWAK CLI). The entrypoint [`railway_start.py`](railway_start.py) starts the **site** (uvicorn, main thread, answers `/healthz` immediately) and the **agent** (own thread), sharing a **volume** (`/app/state`) for state, so `/live` shows real trades. It is the **same trading wallet**: the **encrypted** keystore (`~/.twak/wallet.json`) and the initial state are materialized at boot from base64 env vars — no fund migration, no raw key.
+Real architecture: **a single Railway service** runs the **public site + the 24/7 agent** in the same container ([`Dockerfile`](Dockerfile): Python 3.12 + Node 20 + the TWAK CLI). The entrypoint [`railway_start.py`](railway_start.py) starts the **site** (uvicorn, main thread, answers `/healthz` immediately) and the **agent** (own thread), sharing a **volume** (`/app/state`) for state, so `/live` shows real trades. It is the **same trading wallet**: the **encrypted** TWAK keystore (`~/.twak/wallet.json`), the **encrypted identity keystore** (`identity_wallet/<addr>.json`, from `IDENTITY_WALLET_JSON_B64`), and the initial state are all materialized at boot from base64 env vars — no fund migration, no raw key.
 
 > Why not Vercel: the site is server-rendered Python (Starlette + Jinja2) and the agent is a 24/7 process. Vercel is serverless/static and runs neither. Hence, everything on Railway.
 
@@ -23,6 +23,11 @@ python scripts/railway_setvars.py
 railway variables --set "SESSION_SECRET=$(python -c 'import secrets;print(secrets.token_hex(32))')"
 railway variables --set "OWNER_WALLET_ADDRESS=0x...your_personal_wallet..."
 
+# 3b. identity keystore (base64): materialized at boot so on-chain attestation can sign
+#     as the agentId owner. Without it, set_metadata reverts "Not authorized".
+railway variables --set "IDENTITY_WALLET_JSON_B64=$(python scripts/identity_keystore_b64.py)"
+# (BNB_IDENTITY_PASSWORD is optional — it falls back to WALLET_PASSWORD.)
+
 # 4. build/deploy + public URL
 railway up --detach
 railway domain
@@ -30,13 +35,28 @@ railway domain
 
 [`railway.json`](railway.json) uses the Dockerfile builder, start `python railway_start.py`, and healthcheck `/healthz`. [`.dockerignore`](.dockerignore) ensures `.env`, `identity_wallet/`, and `state/` **never** enter the image — secrets arrive only as protected Railway environment variables, at runtime.
 
-**Verify** (`railway logs -d`): you should see `Equity inicial (on-chain)`, `Estado restaurado`, `Identidade ERC-8004`, `Bot do Telegram em polling`, and the `CICLO` lines. The public `/api/live` shows real `IN_POSITION`/equity/holdings.
+**Verify** (`railway logs -d`): you should see the keystore seed lines `seed: TWAK_WALLET_JSON_B64 -> ...` and `seed: IDENTITY_WALLET_JSON_B64 -> ...`, then `Initial equity (on-chain)`, `State restored`, `ERC-8004 identity`, `Telegram bot polling`, and the `CYCLE` lines. The public `/api/live` shows real `IN_POSITION`/equity/holdings.
 
 > **Security (cloud):** the encrypted keystore **and** `WALLET_PASSWORD` both live on Railway, so the key is decryptable on the provider. This is inherent to any hosted bot; a small bankroll bounds the risk. Secrets stay only in env vars (never in the repo/image). **Rotate `TELEGRAM_BOT_TOKEN`** (via @BotFather) if it ever appeared in a log before the logging filter was added.
 
-### Real x402
+### Real x402 (load-bearing in the trade loop)
 
-`twak` now runs **inside the container** (same image). The site's own `/x402` route injects the header that CoinMarketCap's MCP requires, so the pay-per-call payment can be settled from the cloud or from a local machine pointing at the public URL:
+x402 is **no longer a demo** — it is **wired into the trade loop**. About **once per hour** the
+agent pays a real **USDC-on-Base** micropayment (~$0.01, EIP-3009, signed locally via twak) for
+CoinMarketCap **Agent Hub derivatives** that the free REST plan blocks; that data feeds the brain
+(best-effort, with a Binance-funding fallback if the payment can't settle).
+
+To enable it, **set `X402_ENDPOINT`** to the site's own `/x402` proxy — it injects the `Accept`
+header CoinMarketCap's MCP requires:
+
+```bash
+railway variables --set "X402_ENDPOINT=https://YOUR-APP.up.railway.app/x402"
+```
+
+The **TRADE wallet** (`0xc72a…`) must hold a few dollars of **USDC on Base** to pay. Cost is tiny:
+~$0.01/call, throttled to ~1×/hour ≈ **$0.24/day**. You can sanity-check the endpoint manually
+(`twak` runs inside the container; the `/x402` proxy works from the cloud or a local machine
+pointing at the public URL):
 
 ```bash
 twak x402 request --method POST \
@@ -45,7 +65,7 @@ twak x402 request --method POST \
   https://YOUR-APP.up.railway.app/x402
 ```
 
-A 200 with data = payment settled on-chain ($0.01 USDC on Base). In normal operation, data comes via **free REST** (do not set `X402_ENDPOINT`); real x402 is a proof/demo, not a per-cycle cost.
+A **402 → 200** on `/x402` = a payment settled on-chain ($0.01 USDC on Base) and data returned.
 
 > **Do not run a local agent** alongside the Railway one: two agents on the same wallet conflict.
 

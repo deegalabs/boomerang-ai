@@ -13,7 +13,7 @@ Mapped to the project's real files.
 │                                                                            │
 │   📱 Telegram Bot   boomerang/interface/telegram_bot.py                    │
 │      • buttons (InlineKeyboards)   • MASTER_USER_ID pinning                 │
-│      • /start /status /panic /pausar /sacar   • real-time alerts           │
+│      • /start /status /pausar /panic /reiniciar   • real-time alerts        │
 └───────────────┬───────────────────────────────▲───────────────────────────┘
                 │ control intents               │ alerts (AlertBus)
                 │ (configure/start/panic/        │ boomerang/ipc/events.py
@@ -60,8 +60,10 @@ aborts the trade **before** any money is touched.
 ```
                     ┌──────────────────────────────────────────────┐
   each cycle   →    │ 🛡️ RISK ENGINE (pre-check)                    │
-                    │  • equity (twak portfolio) → update peak      │
+                    │  • equity (on-chain) → update peak            │
+                    │  • equity reliable? else SKIP this cycle      │
                     │  • drawdown ≥ 23%? → PANIC (liquidate + halt) │
+                    │  • daily loss ≥ 15%? → halt for the day       │
                     │  • heartbeat? (>20h without a trade)          │
                     │  • can open? (cooldown, #positions, stable)   │
                     └───────────────────┬──────────────────────────┘
@@ -72,7 +74,7 @@ aborts the trade **before** any money is touched.
    │   injection) → Claude (forced tool) → {confidence_score, action}      │
    │   deterministic cutoff: score < min → HOLD                            │
    └────────────────────────────────────┬──────────────────────────────────┘
-                                         │ BUY (score ≥ 70 in conservative)
+                                         │ BUY (adaptive cutoff ≈58 conservative, floor 52)
    ┌─────────────────────────────────────▼─────────────────────────────────┐
    │ 2️⃣ FILTER 2 — On-chain validation (bnb_validation.py)                 │
    │   whitelist · getAmountsOut (slippage) · round-trip (hidden tax) ·     │
@@ -85,6 +87,31 @@ aborts the trade **before** any money is touched.
    │   position with initial stop-loss. Emits a TRADE_OPENED alert.        │
    └─────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 2b. The multi-strategy engine (regime-routed)
+
+Filter 1 is not a single rule. `boomerang/strategy/playbook.py` holds **three regime-routed
+strategies**; a **deterministic trigger** selects the setup and the Claude brain only
+**confirms** it (go/no-go + conviction). Each strategy carries its own exit parameters.
+
+```
+            ┌─ MOMENTUM (uptrend) ── 1h>+2.5%, 24h>0%, rising volume
+            │     SL -1% · trailing 1.5% after +2.5% · 20-min time-stop
+ trigger ──►├─ MEAN-REVERSION (range) ── 1h<-2% dip of a strong token (24h>+4%)
+ selects    │     TP +2.5% · SL -0.8% · 120-min time-stop
+            └─ DCA / crisis-rebound (panic) ── F&G<25, 24h<-10%, bounce started 1h>+0.5%
+                  TP +3% · no fixed SL (global breaker) · 24h time-stop
+```
+
+On top of the per-token trigger sit two deterministic governors:
+
+- **Action Matrix** (`regime_posture`): the macro regime dictates *which* strategies may open,
+  a **size multiplier** and a **max-positions cap** — RISK_OFF (BTC −5%) stands fully down
+  (0.0× / 0 positions); DEFENSIVE shrinks to 0.6× / 2 positions; BULL runs 1.0× / 3.
+- **Expectancy arbiter** (`expectancy_disabled`): auto-deactivates any strategy whose recent
+  average PnL/trade is negative — even at a high win-rate — once enough trades have closed.
 
 ---
 
@@ -111,13 +138,20 @@ for each position:
 ```
 [ Personal Wallet ] ──deposit bankroll──► [ Agent Wallet ] ──trades──► PancakeSwap
        ▲                                        │
-       └──────── /sacar  or  PANIC  ◄───────────┘  (twak transfer --confirm-to)
+       └──────── /panic  ◄──────────────────────┘  (twak transfer --confirm-to)
                  (converts to stable and sends it back)
 ```
 
 - **Competition mode:** trades continuously, compounding the bankroll.
 - **Boomerang (automatic return at cycle end):** a future/demo enhancement.
 - **`--confirm-to`** pins the withdrawal destination = anti-drain shield.
+
+**Two wallets, by design:**
+- **Trade wallet** `0xc72a37f4bb7c454Fd8a9EB629aFaEeb101F67dff` — holds the funds and executes
+  the swaps via twak. All the money lives here.
+- **Identity wallet** `0xd06be7Cf5D097F13Dbf6C35943616EC21641abc9` — a **separate, fund-less**
+  wallet that only signs the ERC-8004 on-chain proofs. It never touches custody, so attestation
+  can never put the bankroll at risk.
 
 ---
 
@@ -127,9 +161,11 @@ for each position:
 |--------------------------------------------|--------------------------------------|
 | eligible-token whitelist                   | token focus (liquid subset)          |
 | global drawdown circuit breaker (23%/DQ 30%) | stop-loss (2% / 4% / 5%)           |
-| slippage cap (0.5%)                        | mode (conservative ≥70 / aggressive ≥60) |
-| destination lock (anti-drain)              | (per-trade size = % of equity)       |
-| min trades / heartbeat                     |                                      |
+| daily loss cap (15% intraday)              | mode (conservative ≈58 / aggressive ≈52, adaptive, floor 52) |
+| slippage cap (1.5%)                        | (per-trade size = % of equity, base 10%) |
+| stablecoin depeg guard · dynamic SL/TP · trailing · time-stop | |
+| anti-false-trip (skip on bad equity read) ·  destination lock (anti-drain) | |
+| min trades / heartbeat · cooldown · anti-loop mutex | |
 
 `config.json` = `dev_safety` + `hackathon` (locked) and `user` (tunable).
 
@@ -145,18 +181,27 @@ for each position:
 | Hidden tax / honeypot           | round-trip retention (bnb_validation)              |
 | Stale oracle ("falling knife")  | CMC×pool divergence (bnb_validation)               |
 | Infinite loop / gas spam        | mutex + cooldown (risk_engine)                     |
-| Key theft                       | encrypted keystore in twak; bot/site have no access |
+| Stablecoin depeg                | depeg guard on the base stable (risk_engine)       |
+| Bad equity read (RPC/price glitch) | anti-false-trip: SKIP the cycle instead of liquidating on bad data (risk_engine) |
+| Key theft                       | encrypted keystore in twak; bot/site have no access; **identity wallet is fund-less** |
 | Host exposure (cloud)           | secrets as protected env vars; never in repo/image; small bankroll bounds risk |
-| Catastrophic drawdown / DQ      | deterministic circuit breaker (risk_engine)        |
+| Catastrophic drawdown / DQ      | deterministic circuit breaker (23%) + 15% intraday daily loss cap (risk_engine) |
+| Fabricated reasoning / hindsight | on-chain attestation: commit_prediction seals the reasoning + falsifier BEFORE the outcome (identity/bnb_agent) |
 
 ---
 
 ## 7. Mapping to sponsors and prizes
 
-- **CoinMarketCap (Agent Hub):** Filter 1 consumes data via REST/MCP and pays via x402
+- **CoinMarketCap (Agent Hub):** Filter 1 consumes data via REST/MCP. **x402 is now
+  load-bearing in the trade loop** (not just a showcase): the agent pays a real USDC-on-Base
+  micropayment (~$0.01, EIP-3009, ~1×/hour) for Agent Hub derivatives the REST plan blocks,
+  and that data feeds the brain (best-effort, with a Binance-funding fallback)
   → competes for "Best Use of Agent Hub".
 - **Trust Wallet (TWAK):** the single execution layer, multiple surfaces (signing +
-  autonomous mode + x402), self-custody → targets the "Best Use of TWAK" rubric.
-- **BNB AI Agent SDK:** the agent's on-chain identity (ERC-8004) → "Best Use of BNB SDK".
+  autonomous mode + x402 micropayments), self-custody → targets the "Best Use of TWAK" rubric.
+- **BNB AI Agent SDK:** the agent's on-chain identity (ERC-8004, agentId 131071, gas-free via
+  MegaFuel) **plus live attestation** — `commit_prediction` (seals each trade's reasoning +
+  falsifier before the outcome), `publish_track_record`, and `publish_risk_state` (circuit-breaker
+  state each cycle), signed by the fund-less identity wallet → "Best Use of BNB SDK".
 - **Track 1 (PnL):** deterministic guardrails maximize return without breaching the
   drawdown that disqualifies.

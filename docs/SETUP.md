@@ -81,8 +81,12 @@ It guides you through: (a) credentials, (b) wiring, (c) wallet creation. Manual 
 
 ## 6. Populate the eligible tokens (`data/eligible_tokens.json`)
 
-The agent only trades eligible tokens. To **start**, the **liquid subset** (about 12) is
-enough — that is what the conservative strategy uses.
+> ✅ **Mostly done already:** **147 eligible tokens** are already populated in
+> `data/eligible_tokens.json`, so this step is largely complete. Only revisit it if you want
+> to adjust the liquid `token_focus` subset.
+
+The agent only trades eligible tokens. To **start**, the **liquid subset** (the 12 in
+`token_focus`) is enough — that is what the conservative strategy uses.
 
 **How to get each address safely:** on the token's CoinMarketCap page, the **Contracts**
 section, copy the **BNB Smart Chain (BEP-20)** address and verify it on **bscscan.com**.
@@ -94,12 +98,13 @@ File format:
   "tokens": {
     "ETH": "0x...",  "XRP": "0x...", "DOGE": "0x...", "ADA": "0x...",
     "LINK": "0x...", "LTC": "0x...", "AVAX": "0x...", "DOT": "0x...",
-    "UNI": "0x...",  "AAVE": "0x...","ATOM": "0x...","BCH": "0x..."
+    "UNI": "0x...",  "SHIB": "0x...","FLOKI": "0x...","TWT": "0x..."
   }
 }
 ```
 
-> Prefer the most liquid majors (ETH, ADA, XRP, DOGE, LINK, LTC, AVAX, DOT, UNI, AAVE, BCH).
+> Prefer the most liquid majors (ETH, ADA, XRP, DOGE, LINK, LTC, AVAX, DOT, UNI, SHIB, FLOKI, TWT).
+> AAVE/ATOM/BCH were removed — they are Binance-Peg, CEX-only, with no DEX pool, so swaps revert.
 > The agent trades thin-liquidity tokens via the TWAK aggregator, but on-chain *pricing*
 > (used for stop-loss monitoring) is unreliable for them.
 

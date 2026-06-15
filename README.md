@@ -1,88 +1,115 @@
+<div align="center">
+
 # 🪃 Boomerang AI
 
-> **Autonomous short-cycle trading agent on BNB Smart Chain, controlled from Telegram.**
-> It reads attention signals on **CoinMarketCap**, decides with **Claude**, and signs/executes self-custody swaps via the **Trust Wallet Agent Kit**. Capital "goes to the market and comes back" — like a boomerang.
+### An autonomous, self-custody crypto trading agent on BNB Chain — controlled from Telegram, verifiable on-chain.
 
-**Hackathon:** BNB Hack — AI Trading Agent Edition (CoinMarketCap × Trust Wallet × BNB Chain) — **Track 1: Autonomous Trading Agents.**
+It reads attention on **CoinMarketCap**, decides with **Claude (Opus 4.8)**, and signs its own
+self-custody swaps via the **Trust Wallet Agent Kit**. Capital *goes to the market and comes
+back* — like a boomerang.
 
-🌐 **Live:** https://boomerang-ai-production.up.railway.app · runs 24/7 in the cloud, controlled by Telegram.
+[![CI](https://img.shields.io/badge/CI-ruff%20%2B%2052%20tests-22c55e)](.github/workflows/ci.yml)
+[![Track 1](https://img.shields.io/badge/BNB%20Hack-Track%201%20·%20Autonomous%20Agents-f0b90b)](https://dorahacks.io/)
+[![ERC-8004](https://img.shields.io/badge/ERC--8004-agentId%20131071-6366f1)](https://bscscan.com/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432)
+[![Self-custody](https://img.shields.io/badge/custody-self--custody%20(TWAK)-0ea5e9)](#-security--verifiability)
+[![License](https://img.shields.io/badge/license-MIT-64748b)](LICENSE)
+
+**🌐 Live:** https://boomerang-ai-production.up.railway.app · runs 24/7, controlled from Telegram.
+
+</div>
+
+---
+
+## Why it's different
+
+Most "AI trading agents" are a prompt with a swap bolted on, a backtest, or a mock that never
+moves money. Boomerang AI is the opposite on every axis:
+
+- 🤖 **Actually autonomous & live.** Runs 24/7 on Railway, scans the real market, decides, and
+  signs its own transactions — no human in the loop.
+- 🔐 **Real self-custody.** The key never leaves the agent; the bot and website have **no access**
+  to it. A *separate, fund-less* wallet signs the on-chain proofs, so frequently-used keys can
+  never move money.
+- 🧠 **A real brain, guarded by deterministic code.** Claude Opus 4.8 scores setups; **the code**
+  decides the action, size, stops, and kill-switches. An LLM hallucination cannot bypass risk.
+- 🎯 **A multi-strategy engine, not one trick.** Momentum, mean-reversion and DCA, *routed by
+  market regime* — with a position-size action matrix and an expectancy arbiter that
+  auto-disables a bleeding strategy.
+- ⛓️ **Verifiable on-chain.** ERC-8004 identity + **live attestation**: every trade's reasoning
+  (and its falsifier) is sealed on-chain **before** the outcome exists. Anti-fabrication by design.
+- 💸 **x402 pay-per-call, load-bearing in the loop.** The agent pays real USDC micropayments on
+  Base — signed locally via TWAK — for premium CMC data, as part of the trade cycle.
 
 ---
 
 ## On-chain proof (mainnet, verifiable)
 
-Everything the agent claims is verifiable on-chain. The agent wallet is `0xc72a37f4bb7c454Fd8a9EB629aFaEeb101F67dff`.
+Everything the agent claims is auditable on-chain. Trade wallet `0xc72a37f4bb7c454Fd8a9EB629aFaEeb101F67dff`.
 
 | What | Proof |
 |---|---|
-| **Agent identity (ERC-8004)** | agentId **131071** on BNB mainnet — [registration tx](https://bscscan.com/tx/0x93b2d496350f23aafc0872e0d6e5b0d736d0cb76260fd33f957b79bbe8f66947) · registry `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` |
+| **Agent identity (ERC-8004)** | agentId **131071** · [registration tx](https://bscscan.com/tx/0x93b2d496350f23aafc0872e0d6e5b0d736d0cb76260fd33f957b79bbe8f66947) · registry `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` |
+| **Live circuit-breaker attestation** | drawdown state sealed each cycle — [example tx](https://bscscan.com/tx/0xaa59abea6e67c1e715ae728562dc56aab412046e51032469933c571598265c11) |
 | **x402 micropayment (real)** | $0.01 USDC settled on Base for CoinMarketCap data — [settlement tx](https://basescan.org/tx/0xd5b04f9e12610160aed646a703a28f3625adbcfff86d8e54fde7f6835a76a699) |
 | **Sell (ADA → USDC)** | [tx](https://bscscan.com/tx/0x7f87dec9e271461b3f1205440cfa26f531da4671e6ad2380966aa3627311da21) |
-| **Sell (ATOM → USDC)** | [tx](https://bscscan.com/tx/0x44b3adbe2bfa9c514a0e75e380a6c78e627c5ac02b696bc559fe1037e9118602) |
 | **Capital return to owner** | anti-drain transfer — [tx](https://bscscan.com/tx/0xbf751fefd833b17c8f37c98f1157b223576240298c8c0f6aec50c7e0a5ee2df9) |
 
-The full lifecycle is proven on-chain: **buy → sell → return to owner**, plus the **identity** and **x402** integrations.
+Full lifecycle proven on-chain: **identity → buy → sell → return to owner → x402 → live attestation**.
 
 ---
 
-## The thesis
+## How it works
 
-**Attention arbitrage + regime-routed strategies.** The core edge is exploiting the lag between a spike in retail attention on CoinMarketCap (searches, trending, sentiment, momentum) and the liquidity arriving on-chain on BNB Smart Chain. A regime router runs the right play for the market — **Momentum** in uptrends, **Mean-Reversion** in ranges, **DCA** in panic — where a deterministic trigger selects the setup and the Claude brain confirms it. Directional **spot** only, with deterministic risk management. No leverage; derivatives data (funding rate) is read as a signal, never traded.
+**Thesis — attention arbitrage + regime-routed strategies.** Exploit the lag between a spike in
+retail attention on CoinMarketCap and the liquidity arriving on-chain. A regime router runs the
+right play for the market; a deterministic trigger selects the setup and the brain confirms it.
+Directional **spot** only. No leverage (derivatives funding is read as a *signal*, never traded).
 
----
+### The strategy engine
 
-## How it works — the "customs" pipeline
+| Strategy | Fires when (deterministic) | Exit |
+|---|---|---|
+| **Momentum** | uptrend regime · 1h>+2.5% · 24h>0% · rising volume | SL −1% → trailing 1.5% after +2.5% · 20-min time-stop |
+| **Mean-Reversion** | range regime · short dip (1h<−2%) of a strong token (24h>+4%) | TP +2.5% (clears friction) · SL −0.8% |
+| **DCA (crisis rebound)** | panic (F&G<25) · 24h<−10% · bounce started (1h>+0.5%) | TP +3% · no fixed SL (global breaker) · 24h time-stop |
 
-Every scan cycle runs three filters in series. A single rejection aborts the trade **before** any money moves.
+On top sits an **Action Matrix**: the macro regime dictates *which strategies may open*, a
+*size multiplier*, and a *max-positions* cap (RISK_OFF stands fully down; DEFENSIVE shrinks).
+An **expectancy arbiter** auto-deactivates any strategy whose recent average PnL/trade goes
+negative — even at high win-rate.
+
+### The "customs" pipeline — every cycle, three filters in series
 
 ```
-                    ┌──────────────────────────────────────────────┐
-  each cycle   →    │ 🛡️ RISK ENGINE (pre-check)                    │
-                    │  • equity (on-chain) → update peak            │
-                    │  • drawdown ≥ 23%? → PANIC (liquidate + halt) │
-                    │  • heartbeat? (min trades/day)                │
-                    │  • can open? (cooldown, #positions, stable)   │
-                    └───────────────────┬──────────────────────────┘
-                                        │ ok
-   ┌────────────────────────────────────▼─────────────────────────────────┐
-   │ 1️⃣  FILTER 1 — Brain (brain/cmc_analyzer.py)                          │
-   │   fetch structured metrics from CoinMarketCap (REST + x402/MCP) →      │
-   │   SANITIZE (anti prompt-injection) → Claude (forced tool) →            │
-   │   {confidence_score, action}. Deterministic cutoff: score < min → HOLD │
-   └────────────────────────────────────┬──────────────────────────────────┘
-                                         │ BUY (score ≥ adaptive cutoff, ~58 conservative)
+            ┌──────────────────────────────────────────────────────────────┐
+ each       │ 🛡️  RISK ENGINE (pre-check, deterministic)                    │
+ cycle  →   │   equity (on-chain) · drawdown ≥23% → PANIC · daily cap 15%   │
+            │   depeg guard · cooldown · #positions · stable balance        │
+            │   skip-cycle on an unreliable equity reading (no false flush) │
+            └───────────────────────────┬──────────────────────────────────┘
+                                         │ ok
    ┌─────────────────────────────────────▼─────────────────────────────────┐
-   │ 2️⃣  FILTER 2 — On-chain validation (vault/bnb_validation.py)          │
-   │   liquidity (V2 + V3 via TWAK aggregator) · round-trip (hidden-tax     │
-   │   detection) · slippage · oracle divergence (CMC vs pool) — read-only  │
-   └─────────────────────────────────────┬─────────────────────────────────┘
-                                          │ approved
+   │ 1️⃣  FILTER 1 — Brain (brain/cmc_analyzer.py)                          │
+   │   CMC metrics (REST) + x402-paid derivatives (in-loop) → SANITIZE     │
+   │   (anti prompt-injection) → Claude (forced tool) → {score, action,    │
+   │   invalidation}.  Deterministic adaptive cutoff (≈58 conservative).   │
+   └─────────────────────────────────────┬──────────────────────────────────┘
+                                          │ BUY
    ┌──────────────────────────────────────▼────────────────────────────────┐
+   │ 2️⃣  FILTER 2 — On-chain validation (vault/bnb_validation.py)         │
+   │   liquidity (V2+V3) · round-trip hidden-tax check · slippage (≤1.5%)  │
+   │   · oracle divergence (CMC × pool) — read-only, zero gas              │
+   └──────────────────────────────────────┬────────────────────────────────┘
+                                           │ approved
+   ┌───────────────────────────────────────▼───────────────────────────────┐
    │ 3️⃣  FILTER 3 — Execution (vault/twak_executor.py)                     │
-   │   under a mutex: TWAK swap USDC→token (agent-side signing) → open       │
-   │   position with stop-loss. A 2s monitor handles trailing / take-profit. │
+   │   under a mutex: TWAK swap USDC→token (agent-side signing) → open      │
+   │   position. A 2s monitor runs trailing / TP / time-stop.              │
    └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Risk engine** (`risk/risk_engine.py`, cross-cutting): global drawdown circuit breaker (23%) + intraday daily-loss cap (15%), dynamic SL/TP + trailing, time-stop, position sizing capped by the **real stable balance**, stablecoin-depeg guard, anti-loop mutex, trade cooldown, activity heartbeat, position reconciliation, and an anti-false-trip guard that **skips the cycle on an unreliable equity reading** (RPC/price glitch) instead of liquidating on bad data.
-
----
-
-## Architecture & deployment
-
-Two **logical** layers, one **physical** container:
-
-```
-[ USER LAYER ]   Telegram bot + public website (never touches the key)
-       │  control intents / config / alerts          ▲ read-only proof
-       ▼                                              │
-[ AGENT LAYER ]  the vault — holds the (encrypted) key
-   Filter 1 (CMC/Claude) → Filter 2 (BNB) → Filter 3 (TWAK)
-```
-
-- **Deployment:** a single service on **Railway** runs both the **public site** (uvicorn) and the **agent** (own thread), sharing a volume for state. The encrypted TWAK keystore and secrets are injected as **protected environment variables at runtime** — never in the repository or the image (`.dockerignore`).
-- **Why not Vercel:** the site is server-rendered Python (Starlette + Jinja2) and the agent is a 24/7 process; Vercel is serverless/static and runs neither.
-- See [`DEPLOY.md`](DEPLOY.md) for the full Railway walkthrough, and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the detailed design.
+Before executing, the agent **seals its reasoning + the invalidation condition on-chain**
+(ERC-8004), gas-free — recorded before the outcome exists.
 
 ---
 
@@ -90,121 +117,94 @@ Two **logical** layers, one **physical** container:
 
 | Integration | Where | What it does |
 |---|---|---|
-| **CoinMarketCap** | `brain/cmc_analyzer.py` | structured market metrics (REST, free) + **x402** pay-per-call to the Agent Hub (MCP) |
-| **Trust Wallet Agent Kit (TWAK)** | `vault/twak_executor.py` | the only execution layer — agent-side signing, swaps (V2+V3 aggregation), ERC-20 approvals, anti-drain transfers |
-| **BNB AI Agent SDK (ERC-8004)** | `boomerang/identity/` | the agent registers a verifiable **on-chain identity** (agentId 131071) — gas-free via MegaFuel |
-| **x402** | `boomerang/payments/x402_cmc.py` | real pay-per-call micropayments (EIP-3009 USDC on Base), signed by the BNB AI Agent SDK |
-| **Claude (Anthropic)** | `brain/cmc_analyzer.py` | the decision brain (`claude-opus-4-8` by default, configurable via `LLM_MODEL`) — forced tool output, deterministic cutoff |
+| **CoinMarketCap** | `brain/cmc_analyzer.py` | market metrics (REST) + **x402 pay-per-call** to the Agent Hub for derivatives, in the trade loop |
+| **Trust Wallet Agent Kit (TWAK)** | `vault/twak_executor.py` | the **only** execution layer — agent-side signing, swaps (V2+V3), approvals, x402 payments, anti-drain transfers (`--confirm-to`) |
+| **BNB AI Agent SDK (ERC-8004)** | `boomerang/identity/` | verifiable **on-chain identity** (agentId 131071) + reasoning/risk attestation — gas-free via MegaFuel |
+| **x402** | `payments/x402_cmc.py` + the live loop | real EIP-3009 USDC micropayments on Base, signed locally |
+| **Claude (Anthropic)** | `brain/cmc_analyzer.py` | the decision brain (`claude-opus-4-8`) — forced tool output, deterministic action |
 
 ---
 
-## Security model — what the agent never does
+## 🔐 Security & verifiability
 
-- Trade outside the eligible-token whitelist.
-- Send funds anywhere except a DEX (swap) or the **owner's personal wallet** (withdraw, pinned with `--confirm-to`).
-- Trade with slippage above the cap, a token with a hidden tax, or a desynced price.
-- Obey instructions from internet text — the LLM sees **only structured metrics** (anti prompt-injection).
-- Accept commands from anyone but the owner (`TELEGRAM_MASTER_USER_ID` pinning).
-- Let the AI decide risk — guardrails are deterministic code.
-
-**Self-custody:** the wallet is the agent's own (non-custodial — not held on an exchange). The private key is stored **encrypted** in the agent's runtime environment and never appears in the browser, the site, or the code. Signing happens agent-side; the user-facing layer (bot/site) has no access to the key. A **separate, fund-less** identity wallet signs the on-chain ERC-8004 proofs, so its key (used frequently) can never move money.
-
-> For a frank account of **what's real, what's a showcase, and the limitations**, see [`REVIEW.md`](REVIEW.md).
+**Two separate wallets (least privilege).** The **trade wallet** holds the capital and executes
+swaps; a **fund-less identity wallet** signs the ERC-8004 proofs. The money lives only in the
+trade wallet — so the frequently-used, secret-resident identity key can never move a cent.
 
 | Threat | Defense |
 |---|---|
-| Prompt injection | `sanitize_metrics` — numbers/labels only |
-| Bot hijack | `TELEGRAM_MASTER_USER_ID` pinning |
-| Sandwich / MEV | slippage + `amountOutMin` |
-| Hidden tax / honeypot | round-trip retention check |
-| Stale oracle ("falling knife") | CMC × pool divergence |
-| Loop / gas spam | mutex + cooldown |
-| Key theft | encrypted keystore; bot/site have no key access |
-| Catastrophic drawdown | deterministic circuit breaker |
+| Prompt injection | `sanitize_metrics` — numbers/labels only; the action is derived by **code** from the score |
+| Bot hijack | `TELEGRAM_MASTER_USER_ID` pinning (any other id is silently ignored) |
+| Key theft | encrypted keystores materialized from secrets + password; bot/site have no key access; password redacted in logs |
+| Identity-key leak | identity wallet holds **no funds** — blast radius is fake metadata, not money |
+| Sandwich / MEV | slippage cap + `amountOutMin` |
+| Hidden tax / honeypot | round-trip retention check + curated eligible whitelist |
+| Stale oracle / bad RPC | CMC × pool divergence + **skip-cycle on unreliable equity** (no false liquidation) |
+| Stablecoin depeg | deviation guard blocks new entries |
+| Catastrophic drawdown | deterministic circuit breaker (23%) + daily loss cap (15%), **attested on-chain** |
+
+> 🔎 For a frank account of **what's real, what's a showcase, and the limitations**, read
+> [`REVIEW.md`](REVIEW.md). The honesty is part of the engineering.
 
 ---
 
-## Telegram control
-
-The owner drives everything from Telegram:
-
-- `/start` — menu (configure / activate / status / pause / withdraw)
-- **3-step config** — focus token · stop-loss (2/4/5%) · take-profit (+5/10/15% or trailing)
-- `/status` — live equity, positions, PnL · `/buy <SYMBOL>` — manual buy
-- `/pausar` — pause · `/panic` — liquidate everything and halt · "Withdraw All" — return capital to the owner wallet and stop
-
----
-
-## Getting started (local dev)
+## Quickstart (local dev)
 
 ```bash
 # Python
-python -m venv .venv && .venv\Scripts\activate     # Windows (use source on Unix)
+python -m venv .venv && .venv\Scripts\activate      # Windows (use source on Unix)
 pip install -r requirements.txt
 
 # TWAK CLI (self-custody execution + x402) — needs Node 18+
-npm install -g @trustwallet/cli                     # the 'twak' CLI
-twak wallet create --password "<STRONG_PASSWORD>"   # creates the encrypted keystore
+npm install -g @trustwallet/cli                      # the 'twak' CLI
+twak wallet create --password "<STRONG_PASSWORD>"    # creates the encrypted keystore
 
 # secrets
-copy .env.example .env                              # fill in (see docs/SETUP.md)
+copy .env.example .env                               # fill in (see docs/SETUP.md)
 
-# run (paper mode simulates execution, zero risk)
-python run_agent.py --paper
-python run_agent.py                                 # live (real funds)
+# run
+python run_agent.py --paper                          # paper mode: simulated, zero risk
+python run_agent.py                                  # live (real funds)
 ```
 
-Required `.env` keys: `ANTHROPIC_API_KEY`, `CMC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_MASTER_USER_ID`, `TWAK_ACCESS_ID`, `TWAK_HMAC_SECRET`, `WALLET_PASSWORD`, `OWNER_WALLET_ADDRESS`. Never commit `.env` (git-ignored).
-
-To run 24/7 hosted (the official instance runs on Railway), see **[`DEPLOY.md`](DEPLOY.md)**.
+Required `.env`: `ANTHROPIC_API_KEY`, `CMC_API_KEY`, `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_MASTER_USER_ID`, `TWAK_ACCESS_ID`, `TWAK_HMAC_SECRET`, `WALLET_PASSWORD`,
+`OWNER_WALLET_ADDRESS`. Hosted 24/7 → [`DEPLOY.md`](DEPLOY.md). Full credential walkthrough →
+[`docs/SETUP.md`](docs/SETUP.md). Design → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
-## Project structure
+## Engineering quality
+
+- ✅ **52 tests + CI** over the safety-critical pure logic — risk engine (circuit breaker, sizing,
+  trailing, time-stop), the anti-injection sanitizer, the strategy router/action-matrix/arbiter,
+  the equity-reliability guard, and log-secret redaction. `ruff` + `pytest` run on every push.
+- ✅ **Deterministic risk fully isolated from the LLM** — the model never touches money rules.
+- ✅ **Reproducible builds** — pinned dependencies + lockfile.
 
 ```
-run_agent.py                  Local entrypoint (agent + Telegram + dashboard)
-railway_start.py              Cloud entrypoint (site + agent, one container)
-config.json                   Rules: user (tunable) · dev_safety + hackathon (locked)
-
 boomerang/
-  agent.py                    Orchestrator: scan loop, monitor loop, buy/sell/withdraw/panic
-  brain/cmc_analyzer.py       Filter 1 — CMC metrics + Claude decision (anti-injection)
+  agent.py                  Orchestrator: scan loop, monitor loop, buy/sell/withdraw/panic
+  brain/cmc_analyzer.py     Filter 1 — CMC metrics + Claude decision (anti-injection)
+  strategy/playbook.py      Regime-routed strategies + action matrix + expectancy arbiter
+  risk/risk_engine.py       Circuit breaker, daily cap, sizing, trailing, time-stop, cooldown
   vault/
-    bnb_validation.py         Filter 2 — on-chain liquidity/slippage/tax/oracle checks
-    twak_executor.py          Filter 3 — TWAK swaps, approvals, transfers
-    paper_executor.py         Simulated execution for --paper
-  risk/risk_engine.py         Circuit breaker, sizing, trailing, heartbeat, cooldown
-  interface/telegram_bot.py   Owner control (InlineKeyboards, MASTER_USER_ID pinning)
-  identity/bnb_agent.py       ERC-8004 on-chain identity (BNB AI Agent SDK)
-  payments/x402_cmc.py        Real x402 pay-per-call client
-  ipc/events.py               Alert bus (agent → Telegram)
-  webapp/                     Public site (landing, docs, guide, live proof, demo console)
-  persistence.py              State that survives restarts (volume)
+    bnb_validation.py       Filter 2 — on-chain liquidity / slippage / tax / oracle checks
+    twak_executor.py        Filter 3 — TWAK swaps, approvals, transfers, x402
+  identity/bnb_agent.py     ERC-8004 identity + on-chain reasoning/risk attestation
+  payments/x402_cmc.py      Real x402 pay-per-call client (SDK-signed)
+  interface/telegram_bot.py Owner control (InlineKeyboards, MASTER_USER_ID pinning)
+  webapp/                   Public site (landing, docs, live proof, demo console)
 ```
 
 ---
 
-## Configuration (`config.json`)
+## Status & disclaimer
 
-| Block | Meaning |
-|---|---|
-| `user` | tunable via Telegram — `token_focus`, `stop_loss_pct`, `take_profit_pct`, `mode` |
-| `dev_safety` | locked safety laws — confidence cutoffs (conservative 58 / aggressive 52), slippage cap, drawdown limits, position sizing, min position |
-| `hackathon` | event rules — drawdown DQ (30%), min trades/day, eligible-tokens file |
+✅ **Live and operating** on BNB mainnet, deployed 24/7 on Railway, controlled from Telegram.
+Identity, attestation, x402, and the full trade lifecycle are proven on-chain (see the proof table).
 
----
+> Operates with **real funds**. Real financial risk. This is a research/competition tool, **not
+> financial advice**. No tool guarantees profit — use only what you are willing to risk.
 
-## Status
-
-✅ **Live and operating.** Deployed 24/7 on Railway, controlled from Telegram. Full trade lifecycle (buy / sell / withdraw), ERC-8004 identity, and x402 payment are all proven on-chain (see the proof table above).
-
-> **Note on token universe:** the eligible whitelist holds 147 BEP-20 tokens, but on-chain *pricing* (used for stop-loss monitoring and equity) is unreliable for thin-liquidity tokens. The agent therefore trades a curated focus list of liquid tokens with real PancakeSwap pools — ETH, XRP, DOGE, ADA, LINK, LTC, AVAX, DOT, UNI, SHIB, FLOKI, TWT (ATOM/BCH/AAVE were dropped: Binance-Peg, CEX-only, no DEX pool).
-
-## Disclaimer
-
-Operates with **real funds** on BNB mainnet. Real financial risk. This is a research/competition tool, **not financial advice**. No tool guarantees profit — use only what you are willing to risk.
-
-## License
-
-MIT — see [`LICENSE`](LICENSE).
+**License:** MIT — see [`LICENSE`](LICENSE).
