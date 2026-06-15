@@ -102,7 +102,9 @@ def test_momentum_stop_then_trailing(engine):
 
 
 def test_mean_reversion_fixed_tp_sl(engine):
-    assert engine.evaluate_position(_pos(MEAN_REVERSION), 101.2) == ExitSignal.SELL_TAKE_PROFIT
+    # TP at +2.5% (clears round-trip friction); SL at -0.8%.
+    assert engine.evaluate_position(_pos(MEAN_REVERSION), 102.5) == ExitSignal.SELL_TAKE_PROFIT
+    assert engine.evaluate_position(_pos(MEAN_REVERSION), 101.2) == ExitSignal.HOLD  # below the new TP
     assert engine.evaluate_position(_pos(MEAN_REVERSION), 99.2) == ExitSignal.SELL_STOP_LOSS
 
 

@@ -57,9 +57,11 @@ MOMENTUM = StrategySpec(
 
 MEAN_REVERSION = StrategySpec(
     "mean_reversion", "Mean Reversion",
-    stop_pct=0.8, take_profit_pct=1.2,
+    # TP must clear round-trip friction (0.5% PancakeSwap fees + slippage) with margin —
+    # a 1.2% TP nets negative by construction. 2.5% leaves real edge; the stop stays tight.
+    stop_pct=0.8, take_profit_pct=2.5,
     trailing_trigger_pct=0.0, trailing_pct=0.0,
-    time_stop_min=0.0, time_stop_band_pct=0.0,
+    time_stop_min=120.0, time_stop_band_pct=0.6,  # free capital if the bounce stalls (no 6h squat)
 )
 
 DCA = StrategySpec(
