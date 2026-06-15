@@ -32,6 +32,41 @@ WEB = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(WEB / "templates"))
 SOON: dict = {}
 
+# Verified on-chain track record — the full lifecycle, always shown so the proof
+# surface is never empty (even when the agent is idle/unfunded). Each tx is real and
+# auditable on the explorer; see the README proof table.
+PROOFS = [
+    {"scan": "bscscan.com", "detail": "agentId 131071",
+     "en": "Agent identity · ERC-8004", "pt": "Identidade do agente · ERC-8004",
+     "tx": "0x93b2d496350f23aafc0872e0d6e5b0d736d0cb76260fd33f957b79bbe8f66947"},
+    {"scan": "bscscan.com", "detail": "USDC → token swap",
+     "en": "Trade · on-chain execution", "pt": "Trade · execução on-chain",
+     "tx": "0x7b1a2ee1fb36c101bda8da9289e84732b56b325556e5503c0115348d88ccde69"},
+    {"scan": "bscscan.com", "detail": "realize position",
+     "en": "Sell · ADA → USDC", "pt": "Venda · ADA → USDC",
+     "tx": "0x7f87dec9e271461b3f1205440cfa26f531da4671e6ad2380966aa3627311da21"},
+    {"scan": "bscscan.com", "detail": "anti-drain --confirm-to",
+     "en": "Capital return to owner", "pt": "Retorno de capital ao dono",
+     "tx": "0xbf751fefd833b17c8f37c98f1157b223576240298c8c0f6aec50c7e0a5ee2df9"},
+    {"scan": "basescan.org", "detail": "$0.01 USDC · CMC data",
+     "en": "x402 micropayment · Base", "pt": "Micropagamento x402 · Base",
+     "tx": "0xd5b04f9e12610160aed646a703a28f3625adbcfff86d8e54fde7f6835a76a699"},
+    {"scan": "bscscan.com", "detail": "risk state each cycle",
+     "en": "Live circuit-breaker attestation", "pt": "Atestação do circuit breaker ao vivo",
+     "tx": "0xaa59abea6e67c1e715ae728562dc56aab412046e51032469933c571598265c11"},
+]
+
+
+def _proofs(lang: str) -> list:
+    out = []
+    for p in PROOFS:
+        tx = p["tx"]
+        out.append({"label": p[lang], "detail": p["detail"],
+                    "url": f"https://{p['scan']}/tx/{tx}",
+                    "short": tx[:8] + "…" + tx[-6:],
+                    "scan": p["scan"].split(".")[0]})
+    return out
+
 
 def _owner() -> str:
     return os.getenv("OWNER_WALLET_ADDRESS", "")
@@ -55,7 +90,7 @@ def _set_lang_cookie(request, resp):  # noqa: ANN001
 def _resp(request, template, active, extra=None):  # noqa: ANN001
     lang = _lang(request)
     ctx = {"request": request, "lang": lang, "t": strings(lang),
-           "nav": nav_items(lang), "active": active}
+           "nav": nav_items(lang), "active": active, "proofs": _proofs(lang)}
     if extra:
         ctx.update({k: v[lang] for k, v in extra.items()})
         ctx["back"] = "Voltar ao início" if lang == "pt" else "Back home"

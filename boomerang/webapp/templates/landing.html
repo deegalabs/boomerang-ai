@@ -105,9 +105,21 @@
     <div class="proof-row">
       <div class="kv"><div class="k">{{ t.l_proof_addr }}</div>
         <div class="val"><a href="https://bscscan.com/address/0xc72a37f4bb7c454Fd8a9EB629aFaEeb101F67dff" target="_blank" rel="noopener">0xc72a…f67dff ↗</a></div></div>
-      <div class="kv"><div class="k">{{ t.l_proof_tx }}</div>
-        <div class="val"><a href="https://bscscan.com/tx/0x7b1a2ee1fb36c101bda8da9289e84732b56b325556e5503c0115348d88ccde69" target="_blank" rel="noopener">0x7b1a2ee1…ccde69 ↗</a></div></div>
     </div>
+
+    <p class="mono" style="margin:22px 0 6px;font-size:.78rem;letter-spacing:.04em;color:var(--faint)">{{ t.track_title }}</p>
+    <table class="tbl">
+      {% for p in proofs %}
+      <tr>
+        <td><b>{{ p.label }}</b> <span class="mut" style="font-size:.78rem">· {{ p.detail }}</span></td>
+        <td class="mono" style="text-align:right">
+          <a href="{{ p.url }}" target="_blank" rel="noopener" style="color:var(--info)">{{ p.short }} ↗</a>
+          <span class="mut" style="font-size:.72rem"> · {{ p.scan }}</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+
     <a class="btn btn--gold" href="/live" style="margin-top:26px">{{ t.l_proof_cta }} →</a>
   </div>
 </section>

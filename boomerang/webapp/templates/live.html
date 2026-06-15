@@ -23,6 +23,25 @@
     </div>
   </div>
 
+  <div class="card" style="margin-top:18px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="pill pill--gold" style="font-size:11px">on-chain</span>
+      <span class="card__lbl" style="margin:0">{{ t.track_title }}</span>
+    </div>
+    <p class="mut" style="font-size:.84rem;margin:8px 0 12px">{{ t.track_sub }}</p>
+    <table class="tbl">
+      {% for p in proofs %}
+      <tr>
+        <td><b>{{ p.label }}</b><br><span class="mut" style="font-size:.74rem">{{ p.detail }}</span></td>
+        <td class="mono" style="text-align:right;vertical-align:middle">
+          <a href="{{ p.url }}" target="_blank" rel="noopener" style="color:var(--info)">{{ p.short }} ↗</a>
+          <br><span class="mut" style="font-size:.7rem">{{ p.scan }}</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
   <div class="grid cols-4" style="margin-top:26px">
     <div class="card card--glow stat"><span class="card__lbl">{{ t.s_equity }}</span><span class="v mono grad-gold" id="lvEquity">·</span></div>
     <div class="card stat"><span class="card__lbl">{{ t.s_drawdown }}</span><span class="v mono" id="lvDd">·</span></div>
