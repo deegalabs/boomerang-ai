@@ -89,26 +89,8 @@ async def main() -> None:
     except Exception as exc:  # noqa: BLE001
         log.warning("On-chain equity unavailable at startup: %s", exc)
 
-    # Read-only web dashboard (token via /dashboard on Telegram).
-    dash_token = os.getenv("DASHBOARD_TOKEN")
-    if dash_token:
-        from boomerang.webapp.server import serve
-        port = int(os.getenv("DASHBOARD_PORT", "8080"))
-
-        def _wallet_provider() -> dict:
-            # Reads the real on-chain wallet composition (BNB + stables + tokens).
-            return validator.wallet_breakdown(agent.agent_address or "")
-
-        async def _safe_serve() -> None:
-            try:
-                await serve(dash_token, port=port, wallet_provider=_wallet_provider)
-            except SystemExit:
-                log.error("Dashboard did not start (port %d in use?). Agent runs normally.", port)
-            except Exception as exc:  # noqa: BLE001
-                log.error("Dashboard failed: %s", exc)
-
-        asyncio.create_task(_safe_serve())
-        log.info("Dashboard active at /dash (port %d).", port)
+    # The read-only panel is the public site's /live page (boomerang/webapp/site.py),
+    # served in production. The owner opens it via /dashboard on Telegram.
 
     # Restore previous state (survives a restart during the live week).
     if agent.restore():

@@ -487,14 +487,10 @@ class TelegramInterface:
         import os
         if not self._is_master(update):
             return
-        token = os.getenv("DASHBOARD_TOKEN")
-        base = os.getenv("DASHBOARD_BASE_URL", "http://localhost:8080")
-        if not token:
-            await update.message.reply_text("Dashboard not configured (DASHBOARD_TOKEN missing in .env).")
-            return
-        url = f"{base}/dash?key={token}"
+        base = os.getenv("PUBLIC_SITE_URL", "https://boomerang-ai-production.up.railway.app").rstrip("/")
+        url = f"{base}/live"
         await update.message.reply_text(
-            f"📊 *Your panel (read-only):*\n{url}\n\n⚠️ Private link — don't share it.",
+            f"📊 *Live panel — read-only, on-chain proof:*\n{url}",
             parse_mode=ParseMode.MARKDOWN)
 
     _HELP = (
