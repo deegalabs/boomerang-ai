@@ -81,13 +81,14 @@ negative — even at high win-rate.
 ### The "customs" pipeline — every cycle, three filters in series
 
 ```mermaid
+%%{init: {'flowchart': {'wrappingWidth': 560, 'nodeSpacing': 50, 'rankSpacing': 46}}}%%
 flowchart TD
     Start([" each cycle "]) --> A
 
-    A["🛡️ <b>RISK ENGINE</b> · deterministic pre-check<br/>drawdown ≥23% → PANIC &nbsp;·&nbsp; daily cap 15%<br/>depeg · cooldown · equity-reliability guard"]
-    A -->|ok| B["1️⃣ <b>FILTER 1 · Brain</b><br/>CMC + x402 derivatives → sanitize → Claude<br/>score · action · invalidation &nbsp;·&nbsp; cutoff ≈58"]
-    B -->|BUY| C["2️⃣ <b>FILTER 2 · On-chain</b><br/>liquidity · hidden-tax · oracle divergence<br/>slippage ≤1.5% &nbsp;·&nbsp; read-only, zero gas"]
-    C -->|approved| D["3️⃣ <b>FILTER 3 · Execution</b><br/>TWAK swap USDC→token, under mutex<br/>open position · 2s monitor: trailing / TP / time-stop"]
+    A["🛡️ <b>RISK ENGINE</b> &nbsp;—&nbsp; deterministic pre-check<br/>equity on-chain &nbsp;·&nbsp; drawdown ≥23% → PANIC &nbsp;·&nbsp; daily cap 15%<br/>depeg guard &nbsp;·&nbsp; cooldown &nbsp;·&nbsp; positions &nbsp;·&nbsp; equity-reliability guard"]
+    A -->|ok| B["1️⃣ <b>FILTER 1 · Brain</b> &nbsp;—&nbsp; CMC metrics + x402 derivatives, in-loop<br/>SANITIZE anti prompt-injection &nbsp;→&nbsp; Claude forced-tool<br/>→ score &nbsp;·&nbsp; action &nbsp;·&nbsp; invalidation &nbsp;·&nbsp; adaptive cutoff ≈58"]
+    B -->|BUY| C["2️⃣ <b>FILTER 2 · On-chain validation</b> &nbsp;—&nbsp; read-only, zero gas<br/>liquidity V2+V3 &nbsp;·&nbsp; round-trip hidden-tax &nbsp;·&nbsp; oracle divergence CMC × pool<br/>slippage ≤1.5%"]
+    C -->|approved| D["3️⃣ <b>FILTER 3 · Execution</b> &nbsp;—&nbsp; under a mutex<br/>TWAK swap USDC→token, agent-side signing &nbsp;→&nbsp; open position<br/>2s monitor: trailing / TP / time-stop"]
 
     classDef risk fill:#1e293b,stroke:#f3ba2f,stroke-width:1.5px,color:#e2e8f0;
     classDef filter fill:#0b0f19,stroke:#334155,stroke-width:1px,color:#e2e8f0;
