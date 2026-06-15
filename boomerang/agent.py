@@ -740,7 +740,10 @@ class BoomerangAgent:
                 # ERC-8004: SEALS the reasoning on-chain BEFORE executing (non-blocking).
                 asyncio.create_task(self._commit_prediction(symbol, verdict, ch24, now))
                 # Opens with the STRATEGY's parameters (its own SL/TP/trailing/time-stop).
-                if await self._open(symbol, addr, size, f"[{spec.label}] {verdict.rationale}", now,
+                rationale = f"[{spec.label}] {verdict.rationale}"
+                if verdict.invalidation:
+                    rationale += f" · Invalidated if: {verdict.invalidation}"
+                if await self._open(symbol, addr, size, rationale, now,
                                     stop_pct=spec.stop_pct, tp_pct=spec.take_profit_pct,
                                     trailing_trigger_pct=spec.trailing_trigger_pct,
                                     trailing_pct=spec.trailing_pct, time_stop_min=spec.time_stop_min,
@@ -1013,7 +1016,8 @@ class BoomerangAgent:
         and best-effort: runs in parallel to the swap; if it fails, the trade happens anyway."""
         pred = {"symbol": symbol, "score": verdict.confidence_score,
                 "volatility": verdict.volatility, "ch24": round(ch24, 1),
-                "rationale": verdict.rationale[:220], "ts": int(now)}
+                "rationale": verdict.rationale[:220], "invalidation": verdict.invalidation[:150],
+                "ts": int(now)}
         try:
             res = await asyncio.to_thread(identity.commit_prediction, pred)
             if res:

@@ -188,8 +188,10 @@ def commit_prediction(pred: dict, *, password: str | None = None) -> dict | None
         if not pw:
             return None
         # keccak256 hash of the canonical reasoning (same Ethereum/ERC-8004 convention).
+        # Includes the INVALIDATION (the falsifier) — the seal proves not just the thesis but
+        # the condition that would prove it wrong, recorded before the outcome exists.
         canonical = "|".join(str(pred.get(k, "")) for k in
-                             ("symbol", "score", "volatility", "ch24", "rationale", "ts"))
+                             ("symbol", "score", "volatility", "ch24", "rationale", "invalidation", "ts"))
         h = Web3.keccak(text=canonical).hex()
         wallet = _wallet_provider(pw)
         sdk = ERC8004Agent(wallet_provider=wallet, network=card.get("network", DEFAULT_NETWORK))

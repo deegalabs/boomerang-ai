@@ -40,6 +40,7 @@ class Verdict:
     rationale: str
     volatility: str = ""  # tier classified by the brain: BAIXA | MEDIA | ALTA (for dynamic SL/TP)
     regime: str = ""      # regime read by the brain: uptrend | choppy | downtrend (for win-rate by regime)
+    invalidation: str = ""  # the falsifier: concrete condition that breaks the thesis (anti-hallucination)
 
     @property
     def is_buy(self) -> bool:
