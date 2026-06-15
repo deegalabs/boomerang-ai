@@ -144,7 +144,8 @@ trade wallet — so the frequently-used, secret-resident identity key can never 
 | Catastrophic drawdown | deterministic circuit breaker (23%) + daily loss cap (15%), **attested on-chain** |
 
 > 🔎 For a frank account of **what's real, what's a showcase, and the limitations**, read
-> [`REVIEW.md`](REVIEW.md). The honesty is part of the engineering.
+> [`REVIEW.md`](REVIEW.md). For the full audit — threat model, verified defenses, severity-rated
+> findings, and disclosure policy — see [`SECURITY.md`](SECURITY.md). The honesty is part of the engineering.
 
 ---
 
