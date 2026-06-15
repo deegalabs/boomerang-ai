@@ -7,35 +7,31 @@ Mapped to the project's real files.
 
 ## 1. Macro view — two layers, one container
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  USER LAYER  (never touches private keys)                                  │
-│                                                                            │
-│   📱 Telegram Bot   boomerang/interface/telegram_bot.py                    │
-│      • buttons (InlineKeyboards)   • MASTER_USER_ID pinning                 │
-│      • /start /status /pausar /panic /reiniciar   • real-time alerts        │
-└───────────────┬───────────────────────────────▲───────────────────────────┘
-                │ control intents               │ alerts (AlertBus)
-                │ (configure/start/panic/        │ boomerang/ipc/events.py
-                ▼  withdraw)                      │
-┌──────────────────────────────────────────────────────────────────────────┐
-│  AGENT LAYER  (holds signing access via TWAK)                              │
-│                                                                            │
-│   🧠 Orchestrator   boomerang/agent.py                                      │
-│      scan_loop (interval) + monitor_loop (2s)                               │
-│                                                                            │
-│   ┌─────────────┐   ┌──────────────┐   ┌───────────────┐                  │
-│   │ FILTER 1    │ → │ FILTER 2     │ → │ FILTER 3      │                  │
-│   │ CMC/Claude  │   │ BNB validate │   │ TWAK execute  │                  │
-│   └─────────────┘   └──────────────┘   └───────────────┘                  │
-│         ▲                  ▲                    ▲                          │
-│         │           🛡️ RISK ENGINE (cross-cutting)                        │
-│         │           boomerang/risk/risk_engine.py                          │
-│         │   circuit breaker · sizing · trailing · heartbeat · mutex        │
-└─────────┼──────────────────┼────────────────────┼─────────────────────────┘
-          │                  │                    │
-     CoinMarketCap       BNB Chain RPC         Trust Wallet
-     (MCP + x402)        (PancakeSwap)         Agent Kit (twak)
+```mermaid
+%%{init: {'flowchart': {'wrappingWidth': 520}}}%%
+flowchart TD
+    subgraph USER["👤 USER LAYER · never touches private keys"]
+        TG["📱 Telegram Bot — interface/telegram_bot.py<br/>InlineKeyboards · MASTER_USER_ID pinning<br/>/start · /status · /pausar · /panic · /reiniciar · real-time alerts"]
+    end
+
+    subgraph AGENT["🔑 AGENT LAYER · holds signing access via TWAK"]
+        ORC["🧠 Orchestrator — agent.py · scan_loop (interval) + monitor_loop (2s)"]
+        F1["FILTER 1<br/>CMC / Claude"] --> F2["FILTER 2<br/>BNB validate"] --> F3["FILTER 3<br/>TWAK execute"]
+        RISK["🛡️ <b>RISK ENGINE</b> · cross-cutting — risk/risk_engine.py<br/>circuit breaker · sizing · trailing · heartbeat · mutex"]
+        ORC --> F1
+        RISK -. guards .-> F1
+        RISK -. guards .-> F2
+        RISK -. guards .-> F3
+    end
+
+    TG -->|"control intents · configure / start / panic / withdraw"| ORC
+    ORC -->|"alerts · AlertBus — ipc/events.py"| TG
+    F1 --- CMC(["CoinMarketCap<br/>MCP + x402"])
+    F2 --- RPC(["BNB Chain RPC<br/>PancakeSwap"])
+    F3 --- TW(["Trust Wallet<br/>Agent Kit · twak"])
+
+    classDef risk fill:#1e293b,stroke:#f3ba2f,stroke-width:1.5px,color:#e2e8f0;
+    class RISK risk;
 ```
 
 **Isolation principle:** the bot/site (which talk to the internet) **never** access the
@@ -57,35 +53,20 @@ phase.)
 Each scan cycle (`agent.run_cycle`) crosses three filters in series. A single rejection
 aborts the trade **before** any money is touched.
 
-```
-                    ┌──────────────────────────────────────────────┐
-  each cycle   →    │ 🛡️ RISK ENGINE (pre-check)                    │
-                    │  • equity (on-chain) → update peak            │
-                    │  • equity reliable? else SKIP this cycle      │
-                    │  • drawdown ≥ 23%? → PANIC (liquidate + halt) │
-                    │  • daily loss ≥ 15%? → halt for the day       │
-                    │  • heartbeat? (>20h without a trade)          │
-                    │  • can open? (cooldown, #positions, stable)   │
-                    └───────────────────┬──────────────────────────┘
-                                        │ ok
-   ┌────────────────────────────────────▼─────────────────────────────────┐
-   │ 1️⃣ FILTER 1 — Brain (cmc_analyzer.py)                                  │
-   │   fetch structured metrics from CMC (REST/MCP) → SANITIZE (anti-       │
-   │   injection) → Claude (forced tool) → {confidence_score, action}      │
-   │   deterministic cutoff: score < min → HOLD                            │
-   └────────────────────────────────────┬──────────────────────────────────┘
-                                         │ BUY (adaptive cutoff ≈58 conservative, floor 52)
-   ┌─────────────────────────────────────▼─────────────────────────────────┐
-   │ 2️⃣ FILTER 2 — On-chain validation (bnb_validation.py)                 │
-   │   whitelist · getAmountsOut (slippage) · round-trip (hidden tax) ·     │
-   │   CMC×pool divergence (oracle) — all read-only, zero cost             │
-   └─────────────────────────────────────┬─────────────────────────────────┘
-                                          │ approved (min_out computed)
-   ┌──────────────────────────────────────▼────────────────────────────────┐
-   │ 3️⃣ FILTER 3 — Execution (twak_executor.py)                            │
-   │   under a mutex: twak swap USDC→token (agent-side signing) → open      │
-   │   position with initial stop-loss. Emits a TRADE_OPENED alert.        │
-   └─────────────────────────────────────────────────────────────────────┘
+```mermaid
+%%{init: {'flowchart': {'wrappingWidth': 560}}}%%
+flowchart TD
+    Start([" each cycle "]) --> A
+
+    A["🛡️ <b>RISK ENGINE</b> · pre-check<br/>equity on-chain → update peak &nbsp;·&nbsp; equity reliable? else SKIP cycle<br/>drawdown ≥23% → PANIC (liquidate + halt) &nbsp;·&nbsp; daily loss ≥15% → halt for the day<br/>heartbeat (&gt;20h without a trade) &nbsp;·&nbsp; can open? cooldown / positions / stable"]
+    A -->|ok| B["1️⃣ <b>FILTER 1 · Brain</b> — cmc_analyzer.py<br/>structured CMC metrics (REST/MCP) → SANITIZE anti-injection<br/>→ Claude forced-tool → confidence_score · action &nbsp;·&nbsp; deterministic cutoff: score &lt; min → HOLD"]
+    B -->|"BUY · adaptive cutoff ≈58 conservative, floor 52"| C["2️⃣ <b>FILTER 2 · On-chain validation</b> — bnb_validation.py<br/>whitelist · getAmountsOut slippage · round-trip hidden-tax · CMC × pool divergence<br/>all read-only, zero cost"]
+    C -->|"approved · min_out computed"| D["3️⃣ <b>FILTER 3 · Execution</b> — twak_executor.py<br/>under a mutex: twak swap USDC→token (agent-side signing)<br/>→ open position with an initial stop-loss · emits a TRADE_OPENED alert"]
+
+    classDef risk fill:#1e293b,stroke:#f3ba2f,stroke-width:1.5px,color:#e2e8f0;
+    classDef filter fill:#0b0f19,stroke:#334155,stroke-width:1px,color:#e2e8f0;
+    class A risk;
+    class B,C,D filter;
 ```
 
 ---
@@ -96,13 +77,12 @@ Filter 1 is not a single rule. `boomerang/strategy/playbook.py` holds **three re
 strategies**; a **deterministic trigger** selects the setup and the Claude brain only
 **confirms** it (go/no-go + conviction). Each strategy carries its own exit parameters.
 
-```
-            ┌─ MOMENTUM (uptrend) ── 1h>+2.5%, 24h>0%, rising volume
-            │     SL -1% · trailing 1.5% after +2.5% · 20-min time-stop
- trigger ──►├─ MEAN-REVERSION (range) ── 1h<-2% dip of a strong token (24h>+4%)
- selects    │     TP +2.5% · SL -0.8% · 120-min time-stop
-            └─ DCA / crisis-rebound (panic) ── F&G<25, 24h<-10%, bounce started 1h>+0.5%
-                  TP +3% · no fixed SL (global breaker) · 24h time-stop
+```mermaid
+%%{init: {'flowchart': {'wrappingWidth': 460}}}%%
+flowchart LR
+    T(["deterministic trigger<br/>selects the setup"]) --> M["<b>MOMENTUM</b> · uptrend<br/>1h&gt;+2.5% · 24h&gt;0% · rising volume<br/>SL -1% · trailing 1.5% after +2.5% · 20-min time-stop"]
+    T --> R["<b>MEAN-REVERSION</b> · range<br/>1h&lt;-2% dip of a strong token (24h&gt;+4%)<br/>TP +2.5% · SL -0.8% · 120-min time-stop"]
+    T --> D["<b>DCA / crisis-rebound</b> · panic<br/>F&amp;G&lt;25 · 24h&lt;-10% · bounce started 1h&gt;+0.5%<br/>TP +3% · no fixed SL (global breaker) · 24h time-stop"]
 ```
 
 On top of the per-token trigger sit two deterministic governors:
@@ -119,27 +99,28 @@ On top of the per-token trigger sit two deterministic governors:
 
 A parallel 2s loop (`agent.check_positions`), leveraging BSC's fast blocks:
 
-```
-for each position:
-   price = bnb_validation.onchain_price_usd(token)     # read-only, no gas
-   signal = risk.evaluate_position(position, price)
-     ├─ HOLD                → keep
-     ├─ SELL_STOP_LOSS      → dropped past the stop → sell
-     ├─ SELL_TRAILING       → rose +5% (locks break-even, follows the peak),
-     │                        then pulled back → sell IN PROFIT
-     └─ SELL_TAKE_PROFIT    → hit the target → realize the gain
-   if selling → twak swap token→USDC → TRADE_CLOSED alert (with PnL)
+```mermaid
+%%{init: {'flowchart': {'wrappingWidth': 480}}}%%
+flowchart TD
+    P["<b>for each open position</b><br/>price = bnb_validation.onchain_price_usd(token) · read-only, no gas<br/>signal = risk.evaluate_position(position, price)"] --> S{"signal?"}
+    S -->|HOLD| K["keep"]
+    S -->|SELL_STOP_LOSS| X1["dropped past the stop → sell"]
+    S -->|SELL_TRAILING| X2["rose, locked break-even, followed the peak,<br/>then pulled back → sell IN PROFIT"]
+    S -->|SELL_TAKE_PROFIT| X3["hit the target → realize the gain"]
+    X1 --> SW["twak swap token→USDC<br/>TRADE_CLOSED alert (with PnL)"]
+    X2 --> SW
+    X3 --> SW
 ```
 
 ---
 
 ## 4. The flow of money (the "boomerang")
 
-```
-[ Personal Wallet ] ──deposit bankroll──► [ Agent Wallet ] ──trades──► PancakeSwap
-       ▲                                        │
-       └──────── /panic  ◄──────────────────────┘  (twak transfer --confirm-to)
-                 (converts to stable and sends it back)
+```mermaid
+flowchart LR
+    PW(["💼 Personal Wallet"]) -->|deposit bankroll| AW(["🤖 Agent Wallet"])
+    AW -->|trades| PS(["🥞 PancakeSwap"])
+    AW -.->|"/panic · twak transfer --confirm-to<br/>(converts to stable, sends it back)"| PW
 ```
 
 - **Competition mode:** trades continuously, compounding the bankroll.
