@@ -51,11 +51,20 @@
   </div>
 
   <!-- Live technical analysis: annotated chart + confluence panel -->
-  <div class="card card--glow" style="margin-top:18px">
+  <style>
+    #taCard.ta-full{position:fixed;inset:0;z-index:9999;margin:0;border-radius:0;
+      overflow:auto;padding:22px clamp(18px,4vw,56px);background:#06080F;}
+    #taExpand{margin-left:auto;font:inherit;cursor:pointer;color:var(--muted);
+      background:rgba(255,255,255,0.05);border:1px solid var(--line-soft,rgba(255,255,255,0.1));
+      border-radius:9px;padding:6px 12px;font-size:.78rem;display:inline-flex;align-items:center;gap:6px;}
+    #taExpand:hover{color:#F5F5F7;background:rgba(243,186,47,0.12);border-color:rgba(243,186,47,0.4);}
+  </style>
+  <div class="card card--glow" id="taCard" style="margin-top:18px">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span class="pill pill--gold" style="font-size:11px">live TA</span>
       <span class="card__lbl" style="margin:0">{{ t.lv_ta_title }}</span>
       <span class="mono" id="taSymbol" style="font-size:.82rem;color:var(--info)"></span>
+      <button id="taExpand" type="button" title="{{ t.lv_ta_expand }}">⛶ <span id="taExpandLbl">{{ t.lv_ta_expand }}</span></button>
     </div>
     <p class="mut" style="font-size:.84rem;margin:8px 0 14px">{{ t.lv_ta_sub }}</p>
     <div id="taUnavail" class="mut" style="display:none;padding:18px 0">·</div>
@@ -201,7 +210,24 @@ tick(); setInterval(tick, 5000);
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 const TA_UNAVAIL = "{{ t.lv_ta_unavail }}";
+const TA_EXPAND = "{{ t.lv_ta_expand }}", TA_CLOSE = "{{ t.lv_ta_close }}";
+let taFull=false;
 let taChart=null, taCandle=null, taE9=null, taE21=null, taLines=[];
+function taResize(){
+  if(!taChart) return;
+  const el=document.getElementById('lvChart');
+  const h = taFull ? Math.max(window.innerHeight - 280, 360) : 380;
+  el.style.height = h+'px';
+  taChart.applyOptions({width: el.clientWidth, height: h});
+  taChart.timeScale().fitContent();
+}
+function taToggleFull(){
+  taFull=!taFull;
+  document.getElementById('taCard').classList.toggle('ta-full', taFull);
+  document.body.style.overflow = taFull ? 'hidden' : '';
+  document.getElementById('taExpandLbl').textContent = taFull ? TA_CLOSE : TA_EXPAND;
+  requestAnimationFrame(()=>requestAnimationFrame(taResize));
+}
 function taEnsure(){
   if(taChart || !window.LightweightCharts) return;
   const el=document.getElementById('lvChart');
@@ -216,7 +242,7 @@ function taEnsure(){
   taCandle = taChart.addCandlestickSeries({upColor:'#34E5A4',downColor:'#FF5470',borderVisible:false,wickUpColor:'#34E5A4',wickDownColor:'#FF5470'});
   taE9 = taChart.addLineSeries({color:'#F3BA2F',lineWidth:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
   taE21 = taChart.addLineSeries({color:'#5AA9FF',lineWidth:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
-  window.addEventListener('resize',()=>{ if(taChart) taChart.applyOptions({width: el.clientWidth}); });
+  window.addEventListener('resize', taResize);
 }
 function taRenderChart(d){
   taEnsure(); if(!taChart) return;
@@ -257,6 +283,8 @@ async function taTick(){
   box.style.display='flex'; un.style.display='none';
   taRenderChart(d); taRenderPanel(d);
 }
+document.getElementById('taExpand').addEventListener('click', taToggleFull);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && taFull) taToggleFull(); });
 taTick(); setInterval(taTick, 15000);
 </script>
 {% endblock %}
