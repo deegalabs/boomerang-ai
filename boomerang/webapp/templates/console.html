@@ -50,6 +50,8 @@
     .dmain{display:grid;grid-template-columns:1fr 400px;gap:16px;align-items:start;margin-top:18px}
     @media(max-width:980px){ .dmain{grid-template-columns:1fr} }
     .dside{display:flex;flex-direction:column;gap:16px}
+    .dbottom{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;align-items:start}
+    @media(max-width:980px){ .dbottom{grid-template-columns:1fr} }
     #dTaCard.ta-full{position:fixed;inset:0;z-index:9999;margin:0;background:#06080F;padding:18px;border-radius:0}
     #dTaExpand{margin-left:auto;font:inherit;cursor:pointer;color:#A7ADBE;background:rgba(255,255,255,0.05);
       border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:6px 12px;font-size:.78rem;display:inline-flex;align-items:center;gap:6px}
@@ -94,18 +96,21 @@
         </div>
       </div>
 
-      <div class="card">
-        <span class="card__lbl">🧠 {{ "A mente do agente — raciocínio ao vivo" if lang=="pt" else "The agent's mind — live reasoning" }}</span>
-        <div id="cFeed" style="margin-top:12px;font-family:var(--font-mono);font-size:.78rem;line-height:1.5;max-height:300px;overflow:auto">
-          <span class="mut">{{ "Ative o agente para ver cada decisão: escaneando, comprando com convicção, deixando o vencedor correr, rotacionando..." if lang=="pt" else "Activate the agent to see every decision: scanning, buying with conviction, letting winners run, rotating..." }}</span>
-        </div>
-      </div>
+    </div>
+  </div>
 
-      <div class="card">
-        <span class="card__lbl">{{ t.lv_composition }}</span>
-        <div id="cComp" style="margin-top:12px"><span class="mut">·</span></div>
-        <p class="mut" style="font-size:.78rem;margin-top:12px;border-top:1px solid var(--line-soft);padding-top:10px">🧪 {{ "Tudo simulado, sem tx on-chain. O agente REAL faz exatamente isto na BNB Chain, com cada swap verificável no BscScan —" if lang=="pt" else "All simulated, no on-chain tx. The REAL agent does exactly this on BNB Chain, every swap verifiable on BscScan —" }} <a href="/live">/live</a>.</p>
+  <!-- Embaixo do gráfico: a mente + a carteira (lado a lado) -->
+  <div class="dbottom">
+    <div class="card">
+      <span class="card__lbl">🧠 {{ "A mente do agente — raciocínio ao vivo" if lang=="pt" else "The agent's mind — live reasoning" }}</span>
+      <div id="cFeed" style="margin-top:12px;font-family:var(--font-mono);font-size:.78rem;line-height:1.5;max-height:320px;overflow:auto">
+        <span class="mut">{{ "Ative o agente para ver cada decisão: escaneando, comprando com convicção, deixando o vencedor correr, rotacionando..." if lang=="pt" else "Activate the agent to see every decision: scanning, buying with conviction, letting winners run, rotating..." }}</span>
       </div>
+    </div>
+    <div class="card">
+      <span class="card__lbl">{{ t.lv_composition }}</span>
+      <div id="cComp" style="margin-top:12px"><span class="mut">·</span></div>
+      <p class="mut" style="font-size:.78rem;margin-top:12px;border-top:1px solid var(--line-soft);padding-top:10px">🧪 {{ "Tudo simulado, sem tx on-chain. O agente REAL faz exatamente isto na BNB Chain, com cada swap verificável no BscScan —" if lang=="pt" else "All simulated, no on-chain tx. The REAL agent does exactly this on BNB Chain, every swap verifiable on BscScan —" }} <a href="/live">/live</a>.</p>
     </div>
   </div>
 {% endif %}
