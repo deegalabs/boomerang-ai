@@ -103,6 +103,7 @@ TR: dict[str, dict[str, str]] = {
         "lv_ta_unavail": "No candle data for this token (on-chain only)",
         "lv_ta_expand": "Expand", "lv_ta_close": "Close",
         "lv_proof_btn": "On-chain proof", "lv_confluence": "Confluence",
+        "lv_trace": "Why no trade", "lv_trace_empty": "no rejections this cycle",
     },
     "pt": {
         "tagline": "Agente de trading autônomo na BNB Chain",
@@ -189,6 +190,7 @@ TR: dict[str, dict[str, str]] = {
         "lv_ta_unavail": "Sem dados de candle pra este token (só on-chain)",
         "lv_ta_expand": "Expandir", "lv_ta_close": "Fechar",
         "lv_proof_btn": "Prova on-chain", "lv_confluence": "Confluência",
+        "lv_trace": "Por que não comprou", "lv_trace_empty": "nenhuma rejeição neste ciclo",
     },
 }
 

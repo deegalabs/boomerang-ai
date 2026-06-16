@@ -94,6 +94,7 @@ class BoomerangAgent:
         self._last_equity: float = 0.0          # most recent equity (cache for dashboard)
         self._last_holdings: list = []          # composition per coin (cache for /live panel)
         self._last_mon_save: float = 0.0        # throttle for monitor-driven state saves (live PnL)
+        self._last_traces: list = []            # decision trace: why each candidate did NOT enter
         self.agent_address: str | None = None   # wallet address (filled in at startup)
 
     # ── loading of eligible addresses ────────────────────────────────────────
@@ -301,6 +302,7 @@ class BoomerangAgent:
             "holdings": self._last_holdings,
             "positions": [asdict(p) for p in self.positions],
             "identity": identity.summary(),
+            "traces": self._last_traces[-12:],
         }
 
     def _save(self) -> None:
@@ -726,6 +728,9 @@ class BoomerangAgent:
         elif not gate.allowed:
             gate_note = f" · Gate BLOCKED: {gate.detail}"
         memory = self._performance_digest()  # Memory SKILL: history for the brain to calibrate
+        self._last_traces = []  # fresh decision trace each cycle
+        if not gate.allowed or block:
+            self._trace("—", "REGIME/GATE", gate_note.strip(" ·") or "systemic gate")
         if gate.allowed and not block and fired:
             best_score = -1
             for spec, symbol, _strength in fired[:TOP_K]:
@@ -744,6 +749,8 @@ class BoomerangAgent:
                     top_eval = f"{symbol} {verdict.confidence_score}{'✓' if verdict.is_buy else ''} [{spec.key}]"
                 if verdict.is_buy:
                     buys.append((verdict, symbol, addr, spec))
+                else:
+                    self._trace(symbol, "BRAIN", f"score {verdict.confidence_score} — no setup [{spec.key}]")
                 if verdict.is_buy and verdict.confidence_score >= STRONG:
                     break
 
@@ -752,12 +759,14 @@ class BoomerangAgent:
                 # Anti-top + overextension dampening ONLY for MOMENTUM. Mean-rev and DCA
                 # buy DROPS on purpose — penalizing them here would kill the strategy.
                 if spec.key == "momentum" and ch24 > self._cfg.max_entry_24h_pct:
+                    self._trace(symbol, "BRAIN", f"overextended 24h {ch24:+.1f}% — top risk")
                     await self._emit(AlertType.REJECTED, f"Entry barred (overextended): {symbol}",
                                      f"24h {ch24:+.1f}% > {self._cfg.max_entry_24h_pct:.0f}% — top risk.")
                     continue
                 # ── Filter 1 timing gate: TA confluence on 1m candles (don't chase pumps) ──
                 conf = await self._confluence(symbol, self._macro_label(posture.size_mult))
                 if conf and conf.decision == "AVOID":
+                    self._trace(symbol, "CONFLUENCE", conf.veto or conf.summary)
                     await self._emit(AlertType.REJECTED, f"Entry vetoed (TA): {symbol}",
                                      conf.veto or conf.summary)
                     continue
@@ -774,6 +783,7 @@ class BoomerangAgent:
                     cmc_price_usd=quotes[symbol].get("price_usd"),  # ativa checagem de oráculo
                 )
                 if not val.ok:
+                    self._trace(symbol, "VALIDATION", val.detail or "on-chain check failed")
                     await self._emit(AlertType.REJECTED, f"Trade barred: {symbol}",
                                      val.detail, reason=val.reason.value if val.reason else "")
                     continue
@@ -843,6 +853,11 @@ class BoomerangAgent:
         if size_mult < 1:
             return "DEFENSIVE"
         return "BULL" if size_mult > 1 else "NEUTRAL"
+
+    def _trace(self, symbol: str, stage: str, reason: str) -> None:
+        """Record why a candidate did NOT enter (surfaced on /live, transparency)."""
+        self._last_traces.append({"symbol": symbol, "blocked_at": stage, "reason": reason})
+        self._last_traces = self._last_traces[-12:]
 
     async def _maybe_rotate(self, equity: float, quotes: dict, global_metrics: dict,
                             ranked: list, now: float) -> str:

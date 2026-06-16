@@ -54,6 +54,7 @@
       <button class="tv-btn" data-modal="mWallet">💼 {{ t.lv_composition }}</button>
       <button class="tv-btn" data-modal="mPos">{{ t.lv_positions }} <span id="lvPosN" class="tv-badge">·</span></button>
       <button class="tv-btn" data-modal="mHist">{{ t.lv_history }}</button>
+      <button class="tv-btn" data-modal="mTrace">🔎 {{ t.lv_trace }}</button>
     </div>
   </div>
   <div id="lvAddr" class="mono" style="font-size:.74rem;color:var(--faint);margin:6px 2px 0">·</div>
@@ -146,6 +147,13 @@
     <h3 class="tv-modal-title">{{ t.lv_history }}</h3>
     <div id="lvHist"><span class="mut">{{ t.lv_no_trades }}</span></div>
   </div></div>
+
+  <div class="tv-modal" id="mTrace"><div class="tv-modal-box">
+    <button class="tv-modal-x" data-close>✕</button>
+    <h3 class="tv-modal-title">🔎 {{ t.lv_trace }}</h3>
+    <p class="mut" style="font-size:.82rem;margin:0 0 14px">{{ "O agente recusando trade até alinhar — cada candidato e o filtro que o barrou." if lang=="pt" else "The agent refusing to trade until it aligns — each candidate and the filter that blocked it." }}</p>
+    <div id="lvTrace"><span class="mut">{{ t.lv_trace_empty }}</span></div>
+  </div></div>
 </div>
 
 <script>
@@ -158,6 +166,7 @@ const L = {
   idProof: "{{ t.lv_id_proof }}", idRegistry: "{{ t.lv_id_registry }}",
   now: "{{ t.lv_now }}", target: "{{ t.lv_target }}", trailing: "{{ t.lv_trailing }}",
   mode: "{{ t.lv_mode }}", size: "{{ t.lv_size }}", watching: "{{ t.lv_universe }}", tokensWord: "{{ t.lv_tokens }}",
+  traceEmpty: "{{ t.lv_trace_empty }}",
 };
 const SCAN = "https://bscscan.com";
 const usd = v => v==null ? "·" : "$"+Number(v).toFixed(2);
@@ -249,6 +258,15 @@ async function tick(){
   document.getElementById("lvHist").innerHTML = rows
     ? `<table class="tbl"><tr><th>${L.type}</th><th>${L.token}</th><th>${L.value}/${L.pnl}</th><th>${L.tx}</th></tr>${rows}</table>`
     : `<span class="mut">${L.noTrades}</span>`;
+
+  // Decision trace — why each candidate did NOT enter
+  const tr = s.traces || [];
+  const STG = { "REGIME/GATE":"#BF5AF2", "BRAIN":"#5AA9FF", "CONFLUENCE":"#F3BA2F", "VALIDATION":"#FF5470" };
+  document.getElementById("lvTrace").innerHTML = tr.length
+    ? [...tr].reverse().map(x=>`<div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line-soft)">
+        <span class="mono" style="font-size:.68rem;color:${STG[x.blocked_at]||'#6E7388'};width:120px;flex-shrink:0">${x.blocked_at}</span>
+        <span style="font-size:.86rem"><b>${x.symbol}</b> <span class="mut">${x.reason}</span></span></div>`).join("")
+    : `<span class="mut">${L.traceEmpty}</span>`;
 
   setText("lvUpd", L.updated + " " + new Date().toLocaleTimeString());
 }
