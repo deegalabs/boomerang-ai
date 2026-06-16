@@ -45,6 +45,38 @@
     <div class="card stat"><span class="card__lbl">{{ "Regime (BTC)" if lang=="pt" else "Regime (BTC)" }}</span><span class="v" id="oRegime" style="font-size:1.05rem">·</span></div>
   </div>
 
+  <!-- TA ao vivo: o que o agente está analisando -->
+  <style>
+    #dTaBox{display:grid;grid-template-columns:1fr 320px;gap:16px}
+    @media(max-width:860px){ #dTaBox{grid-template-columns:1fr} }
+    #dTaCard.ta-full{position:fixed;inset:0;z-index:9999;margin:0;background:#06080F;padding:18px;border-radius:0}
+    #dTaExpand{margin-left:auto;font:inherit;cursor:pointer;color:#A7ADBE;background:rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:6px 12px;font-size:.78rem;display:inline-flex;align-items:center;gap:6px}
+    #dTaExpand:hover{color:#F5F5F7;background:rgba(243,186,47,0.12);border-color:rgba(243,186,47,0.4)}
+  </style>
+  <div class="card card--glow" id="dTaCard" style="margin-top:18px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <span class="pill pill--gold" style="font-size:11px">live TA</span>
+      <span class="card__lbl" style="margin:0">{{ "Token em foco — análise" if lang=="pt" else "Token in focus — analysis" }}</span>
+      <span class="mono" id="dTaSymbol" style="font-size:.82rem;color:var(--info)"></span>
+      <button id="dTaExpand" type="button">⛶ <span id="dTaExpandLbl">{{ t.lv_ta_expand }}</span></button>
+    </div>
+    <div id="dTaUnavail" class="mut" style="display:none;padding:30px 0;text-align:center">·</div>
+    <div id="dTaBox">
+      <div><div id="dTaChart" style="height:380px;width:100%"></div></div>
+      <div>
+        <span class="card__lbl">{{ t.lv_confluence }}</span>
+        <div style="display:flex;align-items:center;gap:12px;margin:12px 0 10px">
+          <span id="dTaDecision" class="pill" style="font-size:13px;font-weight:700;padding:6px 14px">·</span>
+          <span class="mono" id="dTaScoreVal" style="font-size:.82rem;color:var(--muted)">·</span>
+        </div>
+        <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;margin-bottom:14px"><div id="dTaScoreBar" style="height:100%;width:0%;background:var(--faint);transition:width .4s,background .4s"></div></div>
+        <div id="dTaSignals" style="display:flex;flex-direction:column;gap:2px"><span class="mut">·</span></div>
+        <div id="dTaStats" style="display:flex;gap:8px;margin-top:14px"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="grid cols-2" style="margin-top:18px;align-items:start">
     <!-- Coluna esquerda: ativar + posições + controles -->
     <div class="card">
@@ -123,7 +155,7 @@ if (btnLogout) {
 
   const usd = v => v==null?"·":"$"+Number(v).toFixed(2);
   const px  = v => { v=Number(v); return isNaN(v)?"·":"$"+(v>=1?v.toFixed(4):v.toFixed(6)); };
-  const FEEDCLR = { buy:"var(--up)", sell:"var(--text)", skill:"var(--gold)", scan:"var(--faint)", sys:"var(--info)" };
+  const FEEDCLR = { buy:"var(--up)", sell:"var(--text)", skill:"var(--gold)", scan:"var(--faint)", sys:"var(--info)", ta:"#BF5AF2" };
 
   function render(d){
     const s = d.state||{};
@@ -135,8 +167,9 @@ if (btnLogout) {
     const db = document.getElementById("dataBadge");
     if (db) db.innerHTML = s.data_real ? `<span style="color:var(--up)">● ${LANG=="pt"?"dados reais (CMC)":"live data (CMC)"}</span>` : `<span class="mut">○ ${LANG=="pt"?"agente aquecendo…":"agent warming up…"}</span>`;
 
-    // posições (somente leitura — o AGENTE gerencia) com selo das skills
+    // token em foco para o gráfico TA
     const pos = s.positions||[];
+    window.__demoSym = s.analyzing || (pos[0] && pos[0].symbol) || null;
     document.getElementById("posList").innerHTML = pos.length
       ? pos.map(p=>{
           const pnl = `<span class="${p.pnl_pct>=0?'pos':'neg'}">${p.pnl_pct>=0?'+':''}${Number(p.pnl_pct).toFixed(1)}%</span>`;
@@ -190,6 +223,20 @@ if (btnLogout) {
 
   // estado inicial (sem avançar)
   (async()=>{ try{ const d=await(await fetch("/api/console/state")).json(); render(d); if(d.state&&d.state.running) startLoop(); }catch(e){} })();
+}
+</script>
+
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="/static/js/ta-chart.js"></script>
+<script>
+if (document.getElementById('dTaCard') && window.mountTAChart) {
+  mountTAChart({
+    chart:'dTaChart', box:'dTaBox', boxDisplay:'grid', unavail:'dTaUnavail',
+    symbol:'dTaSymbol', decision:'dTaDecision', scoreVal:'dTaScoreVal', scoreBar:'dTaScoreBar',
+    signals:'dTaSignals', stats:'dTaStats', card:'dTaCard', expand:'dTaExpand', expandLbl:'dTaExpandLbl',
+    expandText:"{{ t.lv_ta_expand }}", closeText:"{{ t.lv_ta_close }}", unavailText:"{{ t.lv_ta_unavail }}",
+    symbolFn:function(){ return window.__demoSym || null; }, intervalMs:8000
+  });
 }
 </script>
 {% endblock %}

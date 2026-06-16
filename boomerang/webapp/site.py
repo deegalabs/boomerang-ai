@@ -241,7 +241,7 @@ async def console_action(request):  # noqa: ANN001 — actions on the SIMULATED 
     if name == "start":
         ok, msg = demo.start(addr)
     elif name == "tick":  # advances 1 cycle of the simulated autonomous agent
-        return JSONResponse({"ok": True, **demo.tick(addr)})
+        return JSONResponse({"ok": True, **await asyncio.to_thread(demo.tick, addr)})
     elif name == "configure":
         ok, msg = demo.configure(addr, body.get("token_focus", "ALL"),
                                  body.get("stop_loss_pct", 4), body.get("take_profit_pct", 10))

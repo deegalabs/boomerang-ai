@@ -18,6 +18,9 @@ from boomerang import market_cache
 from boomerang.brain.cmc_analyzer import momentum_prescore
 from boomerang.risk.risk_engine import (
     conviction_size_pct, dynamic_sl_tp, market_regime, tier_from_var)
+from boomerang.strategy.confluence import evaluate_confluence
+from boomerang.strategy.indicators import compute_indicators
+from boomerang.strategy.klines import fetch_klines
 
 START_CASH = 100.0
 MAX_POSITIONS = 3
@@ -131,6 +134,18 @@ def panic(addr: str) -> tuple[bool, str]:
 
 
 # ── 1 CYCLE of the autonomous agent over the REAL MARKET ───────────────────────────
+def _confluence(sym: str, macro: str):
+    """Same TA confluence engine the real agent uses (Binance 1m candles). None when the
+    token has no candle data — then the demo falls back to the momentum-only path."""
+    try:
+        ks = fetch_klines(sym, "1m", 60)
+        if not ks or len(ks) < 30:
+            return None
+        return evaluate_confluence(compute_indicators(ks), macro_regime=macro)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def tick(addr: str) -> dict:
     a = _agent(addr)
     if not a["running"] or a["paused"]:
@@ -196,10 +211,17 @@ def tick(addr: str) -> dict:
         score = int(max(40, min(56 + pre * 0.7 + min(ch24, 12.0) * 0.6 - overext
                                  + random.uniform(-4, 5), 90)))
         var24 = round(abs(ch24), 1)
-        if score >= cut:
+        # SAME confluence brain as the real Filter 1: veto pumps, scale the bet by TA agreement.
+        macro = "BULL" if cut_adj < 0 else "DEFENSIVE" if cut_adj > 0 else "NEUTRAL"
+        conf = _confluence(cand, macro)
+        if conf and conf.decision == "AVOID":
+            _log(a, "scan", f"🛡️ {cand}: TA veto — {conf.veto} · no chase.")
+        elif score >= cut:
             tier = tier_from_var(var24)
             sl, _tp = dynamic_sl_tp(tier, var24)
             conv = conviction_size_pct(BASE_POS_PCT, score, 40.0)
+            if conf:
+                conv *= 1.15 if conf.enter else (0.75 if conf.decision == "WAIT" else 1.0)
             amount = min(a["cash"], a["peak"] * conv / 100.0)
             price = _price(a, market, cand)
             if price > 0 and amount >= 5:
@@ -210,12 +232,16 @@ def tick(addr: str) -> dict:
                     "trailing": False, "score": score, "tier": tier, "opened_at": _now(),
                 })
                 a["trades"].append({"type": "open", "symbol": cand, "amount_usd": amount, "ts": _now()})
-                _log(a, "buy", f"✅ BOUGHT {cand} ${amount:.0f} · score {score} · vol {tier} · "
-                               f"SL {sl:.0f}%/target running · conviction {conv:.0f}% · 24h {ch24:+.1f}%")
+                ta = f" · TA {conf.score:.0f}/100 [{conf.mode}]" if conf else ""
+                _log(a, "buy", f"✅ BOUGHT {cand} ${amount:.0f} · score {score}{ta} · "
+                               f"SL {sl:.0f}% · conviction {conv:.0f}% · 24h {ch24:+.1f}%")
+                if conf and conf.reasons:
+                    _log(a, "ta", "   ↳ " + " · ".join(conf.reasons[:3]))
         else:
             _log(a, "scan", f"🔍 Regime {regime_lbl} · best: {cand} (score {score} < cut {cut}) "
                             f"· 24h {float(m.get('percent_change_24h') or 0):+.1f}% — no setup.")
 
+    a["focus"] = a["positions"][0]["symbol"] if a["positions"] else cand
     a["peak"] = max(a["peak"], _equity(a, market))
     return snapshot(addr)
 
@@ -254,6 +280,7 @@ def snapshot(addr: str) -> dict:
             "running": a["running"], "paused": a["paused"],
             "regime": market_regime(btc24, fng)[0], "btc_24h": round(btc24 or 0.0, 1), "fng": fng,
             "data_real": real,
+            "analyzing": a.get("focus") or (positions[0]["symbol"] if positions else None),
         },
         "feed": a["feed"],
         "trades": a["trades"],
