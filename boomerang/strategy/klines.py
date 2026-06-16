@@ -14,7 +14,11 @@ import httpx
 from boomerang.strategy.indicators import Kline
 
 _log = logging.getLogger("boomerang.klines")
-_BASE = "https://api.binance.com/api/v3/klines"
+# data-api.binance.vision is Binance's public market-data host — globally reachable,
+# no API key, and NOT geo-blocked (api.binance.com returns 451 from US/cloud regions
+# like Railway). We try it first, then fall back to the main host.
+_HOSTS = ("https://data-api.binance.vision", "https://api.binance.com")
+_PATH = "/api/v3/klines"
 _CACHE: dict[str, tuple[float, list[Kline]]] = {}
 _TTL = 30.0  # seconds — a scan/monitor pass reuses the same candles
 
@@ -39,17 +43,18 @@ def fetch_klines(symbol: str, interval: str = "1m", limit: int = 60,
     hit = _CACHE.get(key)
     if hit and now - hit[0] < _TTL:
         return hit[1]
-    try:
-        r = httpx.get(_BASE, params={"symbol": _pair(symbol, quote),
-                                     "interval": interval, "limit": limit}, timeout=timeout)
-        if r.status_code != 200:
-            _CACHE[key] = (now, [])  # cache the miss too (e.g. token not on Binance)
-            return []
-        out = [Kline(open=float(k[1]), high=float(k[2]), low=float(k[3]),
-                     close=float(k[4]), volume=float(k[5])) for k in r.json()]
-        _CACHE[key] = (now, out)
-        return out
-    except Exception as exc:  # noqa: BLE001
-        _log.warning("klines unavailable for %s: %s", symbol, exc)
-        _CACHE[key] = (now, [])
-        return []
+    params = {"symbol": _pair(symbol, quote), "interval": interval, "limit": limit}
+    for host in _HOSTS:
+        try:
+            r = httpx.get(host + _PATH, params=params, timeout=timeout)
+            if r.status_code == 200:
+                out = [Kline(open=float(k[1]), high=float(k[2]), low=float(k[3]),
+                             close=float(k[4]), volume=float(k[5])) for k in r.json()]
+                _CACHE[key] = (now, out)
+                return out
+            if r.status_code in (400, 404):
+                break  # symbol simply doesn't trade here — don't bother the fallback host
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("klines host %s failed for %s: %s", host, symbol, exc)
+    _CACHE[key] = (now, [])  # cache the miss (token not on Binance, or all hosts down)
+    return []
