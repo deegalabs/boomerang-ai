@@ -259,3 +259,31 @@ def publish_track_record(stats: dict, *, password: str | None = None) -> dict | 
         return result if isinstance(result, dict) and result.get("success") else None
     except Exception:  # noqa: BLE001 — reputation is showcase; never takes down the agent
         return None
+
+
+def publish_reputation(feedback: dict, *, password: str | None = None) -> dict | None:
+    """On-chain reputation (ERC-8004 model): AFTER a trade closes, publishes a signed,
+    aggregatable feedback entry under the metadata key 'reputation' — value = realized
+    yield in bps, tag = 'tradingYield', plus the symbol and timestamp.
+
+    NOTE: the BNB AI Agent SDK exposes the Identity Registry only (no separate Reputation
+    Registry / giveFeedback on BNB Chain), so we publish the canonical feedback *model* as
+    on-chain metadata; the network's indexer aggregates it into the agent's reputation
+    score (`get_all_agents` → `total_score`). Additive — complements (does not replace)
+    `commit_prediction` and `track_record`. Best-effort; never interrupts trading."""
+    card = load_card()
+    if not card or not card.get("agent_id"):
+        return None
+    try:
+        from bnbagent import ERC8004Agent
+
+        pw = password or _password()
+        if not pw:
+            return None
+        wallet = _wallet_provider(pw)
+        sdk = ERC8004Agent(wallet_provider=wallet, network=card.get("network", DEFAULT_NETWORK))
+        value = json.dumps(feedback, separators=(",", ":"))[:480]
+        result = sdk.set_metadata(agent_id=card["agent_id"], key="reputation", value=value)
+        return result if isinstance(result, dict) and result.get("success") else None
+    except Exception:  # noqa: BLE001 — reputation is showcase; never takes down the agent
+        return None

@@ -1063,7 +1063,9 @@ class BoomerangAgent:
                          entry=pos.entry_price, exit=exit_price, amount_usd=pos.amount_usd,
                          tx=res.tx_hash)
         self._save()
-        await self._publish_reputation()  # SKILL: updates on-chain reputation (best-effort)
+        await self._publish_reputation()  # aggregate track_record (throttled ~1x/hour)
+        # ERC-8004 reputation model: per-trade signed feedback (additive, non-blocking).
+        asyncio.create_task(self._publish_trade_feedback(pos.symbol, pnl_pct, pos.regime))
 
     def _performance_digest(self) -> str:
         """Memory SKILL: summary of the agent's OWN history for the brain to calibrate (learns from
@@ -1150,6 +1152,22 @@ class BoomerangAgent:
                 self._log.info("On-chain reputation published: %s (tx=%s)", stats, res.get("transactionHash"))
         except Exception as exc:  # noqa: BLE001
             self._log.warning("Reputation publication failed (ignored): %s", exc)
+
+    async def _publish_trade_feedback(self, symbol: str, pnl_pct: float | None, regime: str) -> None:
+        """ERC-8004 reputation model: after a close, publish a signed per-trade feedback
+        (value = realized yield in bps, tag = tradingYield). Additive to the aggregate
+        track_record; best-effort, never interrupts trading."""
+        if pnl_pct is None:
+            return
+        feedback = {"value": round(pnl_pct * 100), "valueDecimals": 2, "tag1": "tradingYield",
+                    "symbol": symbol, "regime": regime, "ts": int(time.time())}
+        try:
+            res = await asyncio.to_thread(identity.publish_reputation, feedback)
+            if res:
+                self._log.info("Per-trade reputation feedback published: %s (tx=%s)",
+                               symbol, res.get("transactionHash"))
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("Trade feedback publish failed (ignored): %s", exc)
 
     async def _publish_risk_state(self, *, halted_event: bool = False) -> None:
         """ON-CHAIN CIRCUIT BREAKER: attests the circuit breaker state on ERC-8004 (key
