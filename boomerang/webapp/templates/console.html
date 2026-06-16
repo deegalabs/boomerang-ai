@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ t.console }} · Boomerang AI{% endblock %}
 {% block content %}
-<div class="wrap section" style="max-width:1280px">
 
 {% if not authed %}
+<div class="wrap section" style="max-width:1100px">
   <!-- ============ PORTA DE LOGIN ============ -->
   <div class="split" style="min-height:60vh;align-items:center">
     <div>
@@ -24,97 +24,115 @@
       <span style="font-size:120px;display:inline-flex">{% include "partials/mark.html" %}</span>
     </div>
   </div>
+</div>
 {% else %}
-  <!-- ============ CONSOLE (AUTENTICADO) ============ -->
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-    <div><span class="eyebrow">{{ t.console }}</span>
-      <h1 class="display" style="font-size:clamp(1.8rem,3.6vw,2.6rem);margin-top:12px">{{ t.console }}</h1></div>
+<!-- ============ CONSOLE (TradingView shell, igual à /live) ============ -->
+<style>
+  .tvc-wrap{max-width:1440px;margin:0 auto;padding:24px clamp(14px,3vw,32px) 60px}
+  .tvc-top{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px}
+  .tvc-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 18px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px}
+  .tvc-sym{font-size:1.5rem;font-weight:800;letter-spacing:-0.02em;color:#F5F5F7}
+  .tvc-eq{display:flex;gap:20px;margin-left:auto}
+  .tvc-eq>div{display:flex;flex-direction:column}
+  .tvc-lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:#6E7388}
+  .tvc-val{font-family:var(--font-mono,monospace);font-size:1rem;font-weight:700;color:#F5F5F7}
+  .tvc-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .tvc-btn{font:inherit;font-size:.78rem;cursor:pointer;color:#A7ADBE;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:8px 12px;display:inline-flex;gap:6px;align-items:center}
+  .tvc-btn:hover{color:#F5F5F7;border-color:rgba(243,186,47,0.4);background:rgba(243,186,47,0.1)}
+  .tvc-btn.gold{background:rgba(243,186,47,0.16);border-color:rgba(243,186,47,0.5);color:#F3BA2F}
+  .tvc-btn.danger{border-color:rgba(255,84,112,0.4);color:#FF5470}
+  .tvc-badge{background:rgba(243,186,47,0.2);color:#F3BA2F;border-radius:999px;padding:1px 7px;font-size:.7rem}
+  .tvc-strip{display:flex;gap:8px;margin-top:12px;padding:12px 18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;min-height:54px}
+  .tvc-main{display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start;margin-top:14px}
+  @media(max-width:980px){ .tvc-main{grid-template-columns:1fr} }
+  .tvc-side{display:flex;flex-direction:column}
+  .tvc-divider{height:1px;background:rgba(255,255,255,0.08);margin:16px 0}
+  #dTaExpand{margin-left:auto;font:inherit;cursor:pointer;color:#A7ADBE;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:6px 12px;font-size:.78rem;display:inline-flex;align-items:center;gap:6px}
+  #dTaExpand:hover{color:#F5F5F7;background:rgba(243,186,47,0.12);border-color:rgba(243,186,47,0.4)}
+  #dTaCard.ta-full{position:fixed;inset:0;z-index:9999;margin:0;background:#06080F;padding:18px;border-radius:0;grid-template-columns:1fr 360px}
+  .tvc-modal{position:fixed;inset:0;z-index:9998;display:none;align-items:flex-start;justify-content:center;background:rgba(3,4,9,0.72);backdrop-filter:blur(4px);overflow:auto;padding:40px 16px}
+  .tvc-modal.open{display:flex}
+  .tvc-modal-box{background:#0B0F19;border:1px solid rgba(255,255,255,0.1);border-radius:18px;width:100%;max-width:620px;padding:26px 28px;position:relative;box-shadow:0 40px 120px rgba(0,0,0,0.6)}
+  .tvc-modal-x{position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#A7ADBE;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:14px}
+  .tvc-modal-x:hover{color:#fff}
+  .tvc-modal-title{font-size:1.2rem;margin:0 0 16px;color:#F5F5F7}
+</style>
+
+<div class="tvc-wrap">
+  <div class="tvc-top">
+    <span class="eyebrow">{{ t.console }} · Demo</span>
     <div style="display:flex;align-items:center;gap:10px">
       <span class="pill pill--up"><span class="dot"></span><span class="mono">{{ owner_short }}</span></span>
       <button class="btn btn--ghost btn--sm" id="btnLogout">{{ "Sair" if lang=="pt" else "Log out" }}</button>
     </div>
   </div>
-  <p id="cMsg" class="mono" style="font-size:.82rem;color:var(--gold);min-height:18px;margin-top:8px"></p>
-  <div class="callout callout--warn" style="margin-top:6px"><span class="ico">📡</span><p>{{ "Demonstração FIEL sobre MERCADO REAL: o agente lê cotações reais da CoinMarketCap (preços, variações 24h, regime do BTC) e decide SOZINHO, com as mesmas regras do robô (SL/TP dinâmico, convicção, regime, deixa o vencedor correr). Só a banca é fictícia ($100) e nada vai à blockchain. A prova on-chain real está em" if lang=="pt" else "FAITHFUL demo on the REAL MARKET: the agent reads live CoinMarketCap quotes (prices, 24h changes, BTC regime) and decides ON ITS OWN, with the same rules as the real bot (dynamic SL/TP, conviction, regime, lets winners run). Only the bankroll is fake ($100) and nothing hits the blockchain. The real on-chain proof is at" }} <a href="/live">/live</a>. <span id="dataBadge" class="mono" style="font-size:.72rem"></span></p></div>
 
-  <!-- Overview -->
-  <div class="grid cols-4" style="margin-top:14px">
-    <div class="card card--glow stat"><span class="card__lbl">{{ "Estado" if lang=="pt" else "State" }}</span><span class="v" id="oState" style="font-size:1.3rem">·</span></div>
-    <div class="card stat"><span class="card__lbl">{{ t.s_equity }}</span><span class="v mono grad-gold" id="oEquity">·</span></div>
-    <div class="card stat"><span class="card__lbl">{{ t.s_drawdown }}</span><span class="v mono" id="oDd">·</span></div>
-    <div class="card stat"><span class="card__lbl">{{ "Regime (BTC)" if lang=="pt" else "Regime (BTC)" }}</span><span class="v" id="oRegime" style="font-size:1.05rem">·</span></div>
+  <!-- TOOLBAR -->
+  <div class="tvc-bar">
+    <span class="tvc-sym" id="dTaSymbol">·</span>
+    <span id="oState" class="pill pill--gold" style="font-size:11px">·</span>
+    <span class="mono" id="oRegime" style="font-size:.74rem;color:var(--faint)">·</span>
+    <div class="tvc-eq">
+      <div><span class="tvc-lbl">{{ t.s_equity }}</span><span class="tvc-val grad-gold" id="oEquity">·</span></div>
+      <div><span class="tvc-lbl">{{ t.s_drawdown }}</span><span class="tvc-val" id="oDd">·</span></div>
+    </div>
+    <div class="tvc-actions">
+      <button class="tvc-btn gold" id="btnStart">▶️ {{ "Ativar" if lang=="pt" else "Activate" }}</button>
+      <button class="tvc-btn" id="btnPause" style="display:none">⏸️</button>
+      <button class="tvc-btn danger" id="btnPanic" style="display:none">🚨 {{ "Pânico" if lang=="pt" else "Panic" }}</button>
+      <button class="tvc-btn" data-modal="dmWallet">💼 {{ t.lv_composition }}</button>
+      <button class="tvc-btn" data-modal="dmPos">📊 {{ t.lv_positions }} <span id="posCount" class="tvc-badge">·</span></button>
+    </div>
   </div>
+  <p id="cMsg" class="mono" style="font-size:.78rem;color:var(--gold);min-height:16px;margin:6px 2px 0"></p>
+  <p class="mut" style="font-size:.72rem;margin:2px 2px 0">🧪 {{ "Demo fiel e 100% simulada (banca $100, sem tx). O agente decide com as mesmas regras do robô real, incluindo a confluência técnica. Prova on-chain em" if lang=="pt" else "Faithful, 100% simulated demo ($100 bankroll, no tx). The agent decides with the same rules as the real bot, including the TA confluence. On-chain proof at" }} <a href="/live">/live</a>. <span id="dataBadge" class="mono" style="font-size:.7rem"></span></p>
 
-  <!-- TradingView-style: gráfico à esquerda, cards na lateral direita -->
-  <style>
-    .dmain{display:grid;grid-template-columns:1fr 400px;gap:16px;align-items:start;margin-top:18px}
-    @media(max-width:980px){ .dmain{grid-template-columns:1fr} }
-    .dside{display:flex;flex-direction:column;gap:16px}
-    .dbottom{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;align-items:start}
-    @media(max-width:980px){ .dbottom{grid-template-columns:1fr} }
-    #dTaCard.ta-full{position:fixed;inset:0;z-index:9999;margin:0;background:#06080F;padding:18px;border-radius:0}
-    #dTaExpand{margin-left:auto;font:inherit;cursor:pointer;color:#A7ADBE;background:rgba(255,255,255,0.05);
-      border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:6px 12px;font-size:.78rem;display:inline-flex;align-items:center;gap:6px}
-    #dTaExpand:hover{color:#F5F5F7;background:rgba(243,186,47,0.12);border-color:rgba(243,186,47,0.4)}
-  </style>
-  <div class="dmain">
-    <!-- ESQUERDA: gráfico (protagonista) -->
-    <div class="card card--glow" id="dTaCard">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+  <!-- INDICATOR STRIP -->
+  <div id="dTaStats" class="tvc-strip"></div>
+
+  <!-- MAIN: gráfico + lateral (confluência + mente) -->
+  <div class="tvc-main" id="dTaCard">
+    <div class="card card--glow" style="display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <span class="pill pill--gold" style="font-size:11px">live TA</span>
-        <span class="card__lbl" style="margin:0">{{ "Token em foco — análise" if lang=="pt" else "Token in focus — analysis" }}</span>
-        <span class="mono" id="dTaSymbol" style="font-size:.82rem;color:var(--info)"></span>
+        <span class="card__lbl" style="margin:0">{{ "Token em foco" if lang=="pt" else "Token in focus" }}</span>
         <button id="dTaExpand" type="button">⛶ <span id="dTaExpandLbl">{{ t.lv_ta_expand }}</span></button>
       </div>
       <div id="dTaUnavail" class="mut" style="display:none;padding:40px 0;text-align:center">·</div>
-      <div id="dTaChartWrap"><div id="dTaChart" style="height:440px;width:100%"></div></div>
+      <div id="dTaChartWrap" style="flex:1"><div id="dTaChart" style="height:460px;width:100%"></div></div>
     </div>
 
-    <!-- DIREITA: confluência + agente + mente + carteira -->
-    <div class="dside">
-      <div class="card">
-        <span class="card__lbl">{{ t.lv_confluence }}</span>
-        <div style="display:flex;align-items:center;gap:12px;margin:12px 0 10px">
-          <span id="dTaDecision" class="pill" style="font-size:13px;font-weight:700;padding:6px 14px">·</span>
-          <span class="mono" id="dTaScoreVal" style="font-size:.82rem;color:var(--muted)">·</span>
-        </div>
-        <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;margin-bottom:14px"><div id="dTaScoreBar" style="height:100%;width:0%;background:var(--faint);transition:width .4s,background .4s"></div></div>
-        <div id="dTaSignals" style="display:flex;flex-direction:column;gap:2px"><span class="mut">·</span></div>
-        <div id="dTaStats" style="display:flex;gap:8px;margin-top:14px"></div>
+    <div class="tvc-side card">
+      <span class="card__lbl">{{ t.lv_confluence }}</span>
+      <div style="display:flex;align-items:center;gap:12px;margin:12px 0 10px">
+        <span id="dTaDecision" class="pill" style="font-size:13px;font-weight:700;padding:6px 14px">·</span>
+        <span class="mono" id="dTaScoreVal" style="font-size:.82rem;color:var(--muted)">·</span>
       </div>
-
-      <div class="card">
-        <span class="card__lbl">{{ "Agente autônomo" if lang=="pt" else "Autonomous agent" }}</span>
-        <div id="startPanel" style="margin-top:12px">
-          <p class="mut" style="font-size:.86rem">{{ "Ative e assista o agente caçar oportunidades, dimensionar por convicção e gerir o risco — sozinho." if lang=="pt" else "Activate and watch the agent hunt opportunities, size by conviction and manage risk — on its own." }}</p>
-          <button class="btn btn--gold" id="btnStart" style="margin-top:14px;width:100%">▶️ {{ "Ativar agente autônomo" if lang=="pt" else "Activate autonomous agent" }}</button>
-        </div>
-        <div id="posList" style="margin-top:14px"><span class="mut">{{ "nenhuma posição" if lang=="pt" else "no positions" }}</span></div>
-        <div id="ctrlRow" style="display:none;gap:8px;margin-top:14px;border-top:1px solid var(--line-soft);padding-top:12px">
-          <button class="btn btn--ghost btn--sm" id="btnPause" style="flex:1">⏸️</button>
-          <button class="btn btn--danger btn--sm" id="btnPanic" style="flex:1">🚨 {{ "Pânico" if lang=="pt" else "Panic" }}</button>
-        </div>
+      <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;margin-bottom:14px"><div id="dTaScoreBar" style="height:100%;width:0%;background:var(--faint);transition:width .4s,background .4s"></div></div>
+      <div id="dTaSignals" style="display:flex;flex-direction:column;gap:2px"><span class="mut">·</span></div>
+      <div class="tvc-divider"></div>
+      <span class="card__lbl">🧠 {{ "A mente do agente" if lang=="pt" else "The agent's mind" }}</span>
+      <div id="cFeed" style="margin-top:10px;font-family:var(--font-mono);font-size:.74rem;line-height:1.5;max-height:300px;overflow:auto">
+        <span class="mut">{{ "Ative o agente para ver cada decisão ao vivo." if lang=="pt" else "Activate the agent to watch every decision live." }}</span>
       </div>
-
     </div>
   </div>
 
-  <!-- Embaixo do gráfico: a mente + a carteira (lado a lado) -->
-  <div class="dbottom">
-    <div class="card">
-      <span class="card__lbl">🧠 {{ "A mente do agente — raciocínio ao vivo" if lang=="pt" else "The agent's mind — live reasoning" }}</span>
-      <div id="cFeed" style="margin-top:12px;font-family:var(--font-mono);font-size:.78rem;line-height:1.5;max-height:320px;overflow:auto">
-        <span class="mut">{{ "Ative o agente para ver cada decisão: escaneando, comprando com convicção, deixando o vencedor correr, rotacionando..." if lang=="pt" else "Activate the agent to see every decision: scanning, buying with conviction, letting winners run, rotating..." }}</span>
-      </div>
-    </div>
-    <div class="card">
-      <span class="card__lbl">{{ t.lv_composition }}</span>
-      <div id="cComp" style="margin-top:12px"><span class="mut">·</span></div>
-      <p class="mut" style="font-size:.78rem;margin-top:12px;border-top:1px solid var(--line-soft);padding-top:10px">🧪 {{ "Tudo simulado, sem tx on-chain. O agente REAL faz exatamente isto na BNB Chain, com cada swap verificável no BscScan —" if lang=="pt" else "All simulated, no on-chain tx. The REAL agent does exactly this on BNB Chain, every swap verifiable on BscScan —" }} <a href="/live">/live</a>.</p>
-    </div>
-  </div>
-{% endif %}
+  <!-- MODAIS -->
+  <div class="tvc-modal" id="dmWallet"><div class="tvc-modal-box">
+    <button class="tvc-modal-x" data-close>✕</button>
+    <h3 class="tvc-modal-title">{{ t.lv_composition }}</h3>
+    <div id="cComp"><span class="mut">·</span></div>
+    <p class="mut" style="font-size:.76rem;margin-top:14px;border-top:1px solid var(--line-soft);padding-top:10px">🧪 {{ "Tudo simulado, sem tx on-chain. O agente REAL faz exatamente isto na BNB Chain —" if lang=="pt" else "All simulated, no on-chain tx. The REAL agent does exactly this on BNB Chain —" }} <a href="/live">/live</a>.</p>
+  </div></div>
+
+  <div class="tvc-modal" id="dmPos"><div class="tvc-modal-box">
+    <button class="tvc-modal-x" data-close>✕</button>
+    <h3 class="tvc-modal-title">{{ t.lv_positions }}</h3>
+    <div id="posList"><span class="mut">{{ "nenhuma posição" if lang=="pt" else "no positions" }}</span></div>
+  </div></div>
 </div>
+{% endif %}
 
 <script>
 const LANG = "{{ lang }}";
@@ -124,7 +142,6 @@ const T = {
   notOwner: LANG=="pt"?"Esta carteira não é a do dono. Conecte a carteira dona do agente.":"This wallet is not the owner. Connect the owner wallet.",
   ok: LANG=="pt"?"Pronto!":"Done!", fail: LANG=="pt"?"Falhou":"Failed",
   confirmPanic: LANG=="pt"?"PÂNICO: vai vender tudo e travar o agente. Confirmar?":"PANIC: will sell everything and halt the agent. Confirm?",
-  confirmWithdraw: LANG=="pt"?"Sacar tudo para a sua carteira pessoal e pausar. Confirmar?":"Withdraw all to your personal wallet and pause. Confirm?",
 };
 const msg = (el,txt,clr) => { const e=document.getElementById(el); if(e){e.textContent=txt; if(clr)e.style.color=clr;} };
 
@@ -144,7 +161,6 @@ if (btnConnect) btnConnect.onclick = async () => {
   } catch (e) { msg("loginMsg", (e.message||T.fail), "var(--down)"); }
 };
 
-// Entrar como convidado (sem carteira) — a demo é 100% simulada
 const btnGuest = document.getElementById("btnGuest");
 if (btnGuest) btnGuest.onclick = async () => {
   try {
@@ -154,28 +170,31 @@ if (btnGuest) btnGuest.onclick = async () => {
   } catch (e) { msg("loginMsg", (e.message||T.fail), "var(--down)"); }
 };
 
-// ---- Console AUTÔNOMO (autenticado) ----
+// ---- Console (autenticado) ----
 const btnLogout = document.getElementById("btnLogout");
 if (btnLogout) {
   btnLogout.onclick = async () => { await fetch("/api/auth/logout",{method:"POST"}); location.replace(location.pathname + "?lang=" + LANG + "&t=" + Date.now()); };
 
   const usd = v => v==null?"·":"$"+Number(v).toFixed(2);
   const px  = v => { v=Number(v); return isNaN(v)?"·":"$"+(v>=1?v.toFixed(4):v.toFixed(6)); };
+  const setText = (id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
   const FEEDCLR = { buy:"var(--up)", sell:"var(--text)", skill:"var(--gold)", scan:"var(--faint)", sys:"var(--info)", ta:"#BF5AF2" };
+  const STATECLR = {IN_POSITION:"pill--up", SCANNING:"pill--gold", PAUSED:"pill", HALTED:"pill--down", READY:"pill"};
 
   function render(d){
     const s = d.state||{};
-    document.getElementById("oState").textContent  = s.state||"·";
-    document.getElementById("oEquity").textContent = usd(s.equity_usd);
-    document.getElementById("oDd").textContent     = (Number(s.drawdown_pct||0)).toFixed(1)+"%";
+    const stEl = document.getElementById("oState");
+    stEl.textContent = s.state||"·"; stEl.className = "pill " + (STATECLR[s.state]||"pill");
+    setText("oEquity", usd(s.equity_usd));
+    setText("oDd", (Number(s.drawdown_pct||0)).toFixed(1)+"%");
     const reg = s.regime||"·", btc = (s.btc_24h>=0?"+":"")+Number(s.btc_24h||0).toFixed(1)+"%";
-    document.getElementById("oRegime").innerHTML = `${reg} <span class="mut mono" style="font-size:.72rem">BTC ${btc}</span>`;
+    document.getElementById("oRegime").innerHTML = `${reg} · BTC ${btc}`;
     const db = document.getElementById("dataBadge");
     if (db) db.innerHTML = s.data_real ? `<span style="color:var(--up)">● ${LANG=="pt"?"dados reais (CMC)":"live data (CMC)"}</span>` : `<span class="mut">○ ${LANG=="pt"?"agente aquecendo…":"agent warming up…"}</span>`;
 
-    // token em foco para o gráfico TA
     const pos = s.positions||[];
     window.__demoSym = s.analyzing || (pos[0] && pos[0].symbol) || null;
+    setText("posCount", pos.length);
     document.getElementById("posList").innerHTML = pos.length
       ? pos.map(p=>{
           const pnl = `<span class="${p.pnl_pct>=0?'pos':'neg'}">${p.pnl_pct>=0?'+':''}${Number(p.pnl_pct).toFixed(1)}%</span>`;
@@ -186,48 +205,38 @@ if (btnLogout) {
         }).join("")
       : `<span class="mut">${LANG=="pt"?"nenhuma posição aberta":"no open positions"}</span>`;
 
-    // composição
     const h = s.holdings||[];
     document.getElementById("cComp").innerHTML = h.length
-      ? h.map(x=>`<div style="display:flex;justify-content:space-between;padding:4px 0"><span><b>${x.symbol}</b> <span class="mut" style="font-size:.72rem">${x.kind}</span></span><span class="mono mut">${usd(x.value_usd)} · ${(x.pct||0).toFixed(0)}%</span></div>`).join("")
+      ? h.map(x=>`<div style="display:flex;justify-content:space-between;padding:5px 0"><span><b>${x.symbol}</b> <span class="mut" style="font-size:.72rem">${x.kind}</span></span><span class="mono mut">${usd(x.value_usd)} · ${(x.pct||0).toFixed(0)}%</span></div>`).join("")
       : `<span class="mut">·</span>`;
 
-    // A MENTE — feed de raciocínio
     const feed = d.feed||[];
     const fEl = document.getElementById("cFeed");
     if (feed.length) fEl.innerHTML = feed.map(f=>`<div style="padding:3px 0;color:${FEEDCLR[f.kind]||'var(--text)'}">${f.text}</div>`).join("");
 
-    // visibilidade ativar vs controles
+    // controles na toolbar
     const running = s.running;
-    document.getElementById("startPanel").style.display = running ? "none" : "block";
-    document.getElementById("ctrlRow").style.display    = running ? "flex" : "none";
-    const bp = document.getElementById("btnPause");
-    if (bp) bp.textContent = s.paused ? (LANG=="pt"?"▶️ Retomar":"▶️ Resume") : (LANG=="pt"?"⏸️ Pausar":"⏸️ Pause");
+    const bs=document.getElementById("btnStart"), bpa=document.getElementById("btnPause"), bpn=document.getElementById("btnPanic");
+    if(bs) bs.style.display = running ? "none" : "inline-flex";
+    if(bpa){ bpa.style.display = running ? "inline-flex" : "none"; bpa.textContent = s.paused ? "▶️" : "⏸️"; }
+    if(bpn) bpn.style.display = running ? "inline-flex" : "none";
   }
 
   let loop = null;
-  async function tickOnce(){
-    try { const d = await (await fetch("/api/console/tick",{method:"POST"})).json(); render(d); } catch(e){}
-  }
+  async function tickOnce(){ try { const d = await (await fetch("/api/console/tick",{method:"POST"})).json(); render(d); } catch(e){} }
   function startLoop(){ if(!loop) loop = setInterval(tickOnce, 2200); }
+  async function post(name){ try { return await (await fetch("/api/console/"+name,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})).json(); } catch(e){ return null; } }
 
-  async function post(name, confirmMsg){
-    if (confirmMsg && !confirm(confirmMsg)) return null;
-    try { return await (await fetch("/api/console/"+name,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})).json(); }
-    catch(e){ return null; }
-  }
-
-  document.getElementById("btnStart").onclick = async () => {
-    msg("cMsg", LANG=="pt"?"Ativando…":"Activating…","var(--gold)");
-    await post("start"); msg("cMsg","");
-    await tickOnce(); startLoop();
-  };
+  document.getElementById("btnStart").onclick = async () => { msg("cMsg", LANG=="pt"?"Ativando…":"Activating…","var(--gold)"); await post("start"); msg("cMsg",""); await tickOnce(); startLoop(); };
   document.getElementById("btnPause").onclick = async () => { await post("pause"); await tickOnce(); };
-  document.getElementById("btnPanic").onclick = async () => {
-    if(!confirm(T.confirmPanic)) return; await post("panic"); await tickOnce();
-  };
+  document.getElementById("btnPanic").onclick = async () => { if(!confirm(T.confirmPanic)) return; await post("panic"); await tickOnce(); };
 
-  // estado inicial (sem avançar)
+  // modais
+  document.querySelectorAll('[data-modal]').forEach(b=>b.addEventListener('click',()=>{ const m=document.getElementById(b.dataset.modal); if(m){m.classList.add('open');document.body.style.overflow='hidden';} }));
+  document.querySelectorAll('.tvc-modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m||e.target.hasAttribute('data-close')){m.classList.remove('open');document.body.style.overflow='';} }));
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.tvc-modal.open').forEach(m=>{m.classList.remove('open');document.body.style.overflow='';}); });
+
+  // estado inicial
   (async()=>{ try{ const d=await(await fetch("/api/console/state")).json(); render(d); if(d.state&&d.state.running) startLoop(); }catch(e){} })();
 }
 </script>
@@ -237,7 +246,7 @@ if (btnLogout) {
 <script>
 if (document.getElementById('dTaCard') && window.mountTAChart) {
   mountTAChart({
-    chart:'dTaChart', box:'dTaChartWrap', unavail:'dTaUnavail', height:440,
+    chart:'dTaChart', box:'dTaChartWrap', unavail:'dTaUnavail', height:460,
     symbol:'dTaSymbol', decision:'dTaDecision', scoreVal:'dTaScoreVal', scoreBar:'dTaScoreBar',
     signals:'dTaSignals', stats:'dTaStats', card:'dTaCard', expand:'dTaExpand', expandLbl:'dTaExpandLbl',
     expandText:"{{ t.lv_ta_expand }}", closeText:"{{ t.lv_ta_close }}", unavailText:"{{ t.lv_ta_unavail }}",
