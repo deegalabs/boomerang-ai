@@ -33,7 +33,7 @@ from boomerang.strategy.confluence import evaluate_confluence
 from boomerang.strategy.indicators import compute_indicators
 from boomerang.strategy.klines import fetch_klines
 from boomerang.strategy.playbook import (
-    expectancy_disabled, regime_posture, select_strategy, setup_strength)
+    expectancy_disabled, regime_posture, select_strategy, setup_strength, ta_select)
 from boomerang.types import AgentState, Position
 from boomerang.vault.bnb_validation import BNBValidator
 from boomerang.vault.twak_executor import TwakError, TwakExecutor
@@ -789,18 +789,23 @@ class BoomerangAgent:
                     continue
                 # ERC-8004: SEALS the reasoning on-chain BEFORE executing (non-blocking).
                 asyncio.create_task(self._commit_prediction(symbol, verdict, ch24, now))
+                # TA STRATEGY (opt-in): refine the exit profile with the matching TA pattern.
+                exec_spec = spec
+                ta_spec = await self._ta_strategy(symbol)
+                if ta_spec and ta_spec.key in posture.allowed:
+                    exec_spec = ta_spec
                 # Opens with the STRATEGY's parameters (its own SL/TP/trailing/time-stop).
-                rationale = f"[{spec.label}] {verdict.rationale}"
+                rationale = f"[{exec_spec.label}] {verdict.rationale}"
                 if conf and conf.summary:
                     rationale += f" · TA: {conf.summary}"
                 if verdict.invalidation:
                     rationale += f" · Invalidated if: {verdict.invalidation}"
                 if await self._open(symbol, addr, size, rationale, now,
-                                    stop_pct=spec.stop_pct, tp_pct=spec.take_profit_pct,
-                                    trailing_trigger_pct=spec.trailing_trigger_pct,
-                                    trailing_pct=spec.trailing_pct, time_stop_min=spec.time_stop_min,
-                                    time_stop_band_pct=spec.time_stop_band_pct,
-                                    strategy=spec.key, regime=verdict.regime):
+                                    stop_pct=exec_spec.stop_pct, tp_pct=exec_spec.take_profit_pct,
+                                    trailing_trigger_pct=exec_spec.trailing_trigger_pct,
+                                    trailing_pct=exec_spec.trailing_pct, time_stop_min=exec_spec.time_stop_min,
+                                    time_stop_band_pct=exec_spec.time_stop_band_pct,
+                                    strategy=exec_spec.key, regime=verdict.regime):
                     opened = True
                     break
                 # Execution failed (e.g.: revert due to liquidity): cooldown and try the next one.
@@ -844,6 +849,19 @@ class BoomerangAgent:
             return evaluate_confluence(compute_indicators(klines), macro_regime=macro)
         except Exception as exc:  # noqa: BLE001
             self._log.warning("confluence failed for %s: %s", symbol, exc)
+            return None
+
+    async def _ta_strategy(self, symbol: str):
+        """Opt-in (config `enable_ta_strategies`): pick a refined TA strategy spec from the
+        klines for an ENTER candidate. None when disabled or no candle data. Additive."""
+        if not self._cfg.dev_safety.get("enable_ta_strategies", False):
+            return None
+        try:
+            klines = await asyncio.to_thread(fetch_klines, symbol, "1m", 60)
+            if not klines or len(klines) < 30:
+                return None
+            return ta_select(compute_indicators(klines))
+        except Exception:  # noqa: BLE001
             return None
 
     @staticmethod
