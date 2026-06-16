@@ -102,6 +102,7 @@ TR: dict[str, dict[str, str]] = {
         "lv_ta_sub": "What the agent sees right now — candles with EMA, VWAP and Fibonacci, and the confluence that drives the decision.",
         "lv_ta_unavail": "No candle data for this token (on-chain only)",
         "lv_ta_expand": "Expand", "lv_ta_close": "Close",
+        "lv_proof_btn": "On-chain proof", "lv_confluence": "Confluence",
     },
     "pt": {
         "tagline": "Agente de trading autônomo na BNB Chain",
@@ -187,6 +188,7 @@ TR: dict[str, dict[str, str]] = {
         "lv_ta_sub": "O que o agente enxerga agora — candles com EMA, VWAP e Fibonacci, e a confluência que guia a decisão.",
         "lv_ta_unavail": "Sem dados de candle pra este token (só on-chain)",
         "lv_ta_expand": "Expandir", "lv_ta_close": "Fechar",
+        "lv_proof_btn": "Prova on-chain", "lv_confluence": "Confluência",
     },
 }
 

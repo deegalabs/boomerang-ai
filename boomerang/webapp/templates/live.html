@@ -1,35 +1,115 @@
 {% extends "base.html" %}
 {% block title %}{{ t.lv_title }} · Boomerang AI{% endblock %}
 {% block content %}
-<div class="wrap section" style="max-width:1000px">
-  <span class="eyebrow">{{ t.lv_title }}</span>
-  <h1 class="display" style="font-size:clamp(2rem,4.4vw,3.1rem);margin:14px 0 10px">
-    {{ t.lv_title }} <span id="lvState" class="pill pill--gold" style="vertical-align:middle;font-size:12px">·</span>
-  </h1>
-  <p class="lead" style="font-size:1.02rem">{{ t.lv_sub }}</p>
-  <p class="mut" style="font-size:.92rem;max-width:68ch;margin-top:8px">{{ t.lv_explain }}</p>
-  <div id="lvAddr" class="mono" style="font-size:.8rem;color:var(--faint);margin-top:10px">·</div>
+<style>
+  .tv-wrap{max-width:1440px;margin:0 auto;padding:24px clamp(14px,3vw,32px) 60px}
+  .tv-bar{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:14px 18px;
+    background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px}
+  .tv-cluster{display:flex;align-items:center;gap:12px}
+  .tv-symbol{font-size:1.5rem;font-weight:800;letter-spacing:-0.02em;color:#F5F5F7}
+  .tv-eq{gap:24px;margin-left:auto}
+  .tv-eq>div{display:flex;flex-direction:column}
+  .tv-lbl{font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:#6E7388}
+  .tv-val{font-family:var(--mono,SF Mono,monospace);font-size:1.05rem;font-weight:700;color:#F5F5F7}
+  .tv-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .tv-btn{font:inherit;font-size:.78rem;cursor:pointer;color:#A7ADBE;background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:8px 12px;display:inline-flex;gap:6px;align-items:center}
+  .tv-btn:hover{color:#F5F5F7;border-color:rgba(243,186,47,0.4);background:rgba(243,186,47,0.1)}
+  .tv-badge{background:rgba(243,186,47,0.2);color:#F3BA2F;border-radius:999px;padding:1px 7px;font-size:.7rem}
+  .tv-strip{display:flex;gap:8px;margin-top:12px;padding:12px 18px;background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.06);border-radius:12px;min-height:54px}
+  .tv-main{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:stretch;margin-top:14px}
+  @media(max-width:920px){.tv-main{grid-template-columns:1fr}}
+  .tv-chead{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .tv-side{display:flex;flex-direction:column}
+  .tv-divider{height:1px;background:rgba(255,255,255,0.08);margin:16px 0}
+  #taExpand{margin-left:auto;font:inherit;cursor:pointer;color:#A7ADBE;background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:6px 12px;font-size:.78rem;display:inline-flex;align-items:center;gap:6px}
+  #taExpand:hover{color:#F5F5F7;background:rgba(243,186,47,0.12);border-color:rgba(243,186,47,0.4)}
+  #taCard.ta-full{position:fixed;inset:0;z-index:9999;margin:0;background:#06080F;padding:18px;border-radius:0;grid-template-columns:1fr 360px}
+  .tv-modal{position:fixed;inset:0;z-index:9998;display:none;align-items:flex-start;justify-content:center;
+    background:rgba(3,4,9,0.72);backdrop-filter:blur(4px);overflow:auto;padding:40px 16px}
+  .tv-modal.open{display:flex}
+  .tv-modal-box{background:#0B0F19;border:1px solid rgba(255,255,255,0.1);border-radius:18px;width:100%;max-width:740px;
+    padding:26px 28px;position:relative;box-shadow:0 40px 120px rgba(0,0,0,0.6)}
+  .tv-modal-x{position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+    color:#A7ADBE;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:14px}
+  .tv-modal-x:hover{color:#fff}
+  .tv-modal-title{font-size:1.2rem;margin:0 0 16px;color:#F5F5F7}
+</style>
 
-  <div class="card card--glow" id="lvIdCard" style="margin-top:18px;display:none">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span class="pill pill--gold" style="font-size:11px">ERC-8004</span>
-      <span class="card__lbl" style="margin:0">{{ t.lv_id_title }}</span>
-      <span class="pill pill--up" id="lvIdNet" style="font-size:10px"></span>
+<div class="tv-wrap">
+  <!-- TOOLBAR -->
+  <div class="tv-bar">
+    <div class="tv-cluster">
+      <span class="tv-symbol" id="taSymbol">·</span>
+      <span id="lvState" class="pill pill--gold" style="font-size:11px">·</span>
     </div>
-    <p class="mut" style="font-size:.86rem;margin:8px 0 12px">{{ t.lv_id_sub }}</p>
-    <div class="grid cols-3" style="gap:12px">
-      <div><span class="card__lbl">{{ t.lv_id_agent }}</span><span class="v mono grad-gold" id="lvIdAgent" style="font-size:1.3rem">·</span></div>
-      <div><span class="card__lbl">{{ t.lv_id_wallet }}</span><span class="v mono" id="lvIdWallet" style="font-size:.86rem">·</span></div>
-      <div><span class="card__lbl">{{ t.lv_id_proof }}</span><span class="v" id="lvIdProof" style="font-size:.86rem">·</span></div>
+    <div class="tv-cluster tv-eq">
+      <div><span class="tv-lbl">{{ t.s_equity }}</span><span class="tv-val grad-gold" id="lvEquity">·</span></div>
+      <div><span class="tv-lbl">{{ t.s_drawdown }}</span><span class="tv-val" id="lvDd">·</span></div>
+    </div>
+    <div class="tv-actions">
+      <button class="tv-btn" data-modal="mProof">⛓ {{ t.lv_proof_btn }}</button>
+      <button class="tv-btn" data-modal="mWallet">💼 {{ t.lv_composition }}</button>
+      <button class="tv-btn" data-modal="mPos">{{ t.lv_positions }} <span id="lvPosN" class="tv-badge">·</span></button>
+      <button class="tv-btn" data-modal="mHist">{{ t.lv_history }}</button>
+    </div>
+  </div>
+  <div id="lvAddr" class="mono" style="font-size:.74rem;color:var(--faint);margin:6px 2px 0">·</div>
+
+  <!-- INDICATOR STRIP -->
+  <div id="taStats" class="tv-strip"></div>
+
+  <!-- MAIN: chart + confluence -->
+  <div class="tv-main" id="taCard">
+    <div class="card card--glow" style="display:flex;flex-direction:column">
+      <div class="tv-chead">
+        <span class="pill pill--gold" style="font-size:11px">live TA</span>
+        <span class="card__lbl" style="margin:0">{{ t.lv_ta_title }}</span>
+        <button id="taExpand" type="button" title="{{ t.lv_ta_expand }}">⛶ <span id="taExpandLbl">{{ t.lv_ta_expand }}</span></button>
+      </div>
+      <div id="taUnavail" class="mut" style="display:none;padding:40px 0;text-align:center">·</div>
+      <div id="taBox" style="flex:1">
+        <div id="lvChart" style="height:440px;width:100%"></div>
+      </div>
+    </div>
+
+    <div class="tv-side card">
+      <span class="card__lbl">{{ t.lv_confluence }}</span>
+      <div style="display:flex;align-items:center;gap:12px;margin:12px 0 10px">
+        <span id="taDecision" class="pill" style="font-size:13px;font-weight:700;padding:6px 14px">·</span>
+        <span class="mono" id="taScoreVal" style="font-size:.82rem;color:var(--muted)">·</span>
+      </div>
+      <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;margin-bottom:16px">
+        <div id="taScoreBar" style="height:100%;width:0%;background:var(--faint);transition:width .4s,background .4s"></div>
+      </div>
+      <div id="taSignals" style="display:flex;flex-direction:column;gap:2px"><span class="mut">·</span></div>
+      <div class="tv-divider"></div>
+      <div id="lvEngine" style="display:flex;gap:8px;flex-wrap:wrap"><span class="mut">·</span></div>
     </div>
   </div>
 
-  <div class="card" style="margin-top:18px">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span class="pill pill--gold" style="font-size:11px">on-chain</span>
-      <span class="card__lbl" style="margin:0">{{ t.track_title }}</span>
+  <p class="mono" id="lvUpd" style="text-align:center;color:var(--faint);font-size:.72rem;margin-top:16px"></p>
+
+  <!-- MODALS -->
+  <div class="tv-modal" id="mProof"><div class="tv-modal-box">
+    <button class="tv-modal-x" data-close>✕</button>
+    <h3 class="tv-modal-title">{{ t.track_title }}</h3>
+    <div class="card card--glow" id="lvIdCard" style="margin-bottom:16px;display:none">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="pill pill--gold" style="font-size:11px">ERC-8004</span>
+        <span class="card__lbl" style="margin:0">{{ t.lv_id_title }}</span>
+        <span class="pill pill--up" id="lvIdNet" style="font-size:10px"></span>
+      </div>
+      <p class="mut" style="font-size:.86rem;margin:8px 0 12px">{{ t.lv_id_sub }}</p>
+      <div class="grid cols-3" style="gap:12px">
+        <div><span class="card__lbl">{{ t.lv_id_agent }}</span><span class="v mono grad-gold" id="lvIdAgent" style="font-size:1.3rem">·</span></div>
+        <div><span class="card__lbl">{{ t.lv_id_wallet }}</span><span class="v mono" id="lvIdWallet" style="font-size:.86rem">·</span></div>
+        <div><span class="card__lbl">{{ t.lv_id_proof }}</span><span class="v" id="lvIdProof" style="font-size:.86rem">·</span></div>
+      </div>
     </div>
-    <p class="mut" style="font-size:.84rem;margin:8px 0 12px">{{ t.track_sub }}</p>
+    <p class="mut" style="font-size:.84rem;margin:0 0 12px">{{ t.track_sub }}</p>
     <table class="tbl">
       {% for p in proofs %}
       <tr>
@@ -41,61 +121,31 @@
       </tr>
       {% endfor %}
     </table>
-  </div>
+  </div></div>
 
-  <div class="grid cols-4" style="margin-top:26px">
-    <div class="card card--glow stat"><span class="card__lbl">{{ t.s_equity }}</span><span class="v mono grad-gold" id="lvEquity">·</span></div>
-    <div class="card stat"><span class="card__lbl">{{ t.s_drawdown }}</span><span class="v mono" id="lvDd">·</span></div>
-    <div class="card stat"><span class="card__lbl">{{ t.lv_peak }}</span><span class="v mono" id="lvPeak">·</span></div>
-    <div class="card stat"><span class="card__lbl">{{ t.lv_positions }}</span><span class="v" id="lvPosN">·</span></div>
-  </div>
-
-  <!-- Live technical analysis: annotated chart + confluence panel -->
-  <style>
-    #taCard.ta-full{position:fixed;inset:0;z-index:9999;margin:0;border-radius:0;
-      overflow:auto;padding:22px clamp(18px,4vw,56px);background:#06080F;}
-    #taExpand{margin-left:auto;font:inherit;cursor:pointer;color:var(--muted);
-      background:rgba(255,255,255,0.05);border:1px solid var(--line-soft,rgba(255,255,255,0.1));
-      border-radius:9px;padding:6px 12px;font-size:.78rem;display:inline-flex;align-items:center;gap:6px;}
-    #taExpand:hover{color:#F5F5F7;background:rgba(243,186,47,0.12);border-color:rgba(243,186,47,0.4);}
-  </style>
-  <div class="card card--glow" id="taCard" style="margin-top:18px">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span class="pill pill--gold" style="font-size:11px">live TA</span>
-      <span class="card__lbl" style="margin:0">{{ t.lv_ta_title }}</span>
-      <span class="mono" id="taSymbol" style="font-size:.82rem;color:var(--info)"></span>
-      <button id="taExpand" type="button" title="{{ t.lv_ta_expand }}">⛶ <span id="taExpandLbl">{{ t.lv_ta_expand }}</span></button>
+  <div class="tv-modal" id="mWallet"><div class="tv-modal-box">
+    <button class="tv-modal-x" data-close>✕</button>
+    <h3 class="tv-modal-title">{{ t.lv_composition }}</h3>
+    <div class="grid cols-2" style="gap:12px;margin-bottom:16px">
+      <div class="card stat"><span class="card__lbl">{{ t.lv_peak }}</span><span class="v mono" id="lvPeak">·</span></div>
+      <div class="card stat"><span class="card__lbl">{{ t.lv_positions }}</span><span class="v mono" id="lvPosN2">·</span></div>
     </div>
-    <p class="mut" style="font-size:.84rem;margin:8px 0 14px">{{ t.lv_ta_sub }}</p>
-    <div id="taUnavail" class="mut" style="display:none;padding:18px 0">·</div>
-    <div id="taBox" style="display:flex;gap:18px;flex-wrap:wrap">
-      <div style="flex:1.7;min-width:380px">
-        <div id="lvChart" style="height:360px;width:100%"></div>
-        <div id="taStats" style="display:flex;justify-content:space-between;margin-top:12px;gap:8px"></div>
-      </div>
-      <div style="flex:1;min-width:280px">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-          <span id="taDecision" class="pill" style="font-size:13px;font-weight:700;padding:6px 14px">·</span>
-          <span class="mono" id="taScoreVal" style="font-size:.82rem;color:var(--muted)">·</span>
-        </div>
-        <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;margin-bottom:14px">
-          <div id="taScoreBar" style="height:100%;width:0%;background:var(--faint);transition:width .4s,background .4s"></div>
-        </div>
-        <div id="taSignals" style="display:flex;flex-direction:column;gap:2px"><span class="mut">·</span></div>
-      </div>
-    </div>
-  </div>
+    <div id="lvComp"><span class="mut">·</span></div>
+    <div class="tv-divider"></div>
+    <div id="lvUniverse"></div>
+  </div></div>
 
-  <div class="card" style="margin-top:18px">
-    <span class="card__lbl">{{ t.lv_engine }}</span>
-    <div id="lvEngine" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><span class="mut">·</span></div>
-    <div id="lvUniverse" style="margin-top:12px"></div>
-  </div>
+  <div class="tv-modal" id="mPos"><div class="tv-modal-box">
+    <button class="tv-modal-x" data-close>✕</button>
+    <h3 class="tv-modal-title">{{ t.lv_positions }}</h3>
+    <div id="lvPos"><span class="mut">{{ t.lv_none }}</span></div>
+  </div></div>
 
-  <div class="card" style="margin-top:18px"><span class="card__lbl">{{ t.lv_composition }}</span><div id="lvComp" style="margin-top:12px"><span class="mut">·</span></div></div>
-  <div class="card" style="margin-top:18px"><span class="card__lbl">{{ t.lv_positions }}</span><div id="lvPos" style="margin-top:12px"><span class="mut">{{ t.lv_none }}</span></div></div>
-  <div class="card" style="margin-top:18px"><span class="card__lbl">{{ t.lv_history }}</span><div id="lvHist" style="margin-top:12px"><span class="mut">{{ t.lv_no_trades }}</span></div></div>
-  <p class="mono" id="lvUpd" style="text-align:center;color:var(--faint);font-size:.74rem;margin-top:22px"></p>
+  <div class="tv-modal" id="mHist"><div class="tv-modal-box">
+    <button class="tv-modal-x" data-close>✕</button>
+    <h3 class="tv-modal-title">{{ t.lv_history }}</h3>
+    <div id="lvHist"><span class="mut">{{ t.lv_no_trades }}</span></div>
+  </div></div>
 </div>
 
 <script>
@@ -112,24 +162,23 @@ const L = {
 const SCAN = "https://bscscan.com";
 const usd = v => v==null ? "·" : "$"+Number(v).toFixed(2);
 const px  = v => { v=Number(v); if(!isFinite(v)) return "·"; return "$"+(v>=1?v.toFixed(4):v>=0.0001?v.toFixed(6):v.toExponential(2)); };
-const qty = v => { v=Number(v); if(!isFinite(v)) return "·"; return v>=1000?v.toLocaleString("en-US",{maximumFractionDigits:2}):v>=1?v.toFixed(4):v.toFixed(6); };
 const short = a => a ? a.slice(0,6)+"…"+a.slice(-4) : "·";
 const KIND = {gas:["BNB (gas)","#F3BA2F"], stable:["stable","#5AA9FF"], token:["token","#34E5A4"]};
 const STATECLR = {IN_POSITION:"pill--up", SCANNING:"pill--gold", PAUSED:"pill", HALTED:"pill--down", IDLE:"pill"};
+const setText = (id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
 
 async function tick(){
   let d;
   try { d = await (await fetch("/api/live")).json(); }
-  catch(e){ document.getElementById("lvState").textContent = L.offline; return; }
+  catch(e){ setText("lvState", L.offline); return; }
   const s = d.state || {}, trades = d.trades || [];
 
-  // Identidade on-chain ERC-8004
+  // ERC-8004 identity
   const id = d.identity || s.identity || {};
-  const idCard = document.getElementById("lvIdCard");
   if (id.registered) {
-    idCard.style.display = "";
-    document.getElementById("lvIdNet").textContent = id.network || "";
-    document.getElementById("lvIdAgent").textContent = "#" + id.agent_id;
+    document.getElementById("lvIdCard").style.display = "";
+    setText("lvIdNet", id.network || "");
+    setText("lvIdAgent", "#" + id.agent_id);
     document.getElementById("lvIdWallet").innerHTML =
       `<a href="${SCAN}/address/${id.address}" target="_blank" style="color:var(--info)">${short(id.address)} ↗</a>`;
     document.getElementById("lvIdProof").innerHTML =
@@ -143,15 +192,15 @@ async function tick(){
 
   document.getElementById("lvAddr").innerHTML = s.agent_address
     ? `<a href="${SCAN}/address/${s.agent_address}" target="_blank" style="color:var(--info)">${s.agent_address} ↗</a>` : "·";
-  document.getElementById("lvEquity").textContent = usd(s.equity_usd);
+  setText("lvEquity", usd(s.equity_usd));
   const dd = Number(s.drawdown_pct||0);
   const ddEl = document.getElementById("lvDd"); ddEl.textContent = dd.toFixed(1)+"%";
-  ddEl.className = "v mono " + (dd>=20?"neg":dd>=10?"":"pos");
-  document.getElementById("lvPeak").textContent = usd(s.peak_equity);
+  ddEl.className = "tv-val " + (dd>=20?"neg":dd>=10?"":"pos");
+  setText("lvPeak", usd(s.peak_equity));
   const pos = s.positions || [];
-  document.getElementById("lvPosN").textContent = pos.length;
+  setText("lvPosN", pos.length); setText("lvPosN2", pos.length);
 
-  // Posture & engine (mode, global settings, watched universe)
+  // Posture & engine + watched universe
   const tpG = Number(s.take_profit_pct||0);
   document.getElementById("lvEngine").innerHTML =
     `<span class="pill pill--gold" style="font-size:11px">${L.mode}: ${s.mode||'—'}</span>`+
@@ -171,7 +220,7 @@ async function tick(){
       h.map(x=>{ const k=KIND[x.kind]||["",""]; return `<tr><td><b>${x.symbol}</b> <span class="pill" style="color:${k[1]};font-size:10px">${k[0]}</span></td><td class="mono">${usd(x.value_usd)}</td><td class="mono mut">${(x.pct||0).toFixed(1)}%</td></tr>`; }).join("")+`</table>`
     : `<span class="mut">·</span>`;
 
-  // Positions — entry → now, live PnL, target, stop (parity with Telegram)
+  // Positions
   document.getElementById("lvPos").innerHTML = pos.length
     ? `<table class="tbl"><tr><th>${L.token}</th><th>${L.entry} → ${L.now}</th><th>${L.pnl}</th><th>${L.target}</th><th>${L.stop}</th></tr>`+
       pos.map(p=>{
@@ -201,10 +250,14 @@ async function tick(){
     ? `<table class="tbl"><tr><th>${L.type}</th><th>${L.token}</th><th>${L.value}/${L.pnl}</th><th>${L.tx}</th></tr>${rows}</table>`
     : `<span class="mut">${L.noTrades}</span>`;
 
-  const t = new Date();
-  document.getElementById("lvUpd").textContent = L.updated + " " + t.toLocaleTimeString();
+  setText("lvUpd", L.updated + " " + new Date().toLocaleTimeString());
 }
 tick(); setInterval(tick, 5000);
+
+// ── modals ──
+function closeModals(){ document.querySelectorAll('.tv-modal.open').forEach(m=>m.classList.remove('open')); document.body.style.overflow = taFull?'hidden':''; }
+document.querySelectorAll('[data-modal]').forEach(b=>b.addEventListener('click',()=>{ document.getElementById(b.dataset.modal).classList.add('open'); document.body.style.overflow='hidden'; }));
+document.querySelectorAll('.tv-modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m || e.target.hasAttribute('data-close')) closeModals(); }));
 </script>
 
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
@@ -216,7 +269,7 @@ let taChart=null, taCandle=null, taE9=null, taE21=null, taLines=[];
 function taResize(){
   if(!taChart) return;
   const el=document.getElementById('lvChart');
-  const h = taFull ? Math.max(window.innerHeight - 280, 360) : 380;
+  const h = taFull ? Math.max(window.innerHeight - 200, 360) : 440;
   el.style.height = h+'px';
   taChart.applyOptions({width: el.clientWidth, height: h});
   taChart.timeScale().fitContent();
@@ -232,7 +285,7 @@ function taEnsure(){
   if(taChart || !window.LightweightCharts) return;
   const el=document.getElementById('lvChart');
   taChart = LightweightCharts.createChart(el,{
-    width: el.clientWidth, height: 360,
+    width: el.clientWidth, height: 440,
     layout:{background:{color:'transparent'}, textColor:'#A7ADBE', fontFamily:'inherit'},
     grid:{vertLines:{color:'rgba(255,255,255,0.04)'}, horzLines:{color:'rgba(255,255,255,0.04)'}},
     timeScale:{visible:false, borderColor:'rgba(255,255,255,0.08)'},
@@ -253,7 +306,7 @@ function taRenderChart(d){
   Object.keys(lv).forEach(k=>{ const gold=(k==='0.618');
     taLines.push(taCandle.createPriceLine({price:lv[k], color: gold?'#F3BA2F':'rgba(255,255,255,0.22)', lineWidth: gold?2:1, lineStyle: gold?0:2, axisLabelVisible:true, title:'fib '+k})); });
   if(d.vwap) taLines.push(taCandle.createPriceLine({price:d.vwap, color:'#BF5AF2', lineWidth:1, lineStyle:1, axisLabelVisible:true, title:'VWAP'}));
-  taChart.timeScale().fitContent();
+  taResize();
 }
 const TA_DEC={ENTER:['#34E5A4','ENTER'], WAIT:['#F3BA2F','WAIT'], AVOID:['#FF5470','AVOID']};
 function taRenderPanel(d){
@@ -280,11 +333,11 @@ async function taTick(){
   let d; try{ d=await(await fetch('/api/ta')).json(); }catch(e){ return; }
   const box=document.getElementById('taBox'), un=document.getElementById('taUnavail');
   if(!d.available){ box.style.display='none'; un.style.display='block'; un.textContent=TA_UNAVAIL+' · '+(d.symbol||''); return; }
-  box.style.display='flex'; un.style.display='none';
+  box.style.display=''; un.style.display='none';
   taRenderChart(d); taRenderPanel(d);
 }
 document.getElementById('taExpand').addEventListener('click', taToggleFull);
-document.addEventListener('keydown', e=>{ if(e.key==='Escape' && taFull) taToggleFull(); });
+document.addEventListener('keydown', e=>{ if(e.key!=='Escape') return; if(document.querySelector('.tv-modal.open')) closeModals(); else if(taFull) taToggleFull(); });
 taTick(); setInterval(taTick, 15000);
 </script>
 {% endblock %}
