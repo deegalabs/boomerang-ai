@@ -27,6 +27,9 @@ from boomerang.ipc import Alert, AlertBus, AlertType
 from boomerang.persistence import append_trade, load_state, load_trades, save_state
 from boomerang.risk import RiskEngine
 from boomerang.risk.risk_engine import ExitSignal
+from boomerang.strategy.confluence import evaluate_confluence
+from boomerang.strategy.indicators import compute_indicators
+from boomerang.strategy.klines import fetch_klines
 from boomerang.strategy.playbook import (
     expectancy_disabled, regime_posture, select_strategy, setup_strength)
 from boomerang.types import AgentState, Position
@@ -737,11 +740,19 @@ class BoomerangAgent:
                     await self._emit(AlertType.REJECTED, f"Entry barred (overextended): {symbol}",
                                      f"24h {ch24:+.1f}% > {self._cfg.max_entry_24h_pct:.0f}% — top risk.")
                     continue
+                # ── Filter 1 timing gate: TA confluence on 1m candles (don't chase pumps) ──
+                conf = await self._confluence(symbol, self._macro_label(posture.size_mult))
+                if conf and conf.decision == "AVOID":
+                    await self._emit(AlertType.REJECTED, f"Entry vetoed (TA): {symbol}",
+                                     conf.veto or conf.summary)
+                    continue
                 conv_pct = conviction_size_pct(self.position_size_pct, verdict.confidence_score,
                                                max_pct=self._cfg.max_position_pct)
                 if spec.key == "momentum":
                     conv_pct *= overextension_factor(ch24)
                 conv_pct *= posture.size_mult  # ACTION MATRIX: regime scales the bet (defensive shrinks)
+                if conf:  # CONFLUENCE: scale the bet by how much the TA agrees (cap respected later)
+                    conv_pct *= 1.15 if conf.enter else (0.75 if conf.decision == "WAIT" else 1.0)
                 size = self._risk.position_size_usd(equity, stable, override_pct=conv_pct)
                 val = await asyncio.to_thread(
                     self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size,
@@ -755,6 +766,8 @@ class BoomerangAgent:
                 asyncio.create_task(self._commit_prediction(symbol, verdict, ch24, now))
                 # Opens with the STRATEGY's parameters (its own SL/TP/trailing/time-stop).
                 rationale = f"[{spec.label}] {verdict.rationale}"
+                if conf and conf.summary:
+                    rationale += f" · TA: {conf.summary}"
                 if verdict.invalidation:
                     rationale += f" · Invalidated if: {verdict.invalidation}"
                 if await self._open(symbol, addr, size, rationale, now,
@@ -791,6 +804,30 @@ class BoomerangAgent:
         self._log.info("CYCLE | %s", detail)  # visibility in the server log
         await self._emit(AlertType.SCAN, "Cycle complete", detail)
         self._save()
+
+    async def _confluence(self, symbol: str, macro: str):
+        """Pre-entry TA confluence gate over Binance 1m candles. Returns a Confluence,
+        or None when the token has no candle data (then the gate is simply skipped —
+        on-chain-only tokens are never penalized)."""
+        try:
+            klines = await asyncio.to_thread(fetch_klines, symbol, "1m", 60)
+        except Exception:  # noqa: BLE001
+            return None
+        if not klines or len(klines) < 30:
+            return None
+        try:
+            return evaluate_confluence(compute_indicators(klines), macro_regime=macro)
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("confluence failed for %s: %s", symbol, exc)
+            return None
+
+    @staticmethod
+    def _macro_label(size_mult: float) -> str:
+        if size_mult <= 0:
+            return "RISK_OFF"
+        if size_mult < 1:
+            return "DEFENSIVE"
+        return "BULL" if size_mult > 1 else "NEUTRAL"
 
     async def _maybe_rotate(self, equity: float, quotes: dict, global_metrics: dict,
                             ranked: list, now: float) -> str:
