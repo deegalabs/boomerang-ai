@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ t.console }} · Boomerang AI{% endblock %}
 {% block content %}
-<div class="wrap section" style="max-width:980px">
+<div class="wrap section" style="max-width:1280px">
 
 {% if not authed %}
   <!-- ============ PORTA DE LOGIN ============ -->
@@ -45,26 +45,32 @@
     <div class="card stat"><span class="card__lbl">{{ "Regime (BTC)" if lang=="pt" else "Regime (BTC)" }}</span><span class="v" id="oRegime" style="font-size:1.05rem">·</span></div>
   </div>
 
-  <!-- TA ao vivo: o que o agente está analisando -->
+  <!-- TradingView-style: gráfico à esquerda, cards na lateral direita -->
   <style>
-    #dTaBox{display:grid;grid-template-columns:1fr 320px;gap:16px}
-    @media(max-width:860px){ #dTaBox{grid-template-columns:1fr} }
+    .dmain{display:grid;grid-template-columns:1fr 400px;gap:16px;align-items:start;margin-top:18px}
+    @media(max-width:980px){ .dmain{grid-template-columns:1fr} }
+    .dside{display:flex;flex-direction:column;gap:16px}
     #dTaCard.ta-full{position:fixed;inset:0;z-index:9999;margin:0;background:#06080F;padding:18px;border-radius:0}
     #dTaExpand{margin-left:auto;font:inherit;cursor:pointer;color:#A7ADBE;background:rgba(255,255,255,0.05);
       border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:6px 12px;font-size:.78rem;display:inline-flex;align-items:center;gap:6px}
     #dTaExpand:hover{color:#F5F5F7;background:rgba(243,186,47,0.12);border-color:rgba(243,186,47,0.4)}
   </style>
-  <div class="card card--glow" id="dTaCard" style="margin-top:18px">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <span class="pill pill--gold" style="font-size:11px">live TA</span>
-      <span class="card__lbl" style="margin:0">{{ "Token em foco — análise" if lang=="pt" else "Token in focus — analysis" }}</span>
-      <span class="mono" id="dTaSymbol" style="font-size:.82rem;color:var(--info)"></span>
-      <button id="dTaExpand" type="button">⛶ <span id="dTaExpandLbl">{{ t.lv_ta_expand }}</span></button>
+  <div class="dmain">
+    <!-- ESQUERDA: gráfico (protagonista) -->
+    <div class="card card--glow" id="dTaCard">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <span class="pill pill--gold" style="font-size:11px">live TA</span>
+        <span class="card__lbl" style="margin:0">{{ "Token em foco — análise" if lang=="pt" else "Token in focus — analysis" }}</span>
+        <span class="mono" id="dTaSymbol" style="font-size:.82rem;color:var(--info)"></span>
+        <button id="dTaExpand" type="button">⛶ <span id="dTaExpandLbl">{{ t.lv_ta_expand }}</span></button>
+      </div>
+      <div id="dTaUnavail" class="mut" style="display:none;padding:40px 0;text-align:center">·</div>
+      <div id="dTaChartWrap"><div id="dTaChart" style="height:440px;width:100%"></div></div>
     </div>
-    <div id="dTaUnavail" class="mut" style="display:none;padding:30px 0;text-align:center">·</div>
-    <div id="dTaBox">
-      <div><div id="dTaChart" style="height:380px;width:100%"></div></div>
-      <div>
+
+    <!-- DIREITA: confluência + agente + mente + carteira -->
+    <div class="dside">
+      <div class="card">
         <span class="card__lbl">{{ t.lv_confluence }}</span>
         <div style="display:flex;align-items:center;gap:12px;margin:12px 0 10px">
           <span id="dTaDecision" class="pill" style="font-size:13px;font-weight:700;padding:6px 14px">·</span>
@@ -74,38 +80,33 @@
         <div id="dTaSignals" style="display:flex;flex-direction:column;gap:2px"><span class="mut">·</span></div>
         <div id="dTaStats" style="display:flex;gap:8px;margin-top:14px"></div>
       </div>
-    </div>
-  </div>
 
-  <div class="grid cols-2" style="margin-top:18px;align-items:start">
-    <!-- Coluna esquerda: ativar + posições + controles -->
-    <div class="card">
-      <span class="card__lbl">{{ "Agente autônomo" if lang=="pt" else "Autonomous agent" }}</span>
-      <div id="startPanel" style="margin-top:12px">
-        <p class="mut" style="font-size:.86rem">{{ "Ative e assista o agente caçar oportunidades, dimensionar por convicção e gerir o risco — sozinho." if lang=="pt" else "Activate and watch the agent hunt opportunities, size by conviction and manage risk — on its own." }}</p>
-        <button class="btn btn--gold" id="btnStart" style="margin-top:14px;width:100%">▶️ {{ "Ativar agente autônomo" if lang=="pt" else "Activate autonomous agent" }}</button>
+      <div class="card">
+        <span class="card__lbl">{{ "Agente autônomo" if lang=="pt" else "Autonomous agent" }}</span>
+        <div id="startPanel" style="margin-top:12px">
+          <p class="mut" style="font-size:.86rem">{{ "Ative e assista o agente caçar oportunidades, dimensionar por convicção e gerir o risco — sozinho." if lang=="pt" else "Activate and watch the agent hunt opportunities, size by conviction and manage risk — on its own." }}</p>
+          <button class="btn btn--gold" id="btnStart" style="margin-top:14px;width:100%">▶️ {{ "Ativar agente autônomo" if lang=="pt" else "Activate autonomous agent" }}</button>
+        </div>
+        <div id="posList" style="margin-top:14px"><span class="mut">{{ "nenhuma posição" if lang=="pt" else "no positions" }}</span></div>
+        <div id="ctrlRow" style="display:none;gap:8px;margin-top:14px;border-top:1px solid var(--line-soft);padding-top:12px">
+          <button class="btn btn--ghost btn--sm" id="btnPause" style="flex:1">⏸️</button>
+          <button class="btn btn--danger btn--sm" id="btnPanic" style="flex:1">🚨 {{ "Pânico" if lang=="pt" else "Panic" }}</button>
+        </div>
       </div>
-      <div id="posList" style="margin-top:14px"><span class="mut">{{ "nenhuma posição" if lang=="pt" else "no positions" }}</span></div>
-      <div id="ctrlRow" style="display:none;gap:8px;margin-top:14px;border-top:1px solid var(--line-soft);padding-top:12px">
-        <button class="btn btn--ghost btn--sm" id="btnPause" style="flex:1">⏸️</button>
-        <button class="btn btn--danger btn--sm" id="btnPanic" style="flex:1">🚨 {{ "Pânico" if lang=="pt" else "Panic" }}</button>
+
+      <div class="card">
+        <span class="card__lbl">🧠 {{ "A mente do agente — raciocínio ao vivo" if lang=="pt" else "The agent's mind — live reasoning" }}</span>
+        <div id="cFeed" style="margin-top:12px;font-family:var(--font-mono);font-size:.78rem;line-height:1.5;max-height:300px;overflow:auto">
+          <span class="mut">{{ "Ative o agente para ver cada decisão: escaneando, comprando com convicção, deixando o vencedor correr, rotacionando..." if lang=="pt" else "Activate the agent to see every decision: scanning, buying with conviction, letting winners run, rotating..." }}</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <span class="card__lbl">{{ t.lv_composition }}</span>
+        <div id="cComp" style="margin-top:12px"><span class="mut">·</span></div>
+        <p class="mut" style="font-size:.78rem;margin-top:12px;border-top:1px solid var(--line-soft);padding-top:10px">🧪 {{ "Tudo simulado, sem tx on-chain. O agente REAL faz exatamente isto na BNB Chain, com cada swap verificável no BscScan —" if lang=="pt" else "All simulated, no on-chain tx. The REAL agent does exactly this on BNB Chain, every swap verifiable on BscScan —" }} <a href="/live">/live</a>.</p>
       </div>
     </div>
-
-    <!-- Coluna direita: A MENTE DO AGENTE (raciocínio ao vivo) -->
-    <div class="card">
-      <span class="card__lbl">🧠 {{ "A mente do agente — raciocínio ao vivo" if lang=="pt" else "The agent's mind — live reasoning" }}</span>
-      <div id="cFeed" style="margin-top:12px;font-family:var(--font-mono);font-size:.78rem;line-height:1.5;max-height:340px;overflow:auto">
-        <span class="mut">{{ "Ative o agente para ver cada decisão: escaneando, comprando com convicção, deixando o vencedor correr, rotacionando..." if lang=="pt" else "Activate the agent to see every decision: scanning, buying with conviction, letting winners run, rotating..." }}</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Composição + endereço -->
-  <div class="card" style="margin-top:18px">
-    <span class="card__lbl">{{ t.lv_composition }}</span>
-    <div id="cComp" style="margin-top:12px"><span class="mut">·</span></div>
-    <p class="mut" style="font-size:.78rem;margin-top:12px;border-top:1px solid var(--line-soft);padding-top:10px">🧪 {{ "Tudo simulado, sem tx on-chain. O agente REAL faz exatamente isto na BNB Chain, com cada swap verificável no BscScan —" if lang=="pt" else "All simulated, no on-chain tx. The REAL agent does exactly this on BNB Chain, every swap verifiable on BscScan —" }} <a href="/live">/live</a>.</p>
   </div>
 {% endif %}
 </div>
@@ -231,7 +232,7 @@ if (btnLogout) {
 <script>
 if (document.getElementById('dTaCard') && window.mountTAChart) {
   mountTAChart({
-    chart:'dTaChart', box:'dTaBox', boxDisplay:'grid', unavail:'dTaUnavail',
+    chart:'dTaChart', box:'dTaChartWrap', unavail:'dTaUnavail', height:440,
     symbol:'dTaSymbol', decision:'dTaDecision', scoreVal:'dTaScoreVal', scoreBar:'dTaScoreBar',
     signals:'dTaSignals', stats:'dTaStats', card:'dTaCard', expand:'dTaExpand', expandLbl:'dTaExpandLbl',
     expandText:"{{ t.lv_ta_expand }}", closeText:"{{ t.lv_ta_close }}", unavailText:"{{ t.lv_ta_unavail }}",
