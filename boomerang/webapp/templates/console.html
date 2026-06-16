@@ -69,6 +69,7 @@
 
   <!-- TOOLBAR -->
   <div class="tvc-bar">
+    <span class="pill" style="font-size:11px;font-weight:700;background:rgba(191,90,242,0.18);color:#BF5AF2;border:1px solid rgba(191,90,242,0.45)">🧪 {{ "DEMO · SIMULADO" if lang=="pt" else "DEMO · SIMULATED" }}</span>
     <span class="tvc-sym" id="dTaSymbol">·</span>
     <span id="oState" class="pill pill--gold" style="font-size:11px">·</span>
     <span class="mono" id="oRegime" style="font-size:.74rem;color:var(--faint)">·</span>
@@ -77,7 +78,7 @@
       <div><span class="tvc-lbl">{{ t.s_drawdown }}</span><span class="tvc-val" id="oDd">·</span></div>
     </div>
     <div class="tvc-actions">
-      <button class="tvc-btn gold" id="btnStart">▶️ {{ "Ativar" if lang=="pt" else "Activate" }}</button>
+      <button class="tvc-btn gold" id="btnStart">▶️ {{ "Iniciar demo" if lang=="pt" else "Start demo" }}</button>
       <button class="tvc-btn" id="btnPause" style="display:none">⏸️</button>
       <button class="tvc-btn danger" id="btnPanic" style="display:none">🚨 {{ "Pânico" if lang=="pt" else "Panic" }}</button>
       <button class="tvc-btn" data-modal="dmWallet">💼 {{ t.lv_composition }}</button>
