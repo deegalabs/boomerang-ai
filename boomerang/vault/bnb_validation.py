@@ -23,6 +23,7 @@ from web3 import Web3
 
 from boomerang.config import Config
 from boomerang.types import RejectReason, ValidationResult
+from boomerang.vault import fees
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -403,6 +404,16 @@ class BNBValidator:
                                     estimated_slippage_pct=perda,
                                     detail=f"Round-trip retains only {retention*100:.2f}% "
                                            f"(loss {perda:.2f}%) → illiquid/tax.")
+
+        # Fee-aware gate (additive): even if not a honeypot, skip a FEE-DEAD entry whose
+        # round-trip cost (fees+slippage+gas) leaves no edge for the target → protects PnL.
+        gas_rt = 2.0 * float(self._cfg.dev_safety.get("est_swap_gas_usd", 0.35))
+        min_edge = float(self._cfg.dev_safety.get("min_edge_over_fees_pct", 1.5))
+        if fees.is_fee_dead(retention, amount_usd, gas_rt, min_edge):
+            cost = fees.roundtrip_cost_pct(retention, amount_usd, gas_rt)
+            return ValidationResult(False, symbol, token, reason=RejectReason.HIGH_SLIPPAGE,
+                                    estimated_slippage_pct=cost,
+                                    detail=f"Fee-dead: round-trip cost {cost:.2f}% ≥ edge {min_edge:.1f}% (fees+gas).")
 
         # Oracle: effective route price (USD per token) vs CMC price.
         divergence_pct = None

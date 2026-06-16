@@ -1,15 +1,26 @@
 {
-  "_comment": "Boomerang AI — regras unificadas. 'user' = ajustável via Telegram. 'dev_safety' e 'hackathon' = imutáveis (leis de segurança e regras do evento).",
-
+  "_comment": "Boomerang AI \u00e2\u20ac\u201d regras unificadas. 'user' = ajust\u00c3\u00a1vel via Telegram. 'dev_safety' e 'hackathon' = imut\u00c3\u00a1veis (leis de seguran\u00c3\u00a7a e regras do evento).",
   "user": {
-    "_token_focus_note": "Apenas tokens com liquidez REAL na PancakeSwap (>~20k em WBNB). Removidos ATOM/BCH/AAVE (Binance-Peg, negociados em CEX, sem pool DEX — swaps revertem).",
-    "token_focus": ["ETH", "XRP", "DOGE", "ADA", "LINK", "LTC", "AVAX", "DOT", "UNI", "SHIB", "FLOKI", "TWT"],
+    "_token_focus_note": "Apenas tokens com liquidez REAL na PancakeSwap (>~20k em WBNB). Removidos ATOM/BCH/AAVE (Binance-Peg, negociados em CEX, sem pool DEX \u00e2\u20ac\u201d swaps revertem).",
+    "token_focus": [
+      "ETH",
+      "XRP",
+      "DOGE",
+      "ADA",
+      "LINK",
+      "LTC",
+      "AVAX",
+      "DOT",
+      "UNI",
+      "SHIB",
+      "FLOKI",
+      "TWT"
+    ],
     "stop_loss_pct": 4.0,
     "take_profit_pct": 10.0,
     "position_size_pct": 10.0,
     "mode": "conservative"
   },
-
   "dev_safety": {
     "position_size_pct": 5.0,
     "max_position_pct": 50.0,
@@ -30,9 +41,10 @@
     "stable_depeg_bps": 100.0,
     "trade_cooldown_seconds": 900,
     "base_stable_symbol": "USDC",
-    "min_position_usd": 1.0
+    "min_position_usd": 1.0,
+    "min_edge_over_fees_pct": 1.5,
+    "est_swap_gas_usd": 0.35
   },
-
   "hackathon": {
     "competition_contract": "0x212c61b9b72c95d95bf29cf032f5e5635629aed5",
     "global_drawdown_dq_pct": 30.0,
@@ -43,7 +55,6 @@
     "eligible_tokens_source": "official_149_bep20_cmc",
     "eligible_tokens_file": "data/eligible_tokens.json"
   },
-
   "network": {
     "bsc_rpc_url": "https://bsc-dataseed.bnbchain.org",
     "bsc_chain_id": 56,
@@ -51,7 +62,6 @@
     "usdt_bsc_address": "0x55d398326f99059fF775485246999027B3197955",
     "usdc_bsc_address": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d"
   },
-
   "cmc": {
     "mcp_endpoint": "https://mcp.coinmarketcap.com/mcp",
     "x402_endpoint": "https://mcp.coinmarketcap.com/x402/mcp",
@@ -59,7 +69,6 @@
     "x402_payment_token": "USDC",
     "x402_cost_per_request_usd": 0.01
   },
-
   "loop": {
     "scan_interval_seconds": 300,
     "position_monitor_interval_seconds": 2
