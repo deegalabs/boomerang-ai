@@ -37,3 +37,6 @@ Thumbs.db
 
 # Auditoria de concorrentes (clones locais — NUNCA versionar)
 _competitor_audit/
+
+# Pasta temporária (vídeo demo / artefatos pesados — fora do git)
+temp/

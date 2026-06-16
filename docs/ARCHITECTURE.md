@@ -95,6 +95,30 @@ On top of the per-token trigger sit two deterministic governors:
 
 ---
 
+## 2c. The TA confluence engine (decides like a human trader)
+
+Wired into Filter 1, before any buy executes, a deterministic **confluence engine** scores the
+candidate the way a discretionary trader does — by *confluence* across pillars, **weighted by the
+micro-regime** (trend vs range), not by one indicator.
+
+- **`boomerang/strategy/klines.py`** — fetches 1-minute OHLCV from Binance's geo-unblocked public
+  host (`data-api.binance.vision`); best-effort (on-chain-only tokens just skip the gate).
+- **`boomerang/strategy/indicators.py`** — a pure, unit-tested TA library: EMA-cross, ADX, RSI,
+  MACD, Bollinger %B, Z-score, ATR, VWAP, OBV, volume-surge, and **Fibonacci** (golden-pocket
+  classification), plus `compute_indicators()` that returns the latest reading of all of them.
+- **`boomerang/strategy/confluence.py`** — `evaluate_confluence()` turns those into per-pillar
+  votes (trend / momentum / mean-reversion / volume / structure), **weights them by regime**,
+  applies **hard vetoes** (never chase a vertical pump), and yields a decision (ENTER / WAIT /
+  AVOID), a 0–100 score, and a **human-readable checklist**.
+
+In `agent.run_cycle`, the gate **vetoes** AVOID candidates, **scales conviction** by the score, and
+folds the confluence summary into the on-chain `commit_prediction`. The action is still derived **by
+code**; the LLM only confirms the narrative. The public `/live` page renders the same analysis live —
+an annotated candle chart (EMA · VWAP · Fibonacci golden pocket) + the confluence panel — and the
+demo Console runs the identical engine on a simulated $100 bankroll.
+
+---
+
 ## 3. The exit monitor (stop / trailing)
 
 A parallel 2s loop (`agent.check_positions`), leveraging BSC's fast blocks:

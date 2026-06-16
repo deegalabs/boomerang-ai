@@ -8,7 +8,7 @@ It reads attention on **CoinMarketCap**, decides with **Claude (Opus 4.8)**, and
 self-custody swaps via the **Trust Wallet Agent Kit**. Capital *goes to the market and comes
 back* — like a boomerang.
 
-[![CI](https://img.shields.io/badge/CI-ruff%20%2B%2052%20tests-22c55e)](.github/workflows/ci.yml)
+[![CI](https://img.shields.io/badge/CI-ruff%20%2B%2074%20tests-22c55e)](.github/workflows/ci.yml)
 [![Track 1](https://img.shields.io/badge/BNB%20Hack-Track%201%20·%20Autonomous%20Agents-f0b90b)](https://dorahacks.io/)
 [![ERC-8004](https://img.shields.io/badge/ERC--8004-agentId%20131071-6366f1)](https://bscscan.com/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432)
 [![Self-custody](https://img.shields.io/badge/custody-self--custody%20(TWAK)-0ea5e9)](#-security--verifiability)
@@ -78,6 +78,17 @@ On top sits an **Action Matrix**: the macro regime dictates *which strategies ma
 An **expectancy arbiter** auto-deactivates any strategy whose recent average PnL/trade goes
 negative — even at high win-rate.
 
+### TA confluence — it decides like a human trader
+
+Before any buy, a deterministic **confluence engine** (`strategy/indicators.py` + `strategy/confluence.py`)
+reads 1-minute candles from Binance and scores the setup across five pillars — **trend** (EMA, ADX,
+slope), **momentum** (RSI, MACD), **volatility/mean-reversion** (Bollinger, Z-score, ATR), **volume**
+(surge, OBV, VWAP) and **structure** (Fibonacci golden pocket). It weighs them **by regime** (trend vs
+range), **vetoes chasing a vertical pump**, and only enters when enough pillars agree — producing a
+human-readable checklist that's sealed on-chain. It's all in pure, unit-tested code (the LLM only
+confirms the narrative). The `/live` page renders this live: an annotated candle chart (EMA · VWAP ·
+Fibonacci) plus the confluence panel showing every signal, its vote, and the score.
+
 ### The "customs" pipeline — every cycle, three filters in series
 
 ```mermaid
@@ -86,7 +97,7 @@ flowchart TD
     Start([" each cycle "]) --> A
 
     A["🛡️ <b>RISK ENGINE</b> &nbsp;—&nbsp; deterministic pre-check<br/>equity on-chain &nbsp;·&nbsp; drawdown ≥23% → PANIC &nbsp;·&nbsp; daily cap 15%<br/>depeg guard &nbsp;·&nbsp; cooldown &nbsp;·&nbsp; positions &nbsp;·&nbsp; equity-reliability guard"]
-    A -->|ok| B["1️⃣ <b>FILTER 1 · Brain</b> &nbsp;—&nbsp; CMC metrics + x402 derivatives, in-loop<br/>SANITIZE anti prompt-injection &nbsp;→&nbsp; Claude forced-tool<br/>→ score &nbsp;·&nbsp; action &nbsp;·&nbsp; invalidation &nbsp;·&nbsp; adaptive cutoff ≈58"]
+    A -->|ok| B["1️⃣ <b>FILTER 1 · Brain</b> &nbsp;—&nbsp; CMC metrics + x402 derivatives, in-loop<br/>SANITIZE anti prompt-injection &nbsp;→&nbsp; Claude forced-tool &nbsp;→&nbsp; score · action · invalidation<br/>TA CONFLUENCE gate (Binance klines) &nbsp;—&nbsp; veto pumps · scale conviction by score"]
     B -->|BUY| C["2️⃣ <b>FILTER 2 · On-chain validation</b> &nbsp;—&nbsp; read-only, zero gas<br/>liquidity V2+V3 &nbsp;·&nbsp; round-trip hidden-tax &nbsp;·&nbsp; oracle divergence CMC × pool<br/>slippage ≤1.5%"]
     C -->|approved| D["3️⃣ <b>FILTER 3 · Execution</b> &nbsp;—&nbsp; under a mutex<br/>TWAK swap USDC→token, agent-side signing &nbsp;→&nbsp; open position<br/>2s monitor: trailing / TP / time-stop"]
 
@@ -165,7 +176,7 @@ Required `.env`: `ANTHROPIC_API_KEY`, `CMC_API_KEY`, `TELEGRAM_BOT_TOKEN`,
 
 ## Engineering quality
 
-- ✅ **52 tests + CI** over the safety-critical pure logic — risk engine (circuit breaker, sizing,
+- ✅ **74 tests + CI** over the safety-critical pure logic — risk engine (circuit breaker, sizing,
   trailing, time-stop), the anti-injection sanitizer, the strategy router/action-matrix/arbiter,
   the equity-reliability guard, and log-secret redaction. `ruff` + `pytest` run on every push.
 - ✅ **Deterministic risk fully isolated from the LLM** — the model never touches money rules.
@@ -176,6 +187,9 @@ boomerang/
   agent.py                  Orchestrator: scan loop, monitor loop, buy/sell/withdraw/panic
   brain/cmc_analyzer.py     Filter 1 — CMC metrics + Claude decision (anti-injection)
   strategy/playbook.py      Regime-routed strategies + action matrix + expectancy arbiter
+  strategy/indicators.py    Pure TA library (RSI/MACD/EMA/ADX/Bollinger/VWAP/OBV/Fibonacci)
+  strategy/confluence.py    Regime-weighted confluence engine (the trader's checklist)
+  strategy/klines.py        Binance 1m candles (data-api.binance.vision, geo-unblocked)
   risk/risk_engine.py       Circuit breaker, daily cap, sizing, trailing, time-stop, cooldown
   vault/
     bnb_validation.py       Filter 2 — on-chain liquidity / slippage / tax / oracle checks

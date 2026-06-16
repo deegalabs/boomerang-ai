@@ -50,6 +50,11 @@ an attacker could only write fake metadata — **not move a cent**.
   outcome exists (anti-fabrication). Verifiable on BscScan.
 - **Multi-strategy engine** routed by regime: Momentum (uptrend), Mean-Reversion (range),
   DCA (panic) — the deterministic trigger selects, the Opus brain confirms.
+- **TA confluence engine** (deterministic, in Filter 1): scores each buy candidate across five
+  pillars over Binance 1m candles — RSI, MACD, EMA, ADX, Bollinger, VWAP, OBV and **Fibonacci** —
+  weighted by regime, **vetoes chasing a pump**, scales conviction by the score, and folds the
+  checklist into the on-chain seal. Rendered live on `/live` (annotated chart + confluence panel)
+  and in the demo Console. Pure, unit-tested; the LLM only confirms the narrative.
 - **Capital-protection stack** (deterministic): entry validation → dynamic SL/TP & trailing →
   drawdown circuit breaker (23%) → daily loss cap (15%), plus a depeg guard and an
   **anti-false-trip** guard that skips the cycle on an unreliable equity reading instead of
@@ -58,7 +63,7 @@ an attacker could only write fake metadata — **not move a cent**.
 - **x402 load-bearing in the loop:** the agent pays a real USDC-on-Base micropayment (~$0.01,
   signed locally via twak, EIP-3009) ~1x/hour for CMC Agent Hub derivatives — confirmed
   settling in production (a 402→200 on the `/x402` proxy). Best-effort with a Binance fallback.
-- **Test coverage + CI:** 52 tests over the critical pure logic (risk engine, sanitizer, config,
+- **Test coverage + CI:** 74 tests over the critical pure logic (risk engine, sanitizer, config,
   strategy router/action-matrix/arbiter, equity-reliability, log redaction); lint + tests on every push.
 
 ## 3. What is a SHOWCASE (honest)
