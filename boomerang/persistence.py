@@ -16,6 +16,8 @@ import json
 import os
 from pathlib import Path
 
+from boomerang.risk import integrity
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -28,6 +30,10 @@ def _state_file() -> Path:
     return _state_dir() / "agent_state.json"
 
 
+def _sig_file() -> Path:
+    return _state_dir() / "agent_state.json.sig"
+
+
 def _trades_file() -> Path:
     return _state_dir() / "trades.json"
 
@@ -35,9 +41,27 @@ def _trades_file() -> Path:
 def save_state(data: dict) -> None:
     state_file = _state_file()
     state_file.parent.mkdir(parents=True, exist_ok=True)
+    raw = json.dumps(data, indent=2).encode("utf-8")
     tmp = state_file.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    tmp.write_bytes(raw)
     tmp.replace(state_file)  # atomic write
+    sig = integrity.sign(raw)  # "" when integrity disabled (no secret) → no sig file
+    if sig:
+        _sig_file().write_text(sig, encoding="utf-8")
+
+
+def verify_state_integrity() -> bool:
+    """True if the on-disk state matches its HMAC signature (or integrity is disabled /
+    there is no state yet). False only when a secret is set AND the signature mismatches."""
+    try:
+        raw = _state_file().read_bytes()
+    except FileNotFoundError:
+        return True
+    try:
+        sig = _sig_file().read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        sig = ""
+    return integrity.verify(raw, sig)
 
 
 def load_state() -> dict | None:

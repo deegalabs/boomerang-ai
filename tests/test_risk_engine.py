@@ -79,6 +79,13 @@ def test_cannot_open_when_halted(engine):
     assert not d.allowed
 
 
+def test_anomaly_guard_trips_on_rapid_buys(engine):
+    for i in range(3):
+        engine.record_buy(1000.0 + i)            # 3 buys within 2s
+    assert engine.too_many_buys(1002.0)           # window 60s → tripped
+    assert not engine.too_many_buys(1200.0)       # 200s later, outside the window
+
+
 def test_cooldown_blocks_back_to_back(engine):
     engine.record_trade(1000.0)
     d = engine.can_open_position(current_equity_usd=100, available_stable_usd=100,

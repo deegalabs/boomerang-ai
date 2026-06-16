@@ -195,6 +195,18 @@ class RiskEngine:
     def record_trade(self, now_ts: float) -> None:
         self._last_trade_ts = now_ts
 
+    # ── Anomaly guard (rapid-buy tripwire — catches prompt-injection cascades) ──
+    def record_buy(self, now_ts: float) -> None:
+        buys = [t for t in getattr(self, "_buy_times", []) if now_ts - t < 300]
+        buys.append(now_ts)
+        self._buy_times = buys
+
+    def too_many_buys(self, now_ts: float, window: float = 60.0, limit: int = 3) -> bool:
+        """True if ``limit`` or more buys happened within ``window`` seconds — a pattern
+        the cooldown should already prevent, so it firing signals an attack/runaway loop."""
+        recent = [t for t in getattr(self, "_buy_times", []) if now_ts - t < window]
+        return len(recent) >= limit
+
     # ── Execution mutex (anti-loop / race condition) ─────────────────────────
     @property
     def trade_lock(self) -> threading.Lock:

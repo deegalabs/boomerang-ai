@@ -88,6 +88,17 @@ single cent moved**.
 - **Password redaction in logs.** `_redact_args` scrubs the value after `--password` and drops
   `0x…` material from the `twak` debug logs; a masking filter scrubs keys/tokens from all logs.
 
+### Runtime integrity & anomaly defense (defense-in-depth)
+- **State-file integrity (HMAC-SHA256).** The persisted state (positions, peak equity, daily
+  count) is signed (`risk/integrity.py`); on restart the agent verifies the signature and, on a
+  mismatch, **halts and refuses to trade** on tampered state. Opt-in via `STATE_HMAC_SECRET`
+  (backward-compatible: a no-op when unset). Constant-time comparison.
+- **Rapid-buy anomaly tripwire.** `risk_engine.too_many_buys` freezes the agent if ≥3 buys land
+  within 60s — a pattern the cooldown already prevents, so it firing signals an injection cascade
+  or a runaway loop.
+- **Forensic audit log.** `risk/audit.py` writes an append-only `logs/audit.jsonl` line for every
+  rejection / halt / anomaly (non-sensitive, best-effort) — a machine-readable trail beyond alerts.
+
 ### Web surface
 - **Sessions are signed, comparisons are timing-safe.** Authenticated sessions use HMAC-SHA256
   over a `SESSION_SECRET`, verified with `hmac.compare_digest` (constant-time). SIWE

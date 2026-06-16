@@ -24,8 +24,10 @@ from boomerang import market_cache
 from boomerang.config import Config
 from boomerang.identity import bnb_agent as identity
 from boomerang.ipc import Alert, AlertBus, AlertType
-from boomerang.persistence import append_trade, load_state, load_trades, save_state
+from boomerang.persistence import (
+    append_trade, load_state, load_trades, save_state, verify_state_integrity)
 from boomerang.risk import RiskEngine
+from boomerang.risk.audit import audit
 from boomerang.risk.risk_engine import ExitSignal
 from boomerang.strategy.confluence import evaluate_confluence
 from boomerang.strategy.indicators import compute_indicators
@@ -116,6 +118,7 @@ class BoomerangAgent:
         if type_ in (AlertType.REJECTED, AlertType.ERROR, AlertType.DATA_ERROR,
                      AlertType.CIRCUIT_BREAKER):
             self._log.info("%s | %s — %s", type_.name, title, detail)
+            audit(type_.name.lower(), title=title, detail=detail)  # forensic trail
         await self._alerts.emit(Alert(type_, title, detail, data))
 
     # ── equity measurement ───────────────────────────────────────────────────
@@ -308,6 +311,12 @@ class BoomerangAgent:
 
     def restore(self) -> bool:
         """Loads saved state (if any). Returns True if it restored."""
+        if not verify_state_integrity():
+            # State file tampered (HMAC mismatch) → refuse to trade on it, freeze + audit.
+            self._risk.halt()
+            self.state = AgentState.HALTED
+            audit("state_integrity_fail", action="halt")
+            self._log.critical("STATE INTEGRITY FAIL — HMAC mismatch. Halted; manual review required.")
         data = load_state()
         if not data:
             return False
@@ -601,6 +610,12 @@ class BoomerangAgent:
             return
         if self._risk.daily_loss_tripped(equity):
             await self.panic(f"Daily loss {self._risk.daily_drawdown_pct(equity):.1f}% hit the day's limit.")
+            return
+        if self._risk.too_many_buys(now):
+            self._risk.halt()
+            self.state = AgentState.HALTED
+            await self._emit(AlertType.CIRCUIT_BREAKER, "Anomaly halt",
+                             "rapid-buy pattern detected — agent frozen, manual review required")
             return
 
         if self._risk.needs_heartbeat(now):
@@ -911,6 +926,7 @@ class BoomerangAgent:
                        trailing_trigger_pct=trailing_trigger_pct, trailing_pct=trailing_pct,
                        time_stop_min=time_stop_min, time_stop_band_pct=time_stop_band_pct)
         self.positions.append(pos)
+        self._risk.record_buy(now)  # anomaly tripwire (rapid-buy / injection cascade)
         self.state = AgentState.IN_POSITION
         self._risk.record_trade(now)
         vol_note = f" | vol {pos.stop_loss_pct:.1f}/{pos.take_profit_pct:.1f}%" if stop_pct else ""
