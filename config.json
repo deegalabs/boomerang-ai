@@ -42,9 +42,10 @@
     "trade_cooldown_seconds": 900,
     "base_stable_symbol": "USDC",
     "min_position_usd": 1.0,
-    "min_edge_over_fees_pct": 5.0,
+    "min_edge_over_fees_pct": 1.5,
     "est_swap_gas_usd": 0.15,
-    "enable_ta_strategies": false
+    "enable_ta_strategies": false,
+    "enable_fee_gate": false
   },
   "hackathon": {
     "competition_contract": "0x212c61b9b72c95d95bf29cf032f5e5635629aed5",
