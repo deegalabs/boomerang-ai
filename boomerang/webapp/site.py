@@ -11,6 +11,7 @@ Telegram (owner) / via the owner wallet.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import secrets
 from pathlib import Path
@@ -24,6 +25,9 @@ from starlette.templating import Jinja2Templates
 
 from boomerang.identity import bnb_agent as identity
 from boomerang.persistence import load_state, load_trades
+from boomerang.strategy.confluence import evaluate_confluence
+from boomerang.strategy.indicators import _ema_series, compute_indicators
+from boomerang.strategy.klines import fetch_klines
 from boomerang.webapp import auth, demo
 from boomerang.webapp.i18n import docs_nav, nav_items, pick_lang, strings
 
@@ -128,6 +132,47 @@ async def live_page(request):  # noqa: ANN001
 async def api_live(request):  # noqa: ANN001 — public, read-only of the persisted state
     return JSONResponse({"state": load_state() or {}, "trades": load_trades(),
                          "identity": identity.summary()})
+
+
+async def api_ta(request):  # noqa: ANN001 — live technical analysis for the chart + confluence panel
+    """Server-side TA for a token: candles + EMA/VWAP/Fibonacci overlays + the confluence
+    verdict. Defaults to the open position's symbol, else the first watched token."""
+    symbol = (request.query_params.get("symbol") or "").upper().strip()
+    if not symbol:
+        st = load_state() or {}
+        ps = st.get("positions") or []
+        focus = st.get("token_focus") or ["BNB"]
+        symbol = ((ps[0].get("symbol") if ps else None) or focus[0]).upper()
+
+    klines = await asyncio.to_thread(fetch_klines, symbol, "1m", 90)
+    if not klines or len(klines) < 30:
+        return JSONResponse({"symbol": symbol, "available": False})
+
+    ind = compute_indicators(klines)
+    conf = evaluate_confluence(ind)
+    closes = [k.close for k in klines]
+    e9, e21 = _ema_series(closes, 9), _ema_series(closes, 21)
+    candles = [{"time": i * 60, "open": k.open, "high": k.high, "low": k.low, "close": k.close}
+               for i, k in enumerate(klines)]
+    fib = ind.get("fibonacci") or {}
+    return JSONResponse({
+        "symbol": symbol, "available": True, "price": ind.get("price"),
+        "candles": candles,
+        "ema9": [{"time": i * 60, "value": v} for i, v in enumerate(e9) if v is not None],
+        "ema21": [{"time": i * 60, "value": v} for i, v in enumerate(e21) if v is not None],
+        "vwap": ind.get("vwap"),
+        "fib": {"levels": fib.get("levels", {}), "golden_pocket": fib.get("golden_pocket", False),
+                "position": fib.get("position"), "swing_high": fib.get("swing_high"),
+                "swing_low": fib.get("swing_low")},
+        "confluence": {"decision": conf.decision, "score": conf.score, "mode": conf.mode,
+                       "veto": conf.veto, "reasons": conf.reasons,
+                       "signals": [{"pillar": s.pillar, "name": s.name, "vote": s.vote,
+                                    "reason": s.reason} for s in conf.signals]},
+        "stats": {"rsi": ind.get("rsi"), "macd_hist": (ind.get("macd") or {}).get("hist"),
+                  "adx": (ind.get("adx") or {}).get("adx"),
+                  "bb_pct_b": (ind.get("bollinger") or {}).get("pct_b"),
+                  "atr_pct": ind.get("atr_pct"), "vwap_dist_pct": ind.get("vwap_dist_pct")},
+    })
 
 
 # ── Console (owner) + SIWE ────────────────────────────────────────────────────
@@ -255,7 +300,7 @@ def create_app() -> Starlette:
     routes = [
         Route("/", home), Route("/style", style), Route("/docs", docs_page),
         Route("/guides", guides_page), Route("/live", live_page),
-        Route("/api/live", api_live), Route("/console", console_page),
+        Route("/api/live", api_live), Route("/api/ta", api_ta), Route("/console", console_page),
         Route("/api/auth/nonce", auth_nonce, methods=["POST"]),
         Route("/api/auth/verify", auth_verify, methods=["POST"]),
         Route("/api/auth/guest", auth_guest, methods=["POST"]),

@@ -98,6 +98,9 @@ TR: dict[str, dict[str, str]] = {
         "lv_mode": "Mode", "lv_size": "Size", "lv_universe": "Watching", "lv_tokens": "tokens monitored",
         "lv_engine": "Posture & engine",
         "lv_explain": "An autonomous agent on BNB Chain. It scans CoinMarketCap attention, decides with AI under deterministic risk rules, and signs its own self-custody swaps. Read-only, updating live.",
+        "lv_ta_title": "Live technical analysis",
+        "lv_ta_sub": "What the agent sees right now — candles with EMA, VWAP and Fibonacci, and the confluence that drives the decision.",
+        "lv_ta_unavail": "No candle data for this token (on-chain only)",
     },
     "pt": {
         "tagline": "Agente de trading autônomo na BNB Chain",
@@ -179,6 +182,9 @@ TR: dict[str, dict[str, str]] = {
         "lv_mode": "Modo", "lv_size": "Tamanho", "lv_universe": "Vigiando", "lv_tokens": "tokens monitorados",
         "lv_engine": "Postura & motor",
         "lv_explain": "Um agente autônomo na BNB Chain. Lê a atenção da CoinMarketCap, decide com IA sob regras determinísticas de risco, e assina seus próprios swaps em autocustódia. Só leitura, atualizando ao vivo.",
+        "lv_ta_title": "Análise técnica ao vivo",
+        "lv_ta_sub": "O que o agente enxerga agora — candles com EMA, VWAP e Fibonacci, e a confluência que guia a decisão.",
+        "lv_ta_unavail": "Sem dados de candle pra este token (só on-chain)",
     },
 }
 

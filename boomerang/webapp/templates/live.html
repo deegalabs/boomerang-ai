@@ -50,6 +50,33 @@
     <div class="card stat"><span class="card__lbl">{{ t.lv_positions }}</span><span class="v" id="lvPosN">·</span></div>
   </div>
 
+  <!-- Live technical analysis: annotated chart + confluence panel -->
+  <div class="card card--glow" style="margin-top:18px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="pill pill--gold" style="font-size:11px">live TA</span>
+      <span class="card__lbl" style="margin:0">{{ t.lv_ta_title }}</span>
+      <span class="mono" id="taSymbol" style="font-size:.82rem;color:var(--info)"></span>
+    </div>
+    <p class="mut" style="font-size:.84rem;margin:8px 0 14px">{{ t.lv_ta_sub }}</p>
+    <div id="taUnavail" class="mut" style="display:none;padding:18px 0">·</div>
+    <div id="taBox" style="display:flex;gap:18px;flex-wrap:wrap">
+      <div style="flex:1.7;min-width:380px">
+        <div id="lvChart" style="height:360px;width:100%"></div>
+        <div id="taStats" style="display:flex;justify-content:space-between;margin-top:12px;gap:8px"></div>
+      </div>
+      <div style="flex:1;min-width:280px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <span id="taDecision" class="pill" style="font-size:13px;font-weight:700;padding:6px 14px">·</span>
+          <span class="mono" id="taScoreVal" style="font-size:.82rem;color:var(--muted)">·</span>
+        </div>
+        <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;margin-bottom:14px">
+          <div id="taScoreBar" style="height:100%;width:0%;background:var(--faint);transition:width .4s,background .4s"></div>
+        </div>
+        <div id="taSignals" style="display:flex;flex-direction:column;gap:2px"><span class="mut">·</span></div>
+      </div>
+    </div>
+  </div>
+
   <div class="card" style="margin-top:18px">
     <span class="card__lbl">{{ t.lv_engine }}</span>
     <div id="lvEngine" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><span class="mut">·</span></div>
@@ -169,5 +196,67 @@ async function tick(){
   document.getElementById("lvUpd").textContent = L.updated + " " + t.toLocaleTimeString();
 }
 tick(); setInterval(tick, 5000);
+</script>
+
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+const TA_UNAVAIL = "{{ t.lv_ta_unavail }}";
+let taChart=null, taCandle=null, taE9=null, taE21=null, taLines=[];
+function taEnsure(){
+  if(taChart || !window.LightweightCharts) return;
+  const el=document.getElementById('lvChart');
+  taChart = LightweightCharts.createChart(el,{
+    width: el.clientWidth, height: 360,
+    layout:{background:{color:'transparent'}, textColor:'#A7ADBE', fontFamily:'inherit'},
+    grid:{vertLines:{color:'rgba(255,255,255,0.04)'}, horzLines:{color:'rgba(255,255,255,0.04)'}},
+    timeScale:{visible:false, borderColor:'rgba(255,255,255,0.08)'},
+    rightPriceScale:{borderColor:'rgba(255,255,255,0.08)'},
+    crosshair:{mode:0}
+  });
+  taCandle = taChart.addCandlestickSeries({upColor:'#34E5A4',downColor:'#FF5470',borderVisible:false,wickUpColor:'#34E5A4',wickDownColor:'#FF5470'});
+  taE9 = taChart.addLineSeries({color:'#F3BA2F',lineWidth:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+  taE21 = taChart.addLineSeries({color:'#5AA9FF',lineWidth:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+  window.addEventListener('resize',()=>{ if(taChart) taChart.applyOptions({width: el.clientWidth}); });
+}
+function taRenderChart(d){
+  taEnsure(); if(!taChart) return;
+  taCandle.setData(d.candles||[]);
+  taE9.setData(d.ema9||[]); taE21.setData(d.ema21||[]);
+  taLines.forEach(l=>{ try{taCandle.removePriceLine(l);}catch(e){} }); taLines=[];
+  const lv=(d.fib&&d.fib.levels)||{};
+  Object.keys(lv).forEach(k=>{ const gold=(k==='0.618');
+    taLines.push(taCandle.createPriceLine({price:lv[k], color: gold?'#F3BA2F':'rgba(255,255,255,0.22)', lineWidth: gold?2:1, lineStyle: gold?0:2, axisLabelVisible:true, title:'fib '+k})); });
+  if(d.vwap) taLines.push(taCandle.createPriceLine({price:d.vwap, color:'#BF5AF2', lineWidth:1, lineStyle:1, axisLabelVisible:true, title:'VWAP'}));
+  taChart.timeScale().fitContent();
+}
+const TA_DEC={ENTER:['#34E5A4','ENTER'], WAIT:['#F3BA2F','WAIT'], AVOID:['#FF5470','AVOID']};
+function taRenderPanel(d){
+  const cf=d.confluence||{}, dec=TA_DEC[cf.decision]||['#6E7388', cf.decision||'·'];
+  document.getElementById('taSymbol').textContent = d.symbol||'';
+  const b=document.getElementById('taDecision'); b.textContent=dec[1]; b.style.background=dec[0]; b.style.color='#05060B';
+  document.getElementById('taScoreBar').style.width=(cf.score||0)+'%';
+  document.getElementById('taScoreBar').style.background=dec[0];
+  document.getElementById('taScoreVal').textContent=(cf.score!=null?cf.score:'·')+'/100 · '+(cf.mode||'');
+  const sig=cf.signals||[];
+  document.getElementById('taSignals').innerHTML = sig.length
+    ? sig.map(s=>{const col=s.vote>0?'#34E5A4':s.vote<0?'#FF5470':'#6E7388';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+          <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0"></span>
+          <span class="mono" style="font-size:.66rem;color:#6E7388;width:74px;text-transform:uppercase;flex-shrink:0">${s.pillar}</span>
+          <span style="font-size:.84rem;color:#F5F5F7">${s.reason}</span></div>`;}).join('')
+    : `<span class="mut">${cf.veto||'no long signals'}</span>`;
+  const st=d.stats||{}, f=(v,s='')=>v==null?'·':(Math.round(v*10)/10)+s;
+  document.getElementById('taStats').innerHTML =
+    [['RSI',f(st.rsi)],['MACD',f(st.macd_hist)],['ADX',f(st.adx)],['%B',st.bb_pct_b!=null?(Math.round(st.bb_pct_b*100)/100):'·'],['ATR%',f(st.atr_pct)],['VWAP Δ',f(st.vwap_dist_pct,'%')]]
+    .map(([k,v])=>`<div style="text-align:center;flex:1"><div class="mono" style="font-size:.66rem;color:#6E7388">${k}</div><div class="mono" style="font-size:1rem;color:#F5F5F7">${v}</div></div>`).join('');
+}
+async function taTick(){
+  let d; try{ d=await(await fetch('/api/ta')).json(); }catch(e){ return; }
+  const box=document.getElementById('taBox'), un=document.getElementById('taUnavail');
+  if(!d.available){ box.style.display='none'; un.style.display='block'; un.textContent=TA_UNAVAIL+' · '+(d.symbol||''); return; }
+  box.style.display='flex'; un.style.display='none';
+  taRenderChart(d); taRenderPanel(d);
+}
+taTick(); setInterval(taTick, 15000);
 </script>
 {% endblock %}
