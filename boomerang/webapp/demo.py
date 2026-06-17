@@ -32,6 +32,16 @@ _FALLBACK = {
     "DOGE": 0.16, "SHIB": 0.000022, "FLOKI": 0.00018, "TWT": 1.1, "LTC": 85.0, "XRP": 2.1,
 }
 
+# Tokens with a Binance spot market (USDT pair) → the live-TA chart (klines) renders for them.
+# The demo restricts its picks to these so the chart panel ALWAYS shows a real chart; on-chain-only
+# eligible tokens (e.g. TAG) have no candles and would leave the panel empty. The real agent trades
+# the full universe — this is purely a demo-quality choice so the showcase never looks broken.
+_CHARTABLE = frozenset({
+    "ETH", "BNB", "SOL", "XRP", "ADA", "DOGE", "TRX", "LINK", "LTC", "AVAX", "DOT", "UNI",
+    "TON", "FIL", "INJ", "ETC", "NEAR", "APT", "ARB", "OP", "SUI", "SEI", "AAVE", "ATOM",
+    "BCH", "SHIB", "PEPE", "FLOKI", "RUNE", "TWT", "CAKE", "WLD", "TIA", "FET",
+})
+
 _agents: dict[str, dict] = {}
 
 
@@ -44,7 +54,8 @@ def _market() -> tuple[dict, float | None, int | None, bool]:
     Simulated fallback if the agent hasn't published anything yet."""
     c = market_cache.get()
     q = c.get("quotes") or {}
-    real = {s: m for s, m in q.items() if (m.get("price_usd") or 0) > 0}
+    # Only chartable tokens: the demo's live-TA panel needs Binance candles to render.
+    real = {s: m for s, m in q.items() if (m.get("price_usd") or 0) > 0 and s in _CHARTABLE}
     if real:
         return real, c.get("btc_24h"), c.get("fng"), True
     sim = {s: {"price_usd": p, "percent_change_24h": random.uniform(-6, 6),
