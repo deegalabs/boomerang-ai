@@ -119,7 +119,7 @@ own and reports every action back to you; the public `/live` page and the `/cons
 read-only windows, not controls.
 
 <p align="center">
-  <img src="docs/img/telegram-cockpit.gif" alt="Boomerang AI — Telegram control panel (real screen recording)" width="300">
+  <img src="boomerang/webapp/static/img/telegram-cockpit.gif" alt="Boomerang AI — Telegram control panel (real screen recording)" width="300">
 </p>
 
 <p align="center"><sub>Real screen recording of the owner control panel (<code>@boomerang_wallet_ai_bot</code>).</sub></p>
