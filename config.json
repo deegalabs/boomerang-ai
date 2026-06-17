@@ -45,7 +45,9 @@
     "min_edge_over_fees_pct": 1.5,
     "est_swap_gas_usd": 0.15,
     "enable_ta_strategies": false,
-    "enable_fee_gate": false
+    "enable_fee_gate": false,
+    "target_return_pct": 0.0,
+    "enable_ev_filter": false
   },
   "hackathon": {
     "competition_contract": "0x212c61b9b72c95d95bf29cf032f5e5635629aed5",

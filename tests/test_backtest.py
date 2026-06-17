@@ -4,7 +4,7 @@ from __future__ import annotations
 from boomerang.strategy.backtest import run_backtest
 from boomerang.strategy.indicators import Kline
 from boomerang.strategy.playbook import (
-    TREND_FOLLOW, VOL_SQUEEZE, VWAP_REVERSION, ta_select)
+    TREND_FOLLOW, VOL_SQUEEZE, ta_select)
 
 
 def _series(closes, spread=0.6):
@@ -47,10 +47,11 @@ def test_ta_select_vol_squeeze():
     assert ta_select(ind) is VOL_SQUEEZE
 
 
-def test_ta_select_vwap_reversion():
-    ind = {"ema_cross": {"bull": True}, "adx": {"adx": 20}, "vwap_dist_pct": -0.5, "rsi": 55}
-    assert ta_select(ind) is VWAP_REVERSION
-
-
 def test_ta_select_none_when_flat():
     assert ta_select({"ema_cross": {"bull": False}, "adx": {"adx": 12}}) is None
+
+
+def test_ta_select_vwap_retired():
+    # The old VWAP-reversion setup (shallow dip below VWAP) must no longer select anything.
+    ind = {"ema_cross": {"bull": True}, "adx": {"adx": 20}, "vwap_dist_pct": -0.5, "rsi": 55}
+    assert ta_select(ind) is None

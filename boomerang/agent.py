@@ -34,6 +34,7 @@ from boomerang.strategy.indicators import compute_indicators
 from boomerang.strategy.klines import fetch_klines
 from boomerang.strategy.playbook import (
     expectancy_disabled, regime_posture, select_strategy, setup_strength, ta_select)
+from boomerang.strategy.projection import project
 from boomerang.types import AgentState, Position
 from boomerang.vault.bnb_validation import BNBValidator
 from boomerang.vault.twak_executor import TwakError, TwakExecutor
@@ -291,6 +292,7 @@ class BoomerangAgent:
             "token_focus": self.token_focus,
             "stop_loss_pct": self.stop_loss_pct,
             "take_profit_pct": self.take_profit_pct,
+            "target_return_pct": self._cfg.dev_safety.get("target_return_pct", 0.0),
             "position_size_pct": self.position_size_pct,
             "mode": self.mode,
             "peak_equity": self._risk.peak_equity,
@@ -800,6 +802,18 @@ class BoomerangAgent:
                 ta_spec = await self._ta_strategy(symbol)
                 if ta_spec and ta_spec.key in posture.allowed:
                     exec_spec = ta_spec
+                # EV PROJECTION: what the agent estimates this entry can reach (target/EV vs the
+                # conviction-implied win rate). Surfaced on /live + Telegram; OPTIONALLY an entry
+                # filter when the user sets a desired return (`target_return_pct` + `enable_ev_filter`).
+                proj = project(target_pct=exec_spec.take_profit_pct, stop_pct=exec_spec.stop_pct,
+                               conviction=verdict.confidence_score,
+                               trailing_trigger_pct=exec_spec.trailing_trigger_pct)
+                goal = float(self._cfg.dev_safety.get("target_return_pct", 0.0) or 0.0)
+                if self._cfg.dev_safety.get("enable_ev_filter", False) and goal > 0 and proj.target_pct < goal:
+                    self._trace(symbol, "GATE", f"projected +{proj.target_pct:.1f}% < target +{goal:.1f}%")
+                    await self._emit(AlertType.REJECTED, f"Below target: {symbol}",
+                                     f"Projected reach +{proj.target_pct:.1f}% < your target +{goal:.1f}%.")
+                    continue
                 # Opens with the STRATEGY's parameters (its own SL/TP/trailing/time-stop).
                 rationale = f"[{exec_spec.label}] {verdict.rationale}"
                 if conf and conf.summary:
@@ -811,7 +825,8 @@ class BoomerangAgent:
                                     trailing_trigger_pct=exec_spec.trailing_trigger_pct,
                                     trailing_pct=exec_spec.trailing_pct, time_stop_min=exec_spec.time_stop_min,
                                     time_stop_band_pct=exec_spec.time_stop_band_pct,
-                                    strategy=exec_spec.key, regime=verdict.regime):
+                                    strategy=exec_spec.key, regime=verdict.regime,
+                                    projection=proj.as_dict()):
                     opened = True
                     break
                 # Execution failed (e.g.: revert due to liquidity): cooldown and try the next one.
@@ -858,12 +873,13 @@ class BoomerangAgent:
             return None
 
     async def _ta_strategy(self, symbol: str):
-        """Opt-in (config `enable_ta_strategies`): pick a refined TA strategy spec from the
-        klines for an ENTER candidate. None when disabled or no candle data. Additive."""
+        """Opt-in (config `enable_ta_strategies`): pick a refined TA strategy spec for an ENTER
+        candidate from 5m klines (the timeframe where the backtest showed positive expectancy —
+        1m bled to noise). None when disabled or no candle data. Additive."""
         if not self._cfg.dev_safety.get("enable_ta_strategies", False):
             return None
         try:
-            klines = await asyncio.to_thread(fetch_klines, symbol, "1m", 60)
+            klines = await asyncio.to_thread(fetch_klines, symbol, "5m", 60)
             if not klines or len(klines) < 30:
                 return None
             return ta_select(compute_indicators(klines))
@@ -927,7 +943,8 @@ class BoomerangAgent:
     async def _open(self, symbol: str, addr: str, size_usd: float, rationale: str, now: float,
                     *, stop_pct: float = 0.0, tp_pct: float = 0.0, regime: str = "",
                     strategy: str = "", trailing_trigger_pct: float = 0.0, trailing_pct: float = 0.0,
-                    time_stop_min: float = 0.0, time_stop_band_pct: float = 0.0) -> bool:
+                    time_stop_min: float = 0.0, time_stop_band_pct: float = 0.0,
+                    projection: dict | None = None) -> bool:
         """Opens the position (real swap). Returns True if it opened, False if execution failed.
 
         With `strategy`, uses the STRATEGY's parameters literally (stop_pct=0 = NO SL,
@@ -963,7 +980,8 @@ class BoomerangAgent:
                        stop_loss_pct=eff_stop, take_profit_pct=eff_tp,
                        opened_at=now, tx_hash=res.tx_hash, regime=regime, strategy=strategy,
                        trailing_trigger_pct=trailing_trigger_pct, trailing_pct=trailing_pct,
-                       time_stop_min=time_stop_min, time_stop_band_pct=time_stop_band_pct)
+                       time_stop_min=time_stop_min, time_stop_band_pct=time_stop_band_pct,
+                       projection=projection)
         self.positions.append(pos)
         self._risk.record_buy(now)  # anomaly tripwire (rapid-buy / injection cascade)
         self.state = AgentState.IN_POSITION
@@ -978,7 +996,7 @@ class BoomerangAgent:
                          rationale, amount_usd=size_usd, entry=entry,
                          stop=stop_price, take_profit=tp_price,
                          stop_pct=eff_stop, take_profit_pct=eff_tp,
-                         tx=res.tx_hash)
+                         projection=projection, tx=res.tx_hash)
         self._save()
         return True
 

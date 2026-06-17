@@ -110,6 +110,7 @@ class Position:
     time_stop_band_pct: float = 0.0  # dead band of the time-stop (0 = uses the global; 999 = pure time)
     last_price: float = 0.0         # latest on-chain price seen by the monitor (for the /live panel)
     last_pnl_pct: float | None = None  # latest unrealized PnL %, updated each monitor pass (for /live)
+    projection: dict | None = None  # EV projection at entry (target/EV/win-rate) for /live + Telegram
 
     def __post_init__(self) -> None:
         if self.peak_price == 0.0:

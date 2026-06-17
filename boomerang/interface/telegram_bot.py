@@ -94,6 +94,12 @@ class TelegramInterface:
                 text += f"\n🎯 Take-profit: {_fmt_price(d['take_profit'])} (+{d.get('take_profit_pct')}%)"
             else:
                 text += "\n🎯 Take-profit: let it run (trailing)"
+            pj = d.get("projection")
+            if pj:
+                ev = pj.get("ev_pct")
+                ev_txt = f"{ev:+.2f}%" if isinstance(ev, (int, float)) else "·"
+                text += (f"\n📐 Projection: reach +{pj.get('target_pct')}% · EV {ev_txt} "
+                         f"(need {pj.get('breakeven_win')}% win, est {pj.get('est_win')}%)")
             if d.get("tx"):
                 text += f"\n🔗 [view on BscScan](https://bscscan.com/tx/{d['tx']})"
 

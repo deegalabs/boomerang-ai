@@ -71,42 +71,38 @@ DCA = StrategySpec(
     time_stop_min=1440.0, time_stop_band_pct=999.0,    # 24h, by pure TIME (band 999 = any PnL)
 )
 
-# ── TA strategies (selected by the confluence indicators, not CMC metrics) ────
-# Off by default (config `enable_ta_strategies`); validate each on the backtest harness
-# before enabling. The confluence layer + expectancy arbiter still gate every entry.
+# ── TA strategies (selected by the confluence indicators, on 5m candles) ──────
+# Off by default (config `enable_ta_strategies`). Parameters were DERIVED EMPIRICALLY with the
+# backtest harness over 20 liquid tokens: on 5m candles a wide stop (4%) + an 8% target flip BOTH
+# concepts to positive expectancy (~+0.13%/trade, ~45% win, 120-176 trades); on 1m the tight stops
+# bled (ordinary noise stops you out before the move). VWAP Reversion was RETIRED — it never reached
+# positive expectancy even tuned (its premise, a reliable bounce back to VWAP, doesn't hold in this
+# universe). The confluence layer + expectancy arbiter still gate every entry.
 TREND_FOLLOW = StrategySpec(
     "trend_follow", "Trend Follow",
-    stop_pct=1.2, take_profit_pct=0.0,                 # ride the trend via trailing
-    trailing_trigger_pct=2.0, trailing_pct=1.5,
-    time_stop_min=60.0, time_stop_band_pct=0.3,
+    stop_pct=4.0, take_profit_pct=8.0,                 # 5m: wide stop survives noise, ~2:1 target
+    trailing_trigger_pct=0.0, trailing_pct=0.0,
+    time_stop_min=240.0, time_stop_band_pct=0.4,
 )
 
 VOL_SQUEEZE = StrategySpec(
     "vol_squeeze", "Volatility Squeeze",
-    stop_pct=1.0, take_profit_pct=3.0,                 # breakout from tight bands → fixed target
+    stop_pct=4.0, take_profit_pct=8.0,                 # 5m: breakout from tight bands → 2:1 target
     trailing_trigger_pct=0.0, trailing_pct=0.0,
-    time_stop_min=45.0, time_stop_band_pct=0.5,
+    time_stop_min=240.0, time_stop_band_pct=0.4,
 )
 
-VWAP_REVERSION = StrategySpec(
-    "vwap_reversion", "VWAP Reversion",
-    stop_pct=0.8, take_profit_pct=1.5,                 # shallow dip back to VWAP → tight target
-    trailing_trigger_pct=0.0, trailing_pct=0.0,
-    time_stop_min=60.0, time_stop_band_pct=0.6,
-)
-
-ALL = (MOMENTUM, MEAN_REVERSION, DCA, TREND_FOLLOW, VOL_SQUEEZE, VWAP_REVERSION)
+ALL = (MOMENTUM, MEAN_REVERSION, DCA, TREND_FOLLOW, VOL_SQUEEZE)
 _BY_KEY = {s.key: s for s in ALL}
 
 
 def ta_select(ind: dict) -> StrategySpec | None:
-    """Pick a TA strategy from the confluence indicators (klines). Deterministic, pure.
+    """Pick a TA strategy from the confluence indicators (5m klines). Deterministic, pure.
     Returns the first matching spec by priority, or None. Used ADDITIVELY: when enabled,
     the agent refines an ENTER candidate's exit profile with the matching TA pattern."""
     ec = ind.get("ema_cross") or {}
     adx = (ind.get("adx") or {}).get("adx") or 0.0
     bb = ind.get("bollinger") or {}
-    rsi = ind.get("rsi")
     vd = ind.get("vwap_dist_pct")
     vol = ind.get("volume") or {}
     # Trend Follow: established uptrend (EMA bull + strong ADX), price above VWAP.
@@ -115,9 +111,6 @@ def ta_select(ind: dict) -> StrategySpec | None:
     # Volatility Squeeze: tight Bollinger bands breaking up on volume.
     if bb.get("bandwidth", 1.0) <= 0.04 and bb.get("pct_b", 0.0) >= 0.8 and vol.get("surge"):
         return VOL_SQUEEZE
-    # VWAP Reversion: shallow dip just below VWAP in an uptrend, not overbought.
-    if ec.get("bull") and vd is not None and -1.0 < vd < 0.0 and (rsi if rsi is not None else 50) < 65:
-        return VWAP_REVERSION
     return None
 
 
@@ -183,7 +176,7 @@ class Posture:
     allowed: frozenset
 
 
-_TA_KEYS = frozenset({"trend_follow", "vol_squeeze", "vwap_reversion"})
+_TA_KEYS = frozenset({"trend_follow", "vol_squeeze"})
 _RISK_TRADE = frozenset({"momentum", "mean_reversion"}) | _TA_KEYS  # TA keys harmless until enabled
 
 

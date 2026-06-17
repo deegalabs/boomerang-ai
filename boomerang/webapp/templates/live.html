@@ -215,7 +215,8 @@ async function tick(){
     `<span class="pill pill--gold" style="font-size:11px">${L.mode}: ${s.mode||'—'}</span>`+
     `<span class="pill" style="font-size:11px">stop -${Number(s.stop_loss_pct||0).toFixed(0)}%</span>`+
     `<span class="pill" style="font-size:11px">${tpG>0?('TP +'+tpG.toFixed(0)+'%'):'TP: '+L.trailing}</span>`+
-    `<span class="pill" style="font-size:11px">${L.size}: ${Number(s.position_size_pct||0).toFixed(0)}%</span>`;
+    `<span class="pill" style="font-size:11px">${L.size}: ${Number(s.position_size_pct||0).toFixed(0)}%</span>`+
+    (Number(s.target_return_pct||0)>0?`<span class="pill pill--gold" style="font-size:11px">🎯 +${Number(s.target_return_pct).toFixed(1)}%/trade</span>`:"");
   const uni = s.token_focus || [];
   document.getElementById("lvUniverse").innerHTML = uni.length
     ? `<span class="mut" style="font-size:.78rem">${L.watching} ${uni.length} ${L.tokensWord}:</span><br>`+
@@ -241,9 +242,13 @@ async function tick(){
           : `<span class="${pv>=0?'pos':'neg'}">${pv>=0?'+':''}${Number(pv).toFixed(2)}%</span>`;
         const trail = p.trailing_active ? ` <span class="pill pill--up" style="font-size:9px">📈 ${L.trailing}</span>` : "";
         const sub = [p.strategy, usd(p.amount_usd)].filter(Boolean).join(" · ");
+        const pj = p.projection;
+        const ev = pj && pj.ev_pct!=null
+          ? `<br><span class="${pj.favorable?'pos':'neg'}" style="font-size:.64rem" title="${pj.basis||''}">EV ${pj.ev_pct>=0?'+':''}${Number(pj.ev_pct).toFixed(2)}% · est ${Number(pj.est_win||0).toFixed(0)}%</span>`
+          : "";
         return `<tr><td><b>${p.symbol}</b>${trail}<br><span class="mut" style="font-size:.7rem">${sub}</span></td>`+
                `<td class="mono">${px(p.entry_price)} → ${now}</td><td class="mono">${pnl}</td>`+
-               `<td class="mono">${tgt}</td><td class="mono">${px(p.stop_loss_price)}</td></tr>`;
+               `<td class="mono">${tgt}${ev}</td><td class="mono">${px(p.stop_loss_price)}</td></tr>`;
       }).join("")+`</table>`
     : `<span class="mut">${L.none}</span>`;
 
