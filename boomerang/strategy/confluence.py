@@ -1,4 +1,4 @@
-"""Confluence engine — turns raw indicators into a trader-style decision.
+"""Confluence engine - turns raw indicators into a trader-style decision.
 
 A serious discretionary trader doesn't obey one indicator; they weigh *confluence*
 across pillars (trend, momentum, mean-reversion, volume, structure) **and shift what
@@ -22,7 +22,7 @@ MIN_POSITIVE_PILLARS = 3    # how many of the 5 pillars must lean long
 TREND_ADX = 25.0            # ADX ≥ → trending; < RANGE_ADX → ranging
 RANGE_ADX = 20.0
 
-# per-regime pillar weights — what a trader pays attention to in each context
+# per-regime pillar weights - what a trader pays attention to in each context
 PILLAR_W: dict[str, dict[str, float]] = {
     "TREND":      {"trend": 1.5, "momentum": 1.2, "structure": 1.2, "meanrev": 0.5, "volume": 1.0},
     "RANGE":      {"trend": 0.5, "momentum": 1.0, "structure": 1.2, "meanrev": 1.5, "volume": 1.0},
@@ -81,7 +81,7 @@ def _trend_signals(ind: dict) -> list[Signal]:
             out.append(Signal("trend", "adx", 0.7 if up else -0.7,
                               f"ADX {adx:.0f} strong {'up' if up else 'down'}trend"))
         elif adx < RANGE_ADX:
-            out.append(Signal("trend", "adx", 0.0, f"ADX {adx:.0f} — no trend (chop)"))
+            out.append(Signal("trend", "adx", 0.0, f"ADX {adx:.0f} - no trend (chop)"))
     slope = ind.get("slope_pct")
     if slope is not None:
         if slope > 0.0005:
@@ -120,9 +120,9 @@ def _meanrev_signals(ind: dict) -> list[Signal]:
     z = ind.get("zscore")
     if z is not None:
         if z < -1.5:
-            out.append(Signal("meanrev", "zscore", 0.6, f"z {z:.1f} — cheap vs mean"))
+            out.append(Signal("meanrev", "zscore", 0.6, f"z {z:.1f} - cheap vs mean"))
         elif z > 2.0:
-            out.append(Signal("meanrev", "zscore", -0.5, f"z {z:.1f} — over-extended"))
+            out.append(Signal("meanrev", "zscore", -0.5, f"z {z:.1f} - over-extended"))
     return out
 
 
@@ -141,7 +141,7 @@ def _volume_signals(ind: dict) -> list[Signal]:
 
 
 def _structure_signals(ind: dict) -> tuple[list[Signal], str | None]:
-    """Fibonacci structure — also returns a hard veto when chasing a pump."""
+    """Fibonacci structure - also returns a hard veto when chasing a pump."""
     out: list[Signal] = []
     veto: str | None = None
     f = ind.get("fibonacci") or {}
@@ -154,7 +154,7 @@ def _structure_signals(ind: dict) -> tuple[list[Signal], str | None]:
     elif pos == "BREAKDOWN":
         out.append(Signal("structure", "fib", -0.8, rat or "fib support failed"))
     elif pos == "NO_RETRACE":
-        out.append(Signal("structure", "fib", 0.0, "no pullback yet — wait for a retrace"))
+        out.append(Signal("structure", "fib", 0.0, "no pullback yet - wait for a retrace"))
     elif pos == "CHASING_PUMP":
         out.append(Signal("structure", "fib", -1.0, rat or "vertical pump candle"))
         veto = rat or "chasing a vertical pump candle"
@@ -198,7 +198,7 @@ def evaluate_confluence(ind: dict, macro_regime: str = "NEUTRAL") -> Confluence:
     if veto:
         reasons = [f"VETO: {veto}"]
     summary = (f"{mode} · confluence {score:.0f}/100 · {positive_pillars}/5 pillars long "
-               f"→ {decision}" + (f" — {reasons[0]}" if reasons else ""))
+               f"→ {decision}" + (f" - {reasons[0]}" if reasons else ""))
 
     return Confluence(decision=decision, score=score, mode=mode, signals=signals,
                       reasons=reasons, veto=veto, summary=summary)

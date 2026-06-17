@@ -180,7 +180,8 @@ async def api_x402_status(request):  # noqa: ANN001 — our x402 payment, in the
     """Describes the agent's load-bearing x402 integration using the standard A2A x402
     field names + a real verified settlement on Base (conformance proof for judges)."""
     return JSONResponse(x402_std.descriptor(
-        last_tx="0xd5b04f9e12610160aed646a703a28f3625adbcfff86d8e54fde7f6835a76a699"))
+        last_tx="0xd5b04f9e12610160aed646a703a28f3625adbcfff86d8e54fde7f6835a76a699",
+        reference=True))
 
 
 # ── Console (owner) + SIWE ────────────────────────────────────────────────────

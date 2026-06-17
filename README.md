@@ -8,7 +8,7 @@ It reads attention on **CoinMarketCap**, decides with **Claude (Opus 4.8)**, and
 self-custody swaps via the **Trust Wallet Agent Kit**. Capital *goes to the market and comes
 back* — like a boomerang.
 
-[![CI](https://img.shields.io/badge/CI-ruff%20%2B%2074%20tests-22c55e)](.github/workflows/ci.yml)
+[![CI](https://img.shields.io/badge/CI-ruff%20%2B%2094%20tests-22c55e)](.github/workflows/ci.yml)
 [![Track 1](https://img.shields.io/badge/BNB%20Hack-Track%201%20·%20Autonomous%20Agents-f0b90b)](https://dorahacks.io/)
 [![ERC-8004](https://img.shields.io/badge/ERC--8004-agentId%20131071-6366f1)](https://bscscan.com/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432)
 [![Self-custody](https://img.shields.io/badge/custody-self--custody%20(TWAK)-0ea5e9)](#-security--verifiability)
@@ -176,7 +176,7 @@ Required `.env`: `ANTHROPIC_API_KEY`, `CMC_API_KEY`, `TELEGRAM_BOT_TOKEN`,
 
 ## Engineering quality
 
-- ✅ **74 tests + CI** over the safety-critical pure logic — risk engine (circuit breaker, sizing,
+- ✅ **94 tests + CI** over the safety-critical pure logic — risk engine (circuit breaker, sizing,
   trailing, time-stop), the anti-injection sanitizer, the strategy router/action-matrix/arbiter,
   the equity-reliability guard, and log-secret redaction. `ruff` + `pytest` run on every push.
 - ✅ **Deterministic risk fully isolated from the LLM** — the model never touches money rules.

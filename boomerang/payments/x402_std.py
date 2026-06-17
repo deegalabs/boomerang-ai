@@ -47,8 +47,12 @@ def settle_receipt(tx_hash: str, network: str = "base", amount_atomic: str = "10
     }
 
 
-def descriptor(last_tx: str | None = None) -> dict:
-    """The agent's x402 integration described in standard terms (for /api/x402-status)."""
+def descriptor(last_tx: str | None = None, *, reference: bool = False) -> dict:
+    """The agent's x402 integration described in standard terms (for /api/x402-status).
+
+    ``reference=True`` marks ``last_tx`` as a verified *example* settlement (not a live feed):
+    in-loop settlements recur ~1x/hour but their tx hashes aren't surfaced here, so we show one
+    real, independently-verifiable Base tx as the conformance proof — labelled as such, honestly."""
     out = {
         "spec": "A2A x402 extension (google-agentic-commerce) · exact scheme",
         "in_loop": True,
@@ -58,4 +62,8 @@ def descriptor(last_tx: str | None = None) -> dict:
     }
     if last_tx:
         out["last_settlement"] = settle_receipt(last_tx)
+        if reference:
+            out["last_settlement"]["note"] = (
+                "verified reference settlement (a real past on-chain tx); "
+                "in-loop settlements recur ~1x/hour and are not individually surfaced here")
     return out

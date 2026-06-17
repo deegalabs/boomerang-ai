@@ -7,7 +7,7 @@ implementations (ChaosChain ERC-8004, Google a2a-x402, agentic-wallet-guard, Bin
 proposed — pending approval before execution.**
 
 > Principle for every item: ships behind a flag/config when sensible · cycle is
-> `branch → implement → ruff + pytest → deploy → verify` · DoD = lint clean, all tests (74 + new)
+> `branch → implement → ruff + pytest → deploy → verify` · DoD = lint clean, all tests (94 + new)
 > green, `/live` and demo intact, deploy confirmed.
 
 ---

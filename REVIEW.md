@@ -63,7 +63,7 @@ an attacker could only write fake metadata — **not move a cent**.
 - **x402 load-bearing in the loop:** the agent pays a real USDC-on-Base micropayment (~$0.01,
   signed locally via twak, EIP-3009) ~1x/hour for CMC Agent Hub derivatives — confirmed
   settling in production (a 402→200 on the `/x402` proxy). Best-effort with a Binance fallback.
-- **Test coverage + CI:** 74 tests over the critical pure logic (risk engine, sanitizer, config,
+- **Test coverage + CI:** 94 tests over the critical pure logic (risk engine, sanitizer, config,
   strategy router/action-matrix/arbiter, equity-reliability, log redaction); lint + tests on every push.
 
 ## 3. What is a SHOWCASE (honest)

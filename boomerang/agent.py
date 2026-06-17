@@ -754,7 +754,13 @@ class BoomerangAgent:
                 if verdict.is_buy and verdict.confidence_score >= STRONG:
                     break
 
+            held = {p.symbol.upper() for p in self.positions}
             for verdict, symbol, addr, spec in sorted(buys, key=lambda b: -b[0].confidence_score):
+                # Don't re-open a symbol already in the book: a second tracked position in the same
+                # token would double exposure / concentration (the per-symbol cooldown alone lapses).
+                if symbol.upper() in held:
+                    self._trace(symbol, "GATE", "already in position — skip duplicate entry")
+                    continue
                 ch24 = float(quotes[symbol].get("percent_change_24h") or 0.0)
                 # Anti-top + overextension dampening ONLY for MOMENTUM. Mean-rev and DCA
                 # buy DROPS on purpose — penalizing them here would kill the strategy.
