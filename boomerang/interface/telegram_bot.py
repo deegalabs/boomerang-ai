@@ -579,20 +579,31 @@ class TelegramInterface:
             parse_mode=ParseMode.MARKDOWN)
 
     _HELP = (
-        "🪃 *Boomerang AI commands*\n\n"
-        "• /start — main menu (🤖 Automatic · 🎮 Manual · Status · Pause · Withdraw)\n"
-        "• /status — situation + *SELL buttons* + projection/EV per position\n"
-        "• /porque (or /why) — *why no trade*: the candidates the AI blocked and where\n"
-        "• /meta [%] [on] — set your *target return per trade* (e.g. `/meta 3 on`)\n"
-        "• /buy SYMBOL [%] — manual buy (e.g. `/buy CAKE` or `/buy FLOKI 100` for all-in)\n"
-        "• /pausar (or /parar, /stop) — pauses the agent (resume with /start)\n"
-        "• /panic — sells everything *and halts* the agent (emergency)\n"
-        "• /reiniciar — *unlocks* after /panic or a withdrawal and resumes trading\n"
-        "• /dashboard — read-only panel link\n"
-        "• /registrar — registers the wallet in the competition (run once before Jun 22)\n"
-        "• /competicao — competition registration status\n"
-        "• /ajuda — this list\n\n"
-        "_To sell without halting, use the 🔴 buttons inside /status._"
+        "🪃 *Boomerang AI — command guide*\n\n"
+
+        "🚀 *Get started*\n"
+        "• /start — main menu: Automatic / Manual mode, Status, Pause, Withdraw\n"
+        "• /registrar — register your wallet in the competition (*once*, before Jun 22)\n\n"
+
+        "📊 *Watch what it's doing*\n"
+        "• /status — full picture: equity, drawdown, posture, open positions "
+        "(live PnL + EV) — with 🔴 Sell buttons\n"
+        "• /porque — *why it did NOT buy* this cycle (the blocked candidates + where)\n"
+        "• /dashboard — link to the public read-only /live panel\n"
+        "• /competicao — your competition registration status\n\n"
+
+        "🎮 *Trade & decide*\n"
+        "• /buy SYMBOL [%] — buy now, your call (e.g. `/buy CAKE` · `/buy FLOKI 100` = all-in)\n"
+        "• /meta — set a target return per trade: `/meta 3` (show) · "
+        "`/meta 3 on` (also skip below it) · `/meta off`\n"
+        "• 🔴 *Sell* buttons inside /status — sell one position *without* stopping the agent\n\n"
+
+        "⏸️ *Pause & emergency*\n"
+        "• /pausar — pause the agent (resume with /start)\n"
+        "• /panic — sell *everything* and *halt* (emergency)\n"
+        "• /reiniciar — unlock after /panic or a withdrawal, and resume trading\n\n"
+
+        "_Type /ajuda anytime to see this guide again._"
     )
 
     async def cmd_help(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
