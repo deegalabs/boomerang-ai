@@ -399,6 +399,22 @@ h3 { font-size: 1.4rem; letter-spacing: -.01em; }
 .tip p { color: var(--muted); margin: 0; font-size: .95rem; }
 @media (max-width: 620px) { .tips { grid-template-columns: 1fr; } }
 
+/* Golden tips laid out beside the Telegram control-panel GIF */
+.tips-media { display: flex; gap: 22px; align-items: stretch; margin-top: 26px; }
+.tips-media .tg-shot { flex: 0 0 250px; margin: 0; align-self: center; text-align: center; }
+.tips-media .tg-shot img { width: 100%; max-width: 250px; border-radius: 18px; border: 1px solid var(--line); box-shadow: 0 14px 44px rgba(0, 0, 0, .5); display: block; }
+.tips-media .tg-shot figcaption { color: var(--muted); font-size: .78rem; margin-top: 10px; }
+.tips-media .tips { margin-top: 0; flex: 1 1 auto; grid-template-rows: 1fr 1fr; }
+.tips-media .tips .tip { padding: 15px 16px; display: flex; flex-direction: column; justify-content: center; }
+.tips-media .tips .tip .ti { font-size: 22px; }
+.tips-media .tips .tip h4 { font-size: 1rem; margin: 7px 0 5px; }
+.tips-media .tips .tip p { font-size: .86rem; }
+@media (max-width: 860px) {
+  .tips-media { flex-direction: column; }
+  .tips-media .tg-shot { align-self: center; flex-basis: auto; }
+  .tips-media .tips { grid-template-rows: none; }
+}
+
 /* ----- Color utilities --------------------------------------------------- */
 .pos { color: var(--up); } .neg { color: var(--down); } .mut { color: var(--faint); }
 
