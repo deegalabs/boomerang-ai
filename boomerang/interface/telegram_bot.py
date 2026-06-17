@@ -114,6 +114,11 @@ class TelegramInterface:
                 text += f"\n{emo} *PnL: {d['pnl_pct']:+.2f}%*"
             if d.get("tx"):
                 text += f"\n🔗 [view on BscScan](https://bscscan.com/tx/{d['tx']})"
+
+        # On-chain SEAL alerts (pre-commit, reputation, circuit-breaker) carry a tx too — make
+        # the proof clickable here, not only for open/close trades (Telegram↔/live parity).
+        if d.get("tx") and alert.type not in (AlertType.TRADE_OPENED, AlertType.TRADE_CLOSED):
+            text += f"\n🔗 [proof on BscScan](https://bscscan.com/tx/{d['tx']})"
         try:
             await self._app.bot.send_message(self._master, text, parse_mode=ParseMode.MARKDOWN)
         except Exception as exc:  # noqa: BLE001
@@ -224,6 +229,8 @@ class TelegramInterface:
             await q.edit_message_text("⏸️ Agent paused. Use /start to resume.")
         elif data == "status":
             await self._send_status(q)
+        elif data == "porque":
+            await self._send_traces(q)
         elif data == "withdraw":
             await q.edit_message_text("🪃 Withdrawing everything to your wallet and stopping...")
             await self._agent.withdraw_all()
@@ -383,12 +390,18 @@ class TelegramInterface:
         dd = f"{s['drawdown_pct']:.1f}%" if s["drawdown_pct"] is not None else "n/a"
         tp = s.get("take_profit_pct") or 0
         tp_txt = f"target +{tp:.0f}%" if tp else "target: let it run"
+        posture = s.get("posture") or ""
+        posture_txt = f" · 🧭 {posture}" if posture else ""
         lines = [
             "📊 *Boomerang AI Status*",
-            f"State: *{s['state']}*",
+            f"State: *{s['state']}*{posture_txt}",
             f"💰 Equity: *{eq}*  ·  Drawdown: {dd}",
             f"⚙️ Stop -{s['stop_loss_pct']:.0f}% · 🎯 {tp_txt} · mode {self._agent.mode}",
         ]
+        goal = float(s.get("target_return_pct") or 0.0)
+        if goal > 0:
+            flt = "filtering ON" if s.get("enable_ev_filter") else "shown only"
+            lines.append(f"🎯 Target/trade: *+{goal:.1f}%* ({flt}) — change with /meta")
         idn = s.get("identity") or {}
         if idn.get("registered") and idn.get("explorer"):
             lines.append(f"⛓️ On-chain ID *#{idn.get('agent_id')}* · [proof on BscScan]({idn['explorer']})")
@@ -400,11 +413,18 @@ class TelegramInterface:
                 emo = "🟢" if (p["pnl_pct"] or 0) >= 0 else "🔴"
                 tpp = _fmt_price(p["take_profit"]) if p["take_profit"] else "trailing"
                 trail = " · 📈trailing ON" if p["trailing_active"] else ""
-                lines.append(
+                row = (
                     f"{emo} *{p['symbol']}*  ${p['amount_usd']:.2f}  ·  PnL *{pnl}*{trail}\n"
                     f"   entry {_fmt_price(p['entry'])} → now {_fmt_price(p['current'])}\n"
                     f"   🛑 stop {_fmt_price(p['stop'])}  ·  🎯 target {tpp}"
                 )
+                pj = p.get("projection")
+                if pj:
+                    ev = pj.get("ev_pct")
+                    ev_txt = f"{ev:+.2f}%" if isinstance(ev, (int, float)) else "·"
+                    row += (f"\n   📐 reach +{pj.get('target_pct')}% · EV {ev_txt} "
+                            f"(need {pj.get('breakeven_win')}%, est {pj.get('est_win')}%)")
+                lines.append(row)
         else:
             lines.append("\n📌 No open positions at the moment.")
         lines.append(f"\n🎯 Focus ({len(s['token_focus'])} coins): {', '.join(s['token_focus'])}")
@@ -417,10 +437,66 @@ class TelegramInterface:
                                               callback_data=f"sell_{p['symbol']}")])
         if len(det) > 1:
             rows.append([InlineKeyboardButton("🔴 Sell EVERYTHING", callback_data="sellall")])
-        rows.append([InlineKeyboardButton("🔄 Refresh", callback_data="status")])
+        rows.append([InlineKeyboardButton("🔎 Why no trade", callback_data="porque"),
+                     InlineKeyboardButton("🔄 Refresh", callback_data="status")])
         kb = InlineKeyboardMarkup(rows)
         send = target.edit_message_text if hasattr(target, "edit_message_text") else target.message.reply_text
         await send(text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+
+    # ── decision trace: WHY no trade (Telegram↔/live parity) ──────────────────
+    _STAGE_EMOJI = {"REGIME": "🌐", "GATE": "🚪", "BRAIN": "🧠", "CONFLUENCE": "📊", "VALIDATION": "🛡️"}
+
+    async def _send_traces(self, target) -> None:  # noqa: ANN001
+        snap = self._agent.snapshot()
+        traces = snap.get("traces") or []
+        if not traces:
+            text = ("🔎 *Why no trade*\n\n_No entries were blocked in the last cycle — either a "
+                    "position was opened, or no candidate reached the decision gates yet._")
+        else:
+            rows = [f"{self._STAGE_EMOJI.get(t.get('blocked_at',''),'•')} *{t.get('symbol')}* — "
+                    f"{t.get('blocked_at')}: {t.get('reason')}" for t in traces]
+            text = ("🔎 *Why no trade* — last cycle's blocked candidates:\n\n" + "\n".join(rows) +
+                    "\n\n_Each line is a candidate the agent evaluated and chose NOT to buy, and where._")
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh", callback_data="porque"),
+                                    InlineKeyboardButton("📊 Status", callback_data="status")]])
+        send = target.edit_message_text if hasattr(target, "edit_message_text") else target.message.reply_text
+        await send(text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+
+    async def cmd_porque(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_master(update):
+            return
+        await self._send_traces(update)
+
+    async def cmd_meta(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_master(update):
+            return
+        ds = self._cfg.dev_safety
+        args = ctx.args or []
+        if not args:
+            cur = float(ds.get("target_return_pct", 0.0) or 0.0)
+            flt = "filtering ON" if ds.get("enable_ev_filter") else "shown only"
+            await update.message.reply_text(
+                f"🎯 *Target per trade*: +{cur:.1f}% ({flt})\n\n"
+                "Set with:\n• `/meta 3` — project every entry vs +3% (no filtering)\n"
+                "• `/meta 3 on` — also *skip* setups projected below +3%\n• `/meta off` — clear it",
+                parse_mode=ParseMode.MARKDOWN)
+            return
+        if args[0].lower() in ("off", "0"):
+            self._agent.configure(target_return_pct=0.0, enable_ev_filter=False)
+            await update.message.reply_text("🎯 Target cleared — the agent no longer screens by a desired return.")
+            return
+        try:
+            goal = max(0.0, min(float(args[0].rstrip("%")), 100.0))
+        except ValueError:
+            await update.message.reply_text("Usage: `/meta 3` · `/meta 3 on` · `/meta off`",
+                                            parse_mode=ParseMode.MARKDOWN)
+            return
+        enable = len(args) > 1 and args[1].lower() in ("on", "filter", "yes", "sim")
+        self._agent.configure(target_return_pct=goal, enable_ev_filter=enable)
+        extra = ("I'll *skip* setups projected below it." if enable
+                 else "Shown in every projection; not filtering (add `on` to also skip below-target setups).")
+        await update.message.reply_text(
+            f"🎯 Target set to *+{goal:.1f}%* per trade. {extra}", parse_mode=ParseMode.MARKDOWN)
 
     async def cmd_panic(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._is_master(update):
@@ -505,7 +581,9 @@ class TelegramInterface:
     _HELP = (
         "🪃 *Boomerang AI commands*\n\n"
         "• /start — main menu (🤖 Automatic · 🎮 Manual · Status · Pause · Withdraw)\n"
-        "• /status — situation + *SELL buttons* for each position\n"
+        "• /status — situation + *SELL buttons* + projection/EV per position\n"
+        "• /porque (or /why) — *why no trade*: the candidates the AI blocked and where\n"
+        "• /meta [%] [on] — set your *target return per trade* (e.g. `/meta 3 on`)\n"
         "• /buy SYMBOL [%] — manual buy (e.g. `/buy CAKE` or `/buy FLOKI 100` for all-in)\n"
         "• /pausar (or /parar, /stop) — pauses the agent (resume with /start)\n"
         "• /panic — sells everything *and halts* the agent (emergency)\n"
@@ -540,6 +618,8 @@ class TelegramInterface:
         app.add_handler(CommandHandler(["pausar", "parar", "stop"], self.cmd_pause))
         app.add_handler(CommandHandler(["reiniciar", "restart", "destravar"], self.cmd_reiniciar))
         app.add_handler(CommandHandler("buy", self.cmd_buy))
+        app.add_handler(CommandHandler(["porque", "why", "trace"], self.cmd_porque))
+        app.add_handler(CommandHandler(["meta", "target"], self.cmd_meta))
         app.add_handler(CommandHandler("dashboard", self.cmd_dashboard))
         app.add_handler(CommandHandler(["registrar", "register"], self.cmd_registrar))
         app.add_handler(CommandHandler(["competicao", "compete"], self.cmd_competicao))

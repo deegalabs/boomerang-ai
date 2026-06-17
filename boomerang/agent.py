@@ -96,6 +96,7 @@ class BoomerangAgent:
         self._last_holdings: list = []          # composition per coin (cache for /live panel)
         self._last_mon_save: float = 0.0        # throttle for monitor-driven state saves (live PnL)
         self._last_traces: list = []            # decision trace: why each candidate did NOT enter
+        self._last_posture: str = ""            # latest Action-Matrix posture label (for /status parity)
         self.agent_address: str | None = None   # wallet address (filled in at startup)
 
     # ── loading of eligible addresses ────────────────────────────────────────
@@ -266,8 +267,13 @@ class BoomerangAgent:
     # ── control (called by the interface) ────────────────────────────────────
     def configure(self, *, token_focus: list[str] | None = None,
                   stop_loss_pct: float | None = None, take_profit_pct: float | None = None,
-                  position_size_pct: float | None = None, mode: str | None = None) -> None:
+                  position_size_pct: float | None = None, mode: str | None = None,
+                  target_return_pct: float | None = None, enable_ev_filter: bool | None = None) -> None:
         # Propagates to cfg.user (single source read by the analyzer and the risk engine).
+        if target_return_pct is not None:
+            self._cfg.dev_safety["target_return_pct"] = max(0.0, float(target_return_pct))
+        if enable_ev_filter is not None:
+            self._cfg.dev_safety["enable_ev_filter"] = bool(enable_ev_filter)
         if token_focus is not None:
             self.token_focus = [t.upper() for t in token_focus]
             self._cfg.user["token_focus"] = self.token_focus
@@ -473,7 +479,7 @@ class BoomerangAgent:
                 "symbol": p.symbol, "amount_usd": p.amount_usd, "entry": p.entry_price,
                 "current": cur, "pnl_pct": pnl, "stop": p.stop_loss_price,
                 "take_profit": self._risk.take_profit_price(p.entry_price),
-                "trailing_active": p.trailing_active,
+                "trailing_active": p.trailing_active, "projection": p.projection,
             })
 
         return {
@@ -487,6 +493,10 @@ class BoomerangAgent:
             "stop_loss_pct": self.stop_loss_pct,
             "take_profit_pct": self.take_profit_pct,
             "position_size_pct": self.position_size_pct,
+            "target_return_pct": self._cfg.dev_safety.get("target_return_pct", 0.0),
+            "enable_ev_filter": self._cfg.dev_safety.get("enable_ev_filter", False),
+            "posture": self._last_posture,
+            "traces": list(self._last_traces[-12:]),
             "identity": identity.summary(),
         }
 
@@ -702,6 +712,7 @@ class BoomerangAgent:
         # ACTION MATRIX + ARBITER: the regime dictates which strategies may open + the size/position
         # posture; a strategy bleeding (negative expectancy) is auto-deactivated from its history.
         posture = regime_posture(fng, btc24, funding)
+        self._last_posture = posture.label
         disabled = expectancy_disabled([t for t in load_trades()
                                         if t.get("type") == "close" and t.get("pnl_pct") is not None])
         fired = [(spec, s, st) for (spec, s, st) in fired
