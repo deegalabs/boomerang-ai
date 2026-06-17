@@ -112,6 +112,37 @@ Before executing, the agent **seals its reasoning + the invalidation condition o
 
 ---
 
+## 🎮 Control from Telegram
+
+You **manage the agent entirely from Telegram** — it's the cockpit. The agent runs 24/7 on its
+own and reports every action back to you; the public `/live` page and the `/console` demo are
+read-only windows, not controls.
+
+<p align="center">
+  <img src="docs/img/telegram-cockpit.gif" alt="Boomerang AI — Telegram control panel (real screen recording)" width="300">
+</p>
+
+<p align="center"><sub>Real screen recording of the owner control panel (<code>@boomerang_wallet_ai_bot</code>).</sub></p>
+
+**Three surfaces, one cockpit:**
+
+| Surface | Role | Controls the agent? |
+|---|---|---|
+| **Telegram** | your command panel + live alerts | ✅ owner-only (pinned to your user ID) |
+| **`/live`** | public, read-only on-chain proof | ❌ no |
+| **`/console`** | simulated demo ($100 fake wallet) | ❌ no |
+
+**The flow:**
+
+1. **Set up once** — `/start` → 🤖 *Automatic Mode* (pick tokens, stop, take-profit, size) → ▶️ *Activate*. Register the wallet for the competition with `/registrar`.
+2. **It runs autonomously** — you get a Telegram alert on every trade (with PnL + BscScan link), every rejection, and every on-chain seal.
+3. **Check in anytime** — `/status` (equity, drawdown, posture, positions with live PnL + **EV projection**, on-chain ID) · `/porque` (*why it did **not** trade*) · `/meta` (set your target return per trade).
+4. **Take control when you want** — 🎮 *Manual Mode* / `/buy ETH` · 🔴 *Sell* buttons · `/pausar` · `/panic` (sell all + halt) · 🪃 *Withdraw*.
+
+> Everything on `/live` is mirrored in Telegram, so you never need the web UI to operate — the bot is self-sufficient.
+
+---
+
 ## Sponsor & ecosystem integrations
 
 | Integration | Where | What it does |
