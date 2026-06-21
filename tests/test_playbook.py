@@ -28,6 +28,17 @@ def test_dca_only_after_bounce_started():
     assert select_strategy(18, MOMENTUM) is None
 
 
+def test_fear_but_stable_tape_routes_normally():
+    # Extreme fear but BTC flat/up (no crash) → don't idle: route momentum/mean-rev normally.
+    assert select_strategy(18, MOMENTUM, btc_24h=0.5).key == "momentum"
+    assert select_strategy(18, MEANREV, btc_24h=0.5).key == "mean_reversion"
+    # A deep-drop token in a stable tape is NOT a crash-DCA setup → no trade.
+    assert select_strategy(18, DCA, btc_24h=0.5) is None
+    # A FALLING tape keeps the DCA-only lockdown.
+    assert select_strategy(18, MOMENTUM, btc_24h=-3.0) is None
+    assert select_strategy(18, DCA, btc_24h=-3.0).key == "dca"
+
+
 def test_no_setup_returns_none():
     assert select_strategy(50, FLAT) is None
 
@@ -44,6 +55,15 @@ def test_setup_strength_positive():
 def test_posture_panic_only_dca():
     p = regime_posture(fng=18, btc_24h=-3.0, funding=None)
     assert p.allowed == frozenset({"dca"}) and p.max_positions == 2
+
+
+def test_posture_fear_but_stable_allows_cautious_risk():
+    # Fear (F&G<25) but a stable/up tape → cautious risk, not a full DCA-only lockdown.
+    p = regime_posture(fng=18, btc_24h=0.5, funding=None)
+    assert p.label == "FEAR_STABLE" and "momentum" in p.allowed and "mean_reversion" in p.allowed
+    assert p.size_mult < 0.7 and p.max_positions == 2  # smaller than PANIC's 0.7
+    # A falling tape (BTC <= -2%) still locks down to DCA-only.
+    assert regime_posture(fng=18, btc_24h=-3.0, funding=None).allowed == frozenset({"dca"})
 
 
 def test_posture_risk_off_stands_down():

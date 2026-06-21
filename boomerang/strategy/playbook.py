@@ -27,6 +27,10 @@ VOL_ACCEL_MIN = 20.0    # momentum: volume_change_24h_pct >= 20% = rising intere
 VOL_STABLE_MAX = 40.0   # mean-rev: volume must not be EXPLODING (range, no trend)
 PANIC_FNG = 25          # F&G < 25 = extreme fear → panic regime (only DCA trades)
 DCA_REBOUND_MIN_1H = 0.5  # Crisis Rebound: 1h must be > +0.5% (the bounce STARTED) before buying the panic
+# Extreme fear locks down to DCA-only ONLY when the TAPE is actually falling. If sentiment is
+# fearful but BTC is flat/up (no crash happening), the full lockdown idles the agent for nothing —
+# so above this BTC/24h threshold we treat the regime as "fear but stable" and allow cautious risk.
+FEAR_STABLE_BTC = -2.0
 
 
 @dataclass(frozen=True)
@@ -118,22 +122,27 @@ def by_key(key: str) -> StrategySpec | None:
     return _BY_KEY.get(key or "")
 
 
-def select_strategy(fng: int | None, metrics: dict) -> StrategySpec | None:
+def select_strategy(fng: int | None, metrics: dict,
+                    btc_24h: float | None = None) -> StrategySpec | None:
     """Routes to the active strategy by the REGIME (fear/greed) + token signals.
     Returns the StrategySpec whose deterministic trigger FIRES, or None.
 
     The triggers are almost mutually exclusive (1h cannot be >+2.5% and <-2% at
-    the same time). In PANIC, ONLY DCA trades (scalping would be stopped out by volatility)."""
+    the same time). In PANIC with a FALLING tape, ONLY DCA trades (scalping would be
+    stopped out by the volatility). If fear is high but the tape is stable (BTC flat/up),
+    fall through to the normal momentum/mean-reversion triggers — the posture sizes it down."""
     p1 = metrics.get("percent_change_1h")
     p24 = metrics.get("percent_change_24h")
     if p1 is None or p24 is None:
         return None
     vc = metrics.get("volume_change_24h_pct") or 0.0
 
-    # PANIC (extreme fear): forbids scalping; only DCA on a solid asset in free fall.
-    # CRISIS REBOUND: don't catch the falling knife — only buy once the bounce has STARTED
-    # (price ticking up in the last hour while 24h is deeply negative).
-    if fng is not None and fng < PANIC_FNG:
+    # PANIC (extreme fear) + FALLING tape: forbids scalping; only DCA on a solid asset in
+    # free fall. CRISIS REBOUND: don't catch the falling knife — only buy once the bounce has
+    # STARTED (price ticking up in the last hour while 24h is deeply negative). When fear is high
+    # but the tape is stable (BTC > FEAR_STABLE_BTC), skip this branch and route normally.
+    panic_tape = btc_24h is None or btc_24h <= FEAR_STABLE_BTC
+    if fng is not None and fng < PANIC_FNG and panic_tape:
         if p24 < -10.0 and p1 > DCA_REBOUND_MIN_1H:
             return DCA
         return None
@@ -185,7 +194,11 @@ def regime_posture(fng: int | None, btc_24h: float | None, funding: float | None
     in panic only DCA (smaller, fewer); in a BTC crash stand fully down; when defensive
     (BTC soft / extreme greed / overleveraged funding) shrink size and positions."""
     if fng is not None and fng < PANIC_FNG:
-        return Posture("PANIC", 0.7, 2, frozenset({"dca"}))      # only DCA, modest size
+        # Full DCA-only lockdown ONLY when the tape is actually falling. Fear + a stable/up
+        # tape (no crash) → allow risk trades, but at a reduced size (more cautious than DEFENSIVE).
+        if btc_24h is None or btc_24h <= FEAR_STABLE_BTC:
+            return Posture("PANIC", 0.7, 2, frozenset({"dca"}))  # only DCA, modest size
+        return Posture("FEAR_STABLE", 0.5, 2, _RISK_TRADE)       # fear but tape stable → cautious risk
     if btc_24h is not None and btc_24h <= -5.0:
         return Posture("RISK_OFF", 0.0, 0, frozenset())          # systemic crash → no entries
     overleveraged = funding is not None and funding >= 0.0005
