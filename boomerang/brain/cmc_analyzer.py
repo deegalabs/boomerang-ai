@@ -556,20 +556,23 @@ class AttentionAnalyzer:
     def _effective_cut(self, metrics: dict | None, cut_adjust: int = 0, strategy: str = "") -> int:
         """ADAPTIVE confidence cutoff. Strong momentum lowers the bar; the market REGIME
         (cut_adjust: BULL lowers, DEFENSIVE raises) shifts it too. Deterministic; never
-        below 52 (does not trade pure noise in a directionless range)."""
-        base = self._cfg.min_confidence_score
+        below the floor (does not trade pure noise in a directionless range)."""
+        loose = bool(self._cfg.dev_safety.get("loose_entries", False))
+        base = self._cfg.min_confidence_score - (16 if loose else 0)
         bonus = min(int(momentum_prescore(metrics) * 0.18), 15)  # strong trend: -up to 15 pts
         cut = base - bonus + cut_adjust
         # CHOP SELECTIVITY — ONLY for MOMENTUM. Mean-reversion and DCA have the chop/drop as
         # their TARGET (the deterministic trigger already qualified the setup), so penalizing the
         # off-trend regime here would BLOCK the strategy itself. For those, no penalty.
+        # The loose switch trades chop on purpose, so it skips this penalty entirely.
         m = metrics or {}
-        if strategy in ("", "momentum"):
+        if strategy in ("", "momentum") and not loose:
             if m.get("trend_aligned_down"):
                 cut += 8
             elif not m.get("trend_aligned_up") and not m.get("accelerating"):
                 cut += 4
-        return max(cut, 52)
+        # TEMP live-activity switch drops the floor too so the brain clears BUY on a flat tape.
+        return max(cut, 40 if loose else 52)
 
     @staticmethod
     def _derive(m: dict) -> dict:

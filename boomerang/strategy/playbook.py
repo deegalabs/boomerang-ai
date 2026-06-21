@@ -123,14 +123,17 @@ def by_key(key: str) -> StrategySpec | None:
 
 
 def select_strategy(fng: int | None, metrics: dict,
-                    btc_24h: float | None = None) -> StrategySpec | None:
+                    btc_24h: float | None = None, loose: bool = False) -> StrategySpec | None:
     """Routes to the active strategy by the REGIME (fear/greed) + token signals.
     Returns the StrategySpec whose deterministic trigger FIRES, or None.
 
     The triggers are almost mutually exclusive (1h cannot be >+2.5% and <-2% at
     the same time). In PANIC with a FALLING tape, ONLY DCA trades (scalping would be
     stopped out by the volatility). If fear is high but the tape is stable (BTC flat/up),
-    fall through to the normal momentum/mean-reversion triggers — the posture sizes it down."""
+    fall through to the normal momentum/mean-reversion triggers — the posture sizes it down.
+
+    `loose` (TEMP live-activity switch): drops the trigger bars so the agent transacts on a
+    flat tape. Lower entry quality — the brain cutoff is loosened in tandem (see _effective_cut)."""
     p1 = metrics.get("percent_change_1h")
     p24 = metrics.get("percent_change_24h")
     if p1 is None or p24 is None:
@@ -147,13 +150,17 @@ def select_strategy(fng: int | None, metrics: dict,
             return DCA
         return None
 
+    # Trigger thresholds — loosened for live activity when `loose` is set.
+    mom_1h, mom_24h, mom_vol = (0.5, -2.0, -30.0) if loose else (2.5, 0.0, VOL_ACCEL_MIN)
+    mr_1h, mr_24h, mr_vol = (-0.5, -2.0, 120.0) if loose else (-2.0, 4.0, VOL_STABLE_MAX)
+
     # MOMENTUM: young thrust (strong 1h), aligned upward (24h>0), with rising volume.
-    if p1 > 2.5 and p24 > 0.0 and vc >= VOL_ACCEL_MIN:
+    if p1 > mom_1h and p24 > mom_24h and vc >= mom_vol:
         return MOMENTUM
 
     # MEAN-REVERSION: short dip (1h<-2%) of a token STRONG on the day (24h>+4%), range
     # (stable volume, not exploding = no trend).
-    if p1 < -2.0 and p24 > 4.0 and vc <= VOL_STABLE_MAX:
+    if p1 < mr_1h and p24 > mr_24h and vc <= mr_vol:
         return MEAN_REVERSION
 
     return None

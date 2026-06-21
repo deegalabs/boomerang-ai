@@ -721,7 +721,7 @@ class BoomerangAgent:
             mq = quotes.get(s)
             if not mq or self._exec_cooldown.get(s, 0.0) > now:
                 continue
-            spec = select_strategy(fng, mq, btc24)
+            spec = select_strategy(fng, mq, btc24, self._cfg.loose_entries)
             if spec:
                 fired.append((spec, s, setup_strength(spec, mq)))
         fired.sort(key=lambda x: -x[2])

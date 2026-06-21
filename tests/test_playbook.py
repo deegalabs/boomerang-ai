@@ -39,6 +39,17 @@ def test_fear_but_stable_tape_routes_normally():
     assert select_strategy(18, DCA, btc_24h=-3.0).key == "dca"
 
 
+def test_loose_mode_fires_on_a_mild_move():
+    mild_up = {"percent_change_1h": 0.8, "percent_change_24h": 0.5, "volume_change_24h_pct": 0}
+    mild_dn = {"percent_change_1h": -0.8, "percent_change_24h": 0.5, "volume_change_24h_pct": 0}
+    # Strict mode: nothing fires (move too small).
+    assert select_strategy(50, mild_up) is None
+    assert select_strategy(50, mild_dn) is None
+    # Loose mode: mild moves now route to momentum / mean-reversion.
+    assert select_strategy(50, mild_up, loose=True).key == "momentum"
+    assert select_strategy(50, mild_dn, loose=True).key == "mean_reversion"
+
+
 def test_no_setup_returns_none():
     assert select_strategy(50, FLAT) is None
 

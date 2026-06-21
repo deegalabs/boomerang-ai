@@ -140,6 +140,12 @@ class Config:
         return int(self.dev_safety.get(key, self.dev_safety["min_confidence_score"]))
 
     @property
+    def loose_entries(self) -> bool:
+        """TEMP live-activity switch: loosens the strategy triggers AND the brain cutoff so the
+        agent transacts on a flat tape (lower entry quality — set false to restore discipline)."""
+        return bool(self.dev_safety.get("loose_entries", False))
+
+    @property
     def user_stop_loss_pct(self) -> float:
         return float(self.user["stop_loss_pct"])
 
