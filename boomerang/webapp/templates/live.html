@@ -44,6 +44,7 @@
     <div class="tv-cluster">
       <span class="tv-symbol" id="taSymbol">·</span>
       <span id="lvState" class="pill pill--gold" style="font-size:11px">·</span>
+      <span id="taWhy" class="mut" style="font-size:.74rem"></span>
     </div>
     <div class="tv-cluster tv-eq">
       <div><span class="tv-lbl">{{ t.s_equity }}</span><span class="tv-val grad-gold" id="lvEquity">·</span></div>
@@ -352,7 +353,7 @@ function taRenderPanel(d){
 function uColor(dec){ return dec==='ENTER'?'#34E5A4':dec==='AVOID'?'#FF5470':'#F3BA2F'; }
 function renderUniverse(rows){
   const el=document.getElementById('lvUniverse'); if(!el) return;
-  const charted = window.__pinSym || window.__chartSym || (rows[0]&&rows[0].symbol);
+  const charted = window.__pinSym || window.__chartSym || window.__autoSym || (rows[0]&&rows[0].symbol);
   el.innerHTML = `<div class="mut" style="font-size:.74rem;margin-bottom:7px">${L.watching||'Watching'} ${rows.length} ${L.tokensWord||'tokens'} · live TA — ${(L.bestFirst||'best setup first')}</div>`+
     `<div style="display:flex;flex-wrap:wrap;gap:6px">`+
     rows.map(r=>{const on=r.symbol===charted, c=uColor(r.decision);
@@ -363,17 +364,31 @@ function renderUniverse(rows){
 }
 async function taTick(){
   let u; try{ u=await(await fetch('/api/universe')).json(); }catch(e){ u=null; }
-  if(u&&u.universe&&u.universe.length){ renderUniverse(u.universe); }
-  // chart follows: a pinned token > the open position > the strongest setup
-  const sym = window.__pinSym || window.__chartSym || (u&&u.top) || '';
+  const rows=(u&&u.universe)||[];
+  if(rows.length){ renderUniverse(rows); }
+  // STICKY auto-follow: only hand the chart to a new leader if it beats the current one by a
+  // clear margin (>5) — avoids the chart hopping on every tiny reshuffle (the 1m noise).
+  const scoreOf=s=>{const r=rows.find(x=>x.symbol===s);return r?r.score:-1;};
+  if(rows.length){
+    const top=rows[0].symbol, cur=window.__autoSym;
+    if(!cur || !rows.find(x=>x.symbol===cur) || scoreOf(top)-scoreOf(cur)>5){ window.__autoSym=top; }
+  }
+  // chart priority: a pinned token > the open position > the (sticky) strongest setup
+  const sym = window.__pinSym || window.__chartSym || window.__autoSym || '';
   let d; try{ d=await(await fetch('/api/ta'+(sym?('?symbol='+encodeURIComponent(sym)):''))).json(); }catch(e){ return; }
-  const box=document.getElementById('taBox'), un=document.getElementById('taUnavail');
-  if(!d.available){ box.style.display='none'; un.style.display='block'; un.textContent=TA_UNAVAIL+' · '+(d.symbol||''); return; }
+  const box=document.getElementById('taBox'), un=document.getElementById('taUnavail'), why=document.getElementById('taWhy');
+  if(!d.available){ box.style.display='none'; un.style.display='block'; un.textContent=TA_UNAVAIL+' · '+(d.symbol||''); if(why) why.textContent=''; return; }
   box.style.display=''; un.style.display='none';
   taRenderChart(d); taRenderPanel(d);
+  // make the chart's choice EXPLICIT (why this token), instead of a silent jump
+  if(why){ const cf=d.confluence||{};
+    if(window.__pinSym) why.textContent='📌 '+(L.pinnedByYou||'pinned by you — click again to release');
+    else if(window.__chartSym) why.textContent='📈 '+(L.followingPos||'following your open position');
+    else why.textContent='💡 '+(L.strongestNow||'strongest setup right now')+' · '+(cf.decision||'')+(cf.score!=null?(' '+cf.score):'');
+  }
 }
 document.getElementById('taExpand').addEventListener('click', taToggleFull);
 document.addEventListener('keydown', e=>{ if(e.key!=='Escape') return; if(document.querySelector('.tv-modal.open')) closeModals(); else if(taFull) taToggleFull(); });
-taTick(); setInterval(taTick, 15000);
+taTick(); setInterval(taTick, 30000);  // 5m-ish cadence: calmer, less chart hopping
 </script>
 {% endblock %}
