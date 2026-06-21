@@ -272,12 +272,11 @@ async function tick(){
   document.getElementById("lvHist").innerHTML = deals.length ? deals.slice(0,40).map(x=>{
     const has=x.pnl!=null, win=has&&x.pnl>=0;
     const exitP=(x.entry!=null&&has)?x.entry*(1+x.pnl/100):null;
-    const pnlUsd=(x.amount!=null&&has)?x.amount*x.pnl/100:null;
     const head = !x.closed
       ? `<span class="pill pill--up" style="font-size:10px">${L.openTag||'OPEN'}</span>`
-      : `<span class="${win?'pos':'neg'}" style="font-weight:700">${win?'+':''}${x.pnl.toFixed(2)}%${pnlUsd!=null?` · ${win?'+':''}$${Math.abs(pnlUsd).toFixed(2)}`:''}</span>`;
+      : `<span class="${win?'pos':'neg'}" style="font-weight:700">${win?'+':''}${x.pnl.toFixed(2)}%</span>`;
     const when = fmtDt(x.inTs)+(x.outTs?(' → '+fmtDt(x.outTs)):'')+((x.outTs&&x.inTs)?(' · '+fmtDur(x.outTs-x.inTs)):'');
-    const prices = (x.entry!=null?('entry '+px(x.entry)):'')+(exitP!=null?(' → exit '+px(exitP)):'')+(x.amount!=null?(' · '+usd(x.amount)):'');
+    const prices = (x.entry!=null?('entry '+px(x.entry)):'')+(exitP!=null?(' → exit '+px(exitP)):'');
     const why = x.closed ? (REASON_LBL[x.reason]||x.reason||'') : (L.runningTag||'running');
     const ctx = [x.strat, x.regime, why].filter(Boolean).join(' · ');
     const tx = x.tx?`<a href="${SCAN}/tx/${x.tx}" target="_blank" style="color:var(--info);font-size:.68rem">${L.tx} ↗</a>`:'';
