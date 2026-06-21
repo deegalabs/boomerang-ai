@@ -1,7 +1,7 @@
 {
   "_comment": "Boomerang AI \u00e2\u20ac\u201d regras unificadas. 'user' = ajust\u00c3\u00a1vel via Telegram. 'dev_safety' e 'hackathon' = imut\u00c3\u00a1veis (leis de seguran\u00c3\u00a7a e regras do evento).",
   "user": {
-    "_token_focus_note": "Apenas tokens com liquidez REAL na PancakeSwap (>~20k em WBNB). Removidos ATOM/BCH/AAVE (Binance-Peg, negociados em CEX, sem pool DEX \u00e2\u20ac\u201d swaps revertem).",
+    "_token_focus_note": "Apenas tokens com liquidez REAL na PancakeSwap (impacto <= 1.5% no notional cheio, validado on-chain). A maioria dos 149 elegiveis e Binance-Peg/CEX sem pool DEX (swaps revertem) e fica de fora. FIL/TON/ACH adicionados apos validacao de liquidez (passam a $27).",
     "token_focus": [
       "ETH",
       "XRP",
@@ -14,7 +14,10 @@
       "UNI",
       "SHIB",
       "FLOKI",
-      "TWT"
+      "TWT",
+      "FIL",
+      "TON",
+      "ACH"
     ],
     "stop_loss_pct": 4.0,
     "take_profit_pct": 10.0,
