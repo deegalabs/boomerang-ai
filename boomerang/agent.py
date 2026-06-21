@@ -318,6 +318,7 @@ class BoomerangAgent:
             "identity": identity.summary(),
             "traces": self._last_traces[-12:],
             "last_seal": self._last_seal,
+            "llm": self._analyzer.usage_summary(),
         }
 
     def _save(self) -> None:

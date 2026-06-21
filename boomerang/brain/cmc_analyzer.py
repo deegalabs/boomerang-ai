@@ -116,6 +116,22 @@ class CMCClient:
                           or config.cmc["mcp_endpoint"])
         # Optional TWAK executor: pays for the tools (402) via `twak x402 request`.
         self._executor = executor
+        self._llm_calls = self._llm_in = self._llm_out = 0  # token usage for the live cost panel
+
+    # ── LLM cost tracking (for the /live "brain cost" panel) ──────────────────
+    def _track(self, msg) -> None:  # noqa: ANN001 — accumulate token usage from a Claude response
+        try:
+            self._llm_calls += 1
+            self._llm_in += msg.usage.input_tokens
+            self._llm_out += msg.usage.output_tokens
+        except Exception:  # noqa: BLE001
+            pass
+
+    def usage_summary(self) -> dict:
+        # Claude Sonnet est. pricing ($/token): in $3/M, out $15/M. Shown with a "~" on the UI.
+        cost = self._llm_in * 3.0 / 1e6 + self._llm_out * 15.0 / 1e6
+        return {"calls": self._llm_calls, "in_tokens": self._llm_in,
+                "out_tokens": self._llm_out, "cost_usd": round(cost, 4)}
 
     def _headers(self) -> dict[str, str]:
         h = {"Accept": "application/json, text/event-stream"}
@@ -618,6 +634,7 @@ class AttentionAnalyzer:
             tool_choice={"type": "tool", "name": "submit_verdict"},
             messages=[{"role": "user", "content": user}],
         )
+        self._track(msg)
         return self._parse_verdict(symbol, msg, cut)
 
     def _parse_verdict(self, symbol: str, msg, cut: int) -> Verdict:  # noqa: ANN001
@@ -689,6 +706,7 @@ class AttentionAnalyzer:
             tool_choice={"type": "tool", "name": "submit_exit"},
             messages=[{"role": "user", "content": user}],
         )
+        self._track(msg)
         for block in msg.content:
             if getattr(block, "type", None) == "tool_use" and block.name == "submit_exit":
                 d = block.input

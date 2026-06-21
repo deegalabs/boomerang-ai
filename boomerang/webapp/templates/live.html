@@ -103,11 +103,11 @@
   <!-- ACTIVITY FEED + PERFORMANCE -->
   <div class="grid cols-2" style="gap:14px;margin-top:14px">
     <div class="card" style="padding:16px 18px">
-      <span class="card__lbl">⚡ Activity</span>
+      <span class="card__lbl">⚡ Agent activity — live log</span>
       <div id="lvActivity" style="margin-top:8px"><span class="mut">·</span></div>
     </div>
     <div class="card" style="padding:16px 18px">
-      <span class="card__lbl">📊 Performance</span>
+      <span class="card__lbl">📊 Performance — closed trades</span>
       <div id="lvPerf" style="margin-top:8px"><span class="mut">·</span></div>
     </div>
   </div>
@@ -115,11 +115,11 @@
   <!-- RISK LOCKS + SELF-CUSTODY (trust) -->
   <div class="grid cols-2" style="gap:14px;margin-top:14px">
     <div class="card" style="padding:16px 18px">
-      <span class="card__lbl">🛡️ Risk locks — it can't blow up</span>
+      <span class="card__lbl">🛡️ Safety limits — it can't blow up</span>
       <div id="lvRisk" style="margin-top:10px"><span class="mut">·</span></div>
     </div>
     <div class="card" style="padding:16px 18px">
-      <span class="card__lbl">🔐 Self-custody — it can't run off with funds</span>
+      <span class="card__lbl">🔐 Your funds are safe — self-custody</span>
       <p style="font-size:.82rem;color:var(--muted);margin:9px 0 8px">Your keys never leave your Trust Wallet. The agent signs every swap <b>locally</b> and can only return funds to <b>you</b> — the anti-drain rule is enforced at execution.</p>
       <div style="font-size:.74rem">Withdrawals only to the owner: <a href="https://bscscan.com/address/0x779126dd2937974118d67568d1bc5b69b84f059c" target="_blank" class="mono" style="color:var(--info)">0x779126…f059c ↗</a></div>
       <div style="margin-top:8px"><button class="tv-btn" data-modal="mProof" style="font-size:.72rem">⛓ See the on-chain proof</button></div>
@@ -129,23 +129,6 @@
 
   <p class="mono" id="lvUpd" style="text-align:center;color:var(--faint);font-size:.72rem;margin-top:16px"></p>
 
-  <!-- FLOATING AGENT CONSOLE (minimizable) -->
-  <style>
-    .agent-console{position:fixed;right:18px;bottom:18px;width:380px;max-width:calc(100vw - 36px);background:rgba(10,14,26,.97);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.6);z-index:60;backdrop-filter:blur(8px);overflow:hidden}
-    .ac-head{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;cursor:pointer;background:rgba(255,255,255,.04);border-bottom:1px solid var(--line);font-size:.82rem;user-select:none}
-    .ac-body{max-height:300px;overflow-y:auto;padding:6px 14px;font-size:.74rem}
-    .agent-console.min{width:auto}
-    .agent-console.min .ac-body{display:none}
-    .ac-line{padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05);line-height:1.45}
-    @media(max-width:640px){.agent-console{right:10px;bottom:10px;width:calc(100vw - 20px)}}
-  </style>
-  <div id="agentConsole" class="agent-console">
-    <div class="ac-head" onclick="toggleConsole()">
-      <span>🖥️ <b>Agent console</b><span class="mut" id="acState" style="font-size:.68rem;margin-left:6px"></span></span>
-      <span id="acToggle" class="mono" style="opacity:.7">▁</span>
-    </div>
-    <div class="ac-body" id="acBody"><span class="mut">·</span></div>
-  </div>
 
   <!-- MODALS -->
   <div class="tv-modal" id="mProof"><div class="tv-modal-box">
@@ -233,10 +216,11 @@ function renderMacro(m, posture){
   if(posture) parts.push(`🧭 <b>${posture}</b>`);
   el.innerHTML = parts.length ? parts.join('<span class="mut" style="margin:0 9px">·</span>') : '<span class="mut">market context loads when the agent runs</span>';
 }
-function renderPerf(deals){
+function renderPerf(deals, llm){
   const el=document.getElementById('lvPerf'); if(!el) return;
+  const llmLine=(llm&&llm.calls)?`<div class="mut" style="font-size:.7rem;margin-top:8px;border-top:1px solid var(--line-soft);padding-top:8px">🤖 Brain (Claude Sonnet): ${llm.calls} calls · ~$${(llm.cost_usd||0).toFixed(4)} <span style="opacity:.6">since start</span></div>`:'';
   const cl=deals.filter(x=>x.closed&&x.pnl!=null);
-  if(!cl.length){ el.innerHTML='<span class="mut">No closed trades yet — fund the agent and it starts trading</span>'; return; }
+  if(!cl.length){ el.innerHTML='<span class="mut">No closed trades yet — fund the agent and it starts trading</span>'+llmLine; return; }
   const n=cl.length, wins=cl.filter(x=>x.pnl>=0).length, wr=wins/n*100, avg=cl.reduce((a,x)=>a+x.pnl,0)/n;
   const best=Math.max(...cl.map(x=>x.pnl)), worst=Math.min(...cl.map(x=>x.pnl));
   const firstTs=Math.min(...cl.map(x=>x.inTs||x.outTs||Infinity).filter(isFinite)), cum=cl.reduce((a,x)=>a+x.pnl,0);
@@ -245,7 +229,7 @@ function renderPerf(deals){
   const byR={}; cl.forEach(x=>{const r=x.regime||'—';(byR[r]=byR[r]||[]).push(x.pnl);});
   const reg=Object.entries(byR).map(([r,a])=>`<span class="mut" style="font-size:.72rem">${r} ${(a.filter(p=>p>=0).length/a.length*100).toFixed(0)}% (${a.length})</span>`).join(' · ');
   const cell=(k,v,cls='')=>`<div style="text-align:center;flex:1"><div class="mut" style="font-size:.64rem">${k}</div><div class="${cls}" style="font-size:1.02rem;font-weight:700">${v}</div></div>`;
-  el.innerHTML=track+`<div style="display:flex;gap:6px">`+cell('Trades',n)+cell('Win rate',wr.toFixed(0)+'%',wr>=50?'pos':'neg')+cell('Avg',(avg>=0?'+':'')+avg.toFixed(2)+'%',avg>=0?'pos':'neg')+cell('Best','+'+best.toFixed(1)+'%','pos')+cell('Worst',worst.toFixed(1)+'%','neg')+`</div>`+(reg?`<div style="border-top:1px solid var(--line-soft);margin-top:8px;padding-top:8px"><span class="mut" style="font-size:.66rem">by regime · </span>${reg}</div>`:'');
+  el.innerHTML=track+`<div style="display:flex;gap:6px">`+cell('Trades',n)+cell('Win rate',wr.toFixed(0)+'%',wr>=50?'pos':'neg')+cell('Avg',(avg>=0?'+':'')+avg.toFixed(2)+'%',avg>=0?'pos':'neg')+cell('Best','+'+best.toFixed(1)+'%','pos')+cell('Worst',worst.toFixed(1)+'%','neg')+`</div>`+(reg?`<div style="border-top:1px solid var(--line-soft);margin-top:8px;padding-top:8px"><span class="mut" style="font-size:.66rem">by regime · </span>${reg}</div>`:'')+llmLine;
 }
 function renderActivity(trades, traces){
   const el=document.getElementById('lvActivity'); if(!el) return; const ev=[];
@@ -274,21 +258,6 @@ function renderSeal(seal){
   const agoTxt = ago<90?'just now':ago<3600?(Math.round(ago/60)+'m ago'):ago<86400?(Math.round(ago/3600)+'h ago'):(Math.round(ago/86400)+'d ago');
   const tx=seal.tx?`<a href="${SCAN}/tx/${seal.tx}" target="_blank" style="color:var(--info)">tx ↗</a>`:'<span class="mut">gas-free</span>';
   el.innerHTML=`🔒 <b>Reasoning sealed on-chain</b> · ${seal.symbol||''} · ${agoTxt} · ${tx}<br><span class="mut" style="font-size:.7rem">recorded BEFORE the outcome existed — can't be made up afterwards</span>`;
-}
-function toggleConsole(){ const c=document.getElementById('agentConsole'); c.classList.toggle('min'); document.getElementById('acToggle').textContent=c.classList.contains('min')?'▢':'▁'; }
-function renderConsole(d){
-  const s=d.state||{}, trades=d.trades||[], traces=s.traces||[], seal=s.last_seal;
-  const st=document.getElementById('acState'); if(st) st.textContent='· '+(s.state||'')+(s.posture?(' · '+s.posture):'');
-  const ev=[];
-  traces.slice(-5).reverse().forEach(t=>ev.push({ts:null, h:`🛡️ skip <b>${t.symbol}</b> <span class="mut">${(t.reason||'').slice(0,36)}</span>`}));
-  if(seal&&seal.ts) ev.push({ts:seal.ts, h:`🔒 sealed reasoning <b>${seal.symbol||''}</b> on-chain`});
-  [...trades].forEach(t=>{
-    if(t.type==='open') ev.push({ts:t.ts, h:`✅ buy <b>${t.symbol}</b> <span class="mut">${t.strategy||''}</span>`});
-    else if(t.type==='close'){const w=t.pnl_pct!=null&&t.pnl_pct>=0; ev.push({ts:t.ts, h:`🏁 sell <b>${t.symbol}</b> ${t.pnl_pct!=null?`<span class="${w?'pos':'neg'}">${w?'+':''}${t.pnl_pct.toFixed(2)}%</span>`:''} <span class="mut">${(REASON_LBL[t.reason]||t.reason||'').slice(0,20)}</span>`});}
-  });
-  const nowEv=ev.filter(e=>e.ts==null), timed=ev.filter(e=>e.ts!=null).sort((a,b)=>b.ts-a.ts);
-  const all=[...nowEv,...timed].slice(0,40);
-  const b=document.getElementById('acBody'); if(b) b.innerHTML = all.length ? all.map(e=>`<div class="ac-line"><span class="mut" style="font-size:.64rem">${e.ts?((fmtDt(e.ts)+'').split(' ')[1]||''):'now'}</span> ${e.h}</div>`).join('') : '<span class="mut">agent idle — waiting for the next cycle</span>';
 }
 const short = a => a ? a.slice(0,6)+"…"+a.slice(-4) : "·";
 const KIND = {gas:["BNB (gas)","#F3BA2F"], stable:["stable","#5AA9FF"], token:["token","#34E5A4"]};
@@ -409,10 +378,9 @@ async function tick(){
   // Macro context · activity feed · performance (use the paired deals + raw events)
   renderMacro(d.macro, s.posture);
   renderActivity(trades, s.traces);
-  renderPerf(deals);
+  renderPerf(deals, s.llm);
   renderRisk(s);
   renderSeal(s.last_seal);
-  renderConsole(d);
 
   // Decision trace — why each candidate did NOT enter
   const tr = s.traces || [];
@@ -506,7 +474,7 @@ function uColor(dec){ return dec==='ENTER'?'#34E5A4':dec==='AVOID'?'#FF5470':'#F
 function renderUniverse(rows){
   const el=document.getElementById('lvUniverse'); if(!el) return;
   const charted = window.__pinSym || window.__chartSym || window.__autoSym || (rows[0]&&rows[0].symbol);
-  el.innerHTML = `<div class="mut" style="font-size:.74rem;margin-bottom:7px">${L.watching||'Watching'} ${rows.length} ${L.tokensWord||'tokens'} · live TA — ${(L.bestFirst||'best setup first')}</div>`+
+  el.innerHTML = `<div class="mut" style="font-size:.74rem;margin-bottom:7px">📡 Watched universe · ${rows.length} tokens — live signals (strongest first)</div>`+
     `<div style="display:flex;flex-wrap:wrap;gap:6px">`+
     rows.map(r=>{const on=r.symbol===charted, c=uColor(r.decision);
       return `<span onclick="window.__pinSym=(window.__pinSym==='${r.symbol}'?null:'${r.symbol}');taTick()" title="${r.decision} · ${r.mode||''} · ${(r.reason||'').replace(/"/g,'')}" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:5px 11px;border-radius:999px;border:1px solid ${on?c:'rgba(255,255,255,.09)'};background:${on?'rgba(243,186,47,.08)':'rgba(255,255,255,.03)'}">`+

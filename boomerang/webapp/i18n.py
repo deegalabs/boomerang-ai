@@ -85,7 +85,7 @@ TR: dict[str, dict[str, str]] = {
         "l_cta_title": "Ready to watch the boomerang fly?",
         # ---- Live panel ----
         "lv_title": "Live proof", "lv_sub": "Read-only. Verifiable on-chain.",
-        "lv_peak": "Peak", "lv_positions": "Open positions", "lv_composition": "Wallet composition",
+        "lv_peak": "Peak", "lv_positions": "Open positions", "lv_composition": "Wallet & funds",
         "lv_history": "Trade history", "lv_none": "none", "lv_no_trades": "no trades yet",
         "lv_coin": "Coin", "lv_value": "Value", "lv_share": "Share", "lv_amount": "Amount",
         "lv_stop": "Stop", "lv_type": "Type", "lv_buy": "BUY", "lv_sell": "SELL", "lv_tx": "Tx",
@@ -102,7 +102,7 @@ TR: dict[str, dict[str, str]] = {
         "lv_ta_sub": "What the agent sees right now — candles with EMA, VWAP and Fibonacci, and the confluence that drives the decision.",
         "lv_ta_unavail": "No candle data for this token (on-chain only)",
         "lv_ta_expand": "Expand", "lv_ta_close": "Close",
-        "lv_proof_btn": "On-chain proof", "lv_confluence": "Confluence",
+        "lv_proof_btn": "On-chain proof", "lv_confluence": "Why this token — live signals",
         "lv_trace": "Why no trade", "lv_trace_empty": "no rejections this cycle",
     },
     "pt": {
@@ -172,7 +172,7 @@ TR: dict[str, dict[str, str]] = {
         "l_cta_title": "Pronto para ver o boomerang voar?",
         # ---- Painel ao vivo ----
         "lv_title": "Prova ao vivo", "lv_sub": "Só leitura. Verificável on-chain.",
-        "lv_peak": "Pico", "lv_positions": "Posições abertas", "lv_composition": "Composição da carteira",
+        "lv_peak": "Pico", "lv_positions": "Posições abertas", "lv_composition": "Carteira & fundos",
         "lv_history": "Histórico de trades", "lv_none": "nenhuma", "lv_no_trades": "nenhum trade ainda",
         "lv_coin": "Moeda", "lv_value": "Valor", "lv_share": "Parte", "lv_amount": "Valor",
         "lv_stop": "Stop", "lv_type": "Tipo", "lv_buy": "COMPRA", "lv_sell": "VENDA", "lv_tx": "Tx",
@@ -189,7 +189,7 @@ TR: dict[str, dict[str, str]] = {
         "lv_ta_sub": "O que o agente enxerga agora — candles com EMA, VWAP e Fibonacci, e a confluência que guia a decisão.",
         "lv_ta_unavail": "Sem dados de candle pra este token (só on-chain)",
         "lv_ta_expand": "Expandir", "lv_ta_close": "Fechar",
-        "lv_proof_btn": "Prova on-chain", "lv_confluence": "Confluência",
+        "lv_proof_btn": "Prova on-chain", "lv_confluence": "Por que este token — sinais ao vivo",
         "lv_trace": "Por que não comprou", "lv_trace_empty": "nenhuma rejeição neste ciclo",
     },
 }
