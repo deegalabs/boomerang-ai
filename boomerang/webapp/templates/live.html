@@ -123,6 +123,7 @@
       <p style="font-size:.82rem;color:var(--muted);margin:9px 0 8px">Your keys never leave your Trust Wallet. The agent signs every swap <b>locally</b> and can only return funds to <b>you</b> — the anti-drain rule is enforced at execution.</p>
       <div style="font-size:.74rem">Withdrawals only to the owner: <a href="https://bscscan.com/address/0x779126dd2937974118d67568d1bc5b69b84f059c" target="_blank" class="mono" style="color:var(--info)">0x779126…f059c ↗</a></div>
       <div style="margin-top:8px"><button class="tv-btn" data-modal="mProof" style="font-size:.72rem">⛓ See the on-chain proof</button></div>
+      <div id="lvSeal" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-soft);font-size:.74rem"><span class="mut">·</span></div>
     </div>
   </div>
 
@@ -248,6 +249,14 @@ function renderRisk(s){
   el.innerHTML = gauge('Drawdown → circuit breaker', dd, br)+gauge('Daily loss → daily cap', dl, cap)+
     `<div style="font-size:.74rem;margin-top:8px">${s.halted?'<span class="neg">🔴 HALTED — a limit was hit, trading stopped</span>':'<span class="pos">🟢 Armed</span> <span class="mut">— auto-stops if a limit is hit</span>'}</div>`;
 }
+function renderSeal(seal){
+  const el=document.getElementById('lvSeal'); if(!el) return;
+  if(!seal||!seal.ts){ el.innerHTML='<span class="mut">🔒 Before every trade, the agent seals its reasoning on-chain — the proof shows here on the next entry.</span>'; return; }
+  const ago=Math.max(0,Math.round(Date.now()/1000-seal.ts));
+  const agoTxt = ago<90?'just now':ago<3600?(Math.round(ago/60)+'m ago'):ago<86400?(Math.round(ago/3600)+'h ago'):(Math.round(ago/86400)+'d ago');
+  const tx=seal.tx?`<a href="${SCAN}/tx/${seal.tx}" target="_blank" style="color:var(--info)">tx ↗</a>`:'<span class="mut">gas-free</span>';
+  el.innerHTML=`🔒 <b>Reasoning sealed on-chain</b> · ${seal.symbol||''} · ${agoTxt} · ${tx}<br><span class="mut" style="font-size:.7rem">recorded BEFORE the outcome existed — can't be made up afterwards</span>`;
+}
 const short = a => a ? a.slice(0,6)+"…"+a.slice(-4) : "·";
 const KIND = {gas:["BNB (gas)","#F3BA2F"], stable:["stable","#5AA9FF"], token:["token","#34E5A4"]};
 const STATECLR = {IN_POSITION:"pill--up", SCANNING:"pill--gold", PAUSED:"pill", HALTED:"pill--down", IDLE:"pill"};
@@ -363,6 +372,7 @@ async function tick(){
   renderActivity(trades, s.traces);
   renderPerf(deals);
   renderRisk(s);
+  renderSeal(s.last_seal);
 
   // Decision trace — why each candidate did NOT enter
   const tr = s.traces || [];

@@ -97,6 +97,7 @@ class BoomerangAgent:
         self._last_mon_save: float = 0.0        # throttle for monitor-driven state saves (live PnL)
         self._last_traces: list = []            # decision trace: why each candidate did NOT enter
         self._last_posture: str = ""            # latest Action-Matrix posture label (for /status parity)
+        self._last_seal: dict | None = None     # last reasoning sealed on-chain (for the /live "verify" panel)
         self.agent_address: str | None = None   # wallet address (filled in at startup)
 
     # ── loading of eligible addresses ────────────────────────────────────────
@@ -316,6 +317,7 @@ class BoomerangAgent:
             "positions": [asdict(p) for p in self.positions],
             "identity": identity.summary(),
             "traces": self._last_traces[-12:],
+            "last_seal": self._last_seal,
         }
 
     def _save(self) -> None:
@@ -1179,6 +1181,9 @@ class BoomerangAgent:
                 await self._emit(AlertType.STARTED, "🔒 Reasoning sealed on-chain (pre-execution)",
                                  f"{symbol}: the thesis was recorded on BNB Chain BEFORE the trade — "
                                  "verifiable proof, can't be made up afterwards.", tx=res.get("tx"))
+                self._last_seal = {"symbol": symbol, "tx": res.get("tx"),
+                                   "hash": res["hash"][:14], "ts": int(now)}
+                self._save()
         except Exception as exc:  # noqa: BLE001
             self._log.warning("On-chain pre-commit failed (ignored): %s", exc)
 
