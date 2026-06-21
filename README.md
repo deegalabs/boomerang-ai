@@ -4,7 +4,7 @@
 
 ### An autonomous, self-custody crypto trading agent on BNB Chain — controlled from Telegram, verifiable on-chain.
 
-It reads attention on **CoinMarketCap**, decides with **Claude (Opus 4.8)**, and signs its own
+It reads attention on **CoinMarketCap**, decides with **Claude (Sonnet)**, and signs its own
 self-custody swaps via the **Trust Wallet Agent Kit**. Capital *goes to the market and comes
 back* — like a boomerang.
 
