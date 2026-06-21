@@ -131,12 +131,36 @@ async def live_page(request):  # noqa: ANN001
     return _resp(request, "live.html", "/live")
 
 
+_BASE_USDC = {"v": None, "ts": 0.0}  # cached so we don't hit the Base RPC on every poll
+
+
+async def _base_usdc(addr: str):  # noqa: ANN001 — agent's USDC-on-Base balance (the x402 reserve)
+    import time
+    if not addr:
+        return None
+    if _BASE_USDC["v"] is not None and time.time() - _BASE_USDC["ts"] < 60:
+        return _BASE_USDC["v"]
+    try:
+        data = "0x70a08231" + addr.lower().replace("0x", "").rjust(64, "0")
+        async with httpx.AsyncClient(timeout=5.0) as c:
+            r = await c.post("https://mainnet.base.org", json={
+                "jsonrpc": "2.0", "method": "eth_call", "id": 1,
+                "params": [{"to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "data": data}, "latest"]})
+            v = int(r.json()["result"], 16) / 1e6
+        _BASE_USDC.update(v=round(v, 2), ts=time.time())
+        return _BASE_USDC["v"]
+    except Exception:  # noqa: BLE001
+        return _BASE_USDC["v"]
+
+
 async def api_live(request):  # noqa: ANN001 — public, read-only of the persisted state
+    st = load_state() or {}
     mc = market_cache.get()
-    return JSONResponse({"state": load_state() or {}, "trades": load_trades(),
+    return JSONResponse({"state": st, "trades": load_trades(),
                          "identity": identity.summary(),
                          "macro": {"btc_24h": mc.get("btc_24h"), "fng": mc.get("fng"),
-                                   "age_s": round(market_cache.age_seconds())}})
+                                   "age_s": round(market_cache.age_seconds())},
+                         "base_usdc": await _base_usdc(st.get("agent_address", ""))})
 
 
 async def api_ta(request):  # noqa: ANN001 — live technical analysis for the chart + confluence panel

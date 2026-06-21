@@ -129,6 +129,24 @@
 
   <p class="mono" id="lvUpd" style="text-align:center;color:var(--faint);font-size:.72rem;margin-top:16px"></p>
 
+  <!-- FLOATING AGENT CONSOLE (minimizable) -->
+  <style>
+    .agent-console{position:fixed;right:18px;bottom:18px;width:380px;max-width:calc(100vw - 36px);background:rgba(10,14,26,.97);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.6);z-index:60;backdrop-filter:blur(8px);overflow:hidden}
+    .ac-head{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;cursor:pointer;background:rgba(255,255,255,.04);border-bottom:1px solid var(--line);font-size:.82rem;user-select:none}
+    .ac-body{max-height:300px;overflow-y:auto;padding:6px 14px;font-size:.74rem}
+    .agent-console.min{width:auto}
+    .agent-console.min .ac-body{display:none}
+    .ac-line{padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05);line-height:1.45}
+    @media(max-width:640px){.agent-console{right:10px;bottom:10px;width:calc(100vw - 20px)}}
+  </style>
+  <div id="agentConsole" class="agent-console">
+    <div class="ac-head" onclick="toggleConsole()">
+      <span>🖥️ <b>Agent console</b><span class="mut" id="acState" style="font-size:.68rem;margin-left:6px"></span></span>
+      <span id="acToggle" class="mono" style="opacity:.7">▁</span>
+    </div>
+    <div class="ac-body" id="acBody"><span class="mut">·</span></div>
+  </div>
+
   <!-- MODALS -->
   <div class="tv-modal" id="mProof"><div class="tv-modal-box">
     <button class="tv-modal-x" data-close>✕</button>
@@ -257,6 +275,21 @@ function renderSeal(seal){
   const tx=seal.tx?`<a href="${SCAN}/tx/${seal.tx}" target="_blank" style="color:var(--info)">tx ↗</a>`:'<span class="mut">gas-free</span>';
   el.innerHTML=`🔒 <b>Reasoning sealed on-chain</b> · ${seal.symbol||''} · ${agoTxt} · ${tx}<br><span class="mut" style="font-size:.7rem">recorded BEFORE the outcome existed — can't be made up afterwards</span>`;
 }
+function toggleConsole(){ const c=document.getElementById('agentConsole'); c.classList.toggle('min'); document.getElementById('acToggle').textContent=c.classList.contains('min')?'▢':'▁'; }
+function renderConsole(d){
+  const s=d.state||{}, trades=d.trades||[], traces=s.traces||[], seal=s.last_seal;
+  const st=document.getElementById('acState'); if(st) st.textContent='· '+(s.state||'')+(s.posture?(' · '+s.posture):'');
+  const ev=[];
+  traces.slice(-5).reverse().forEach(t=>ev.push({ts:null, h:`🛡️ skip <b>${t.symbol}</b> <span class="mut">${(t.reason||'').slice(0,36)}</span>`}));
+  if(seal&&seal.ts) ev.push({ts:seal.ts, h:`🔒 sealed reasoning <b>${seal.symbol||''}</b> on-chain`});
+  [...trades].forEach(t=>{
+    if(t.type==='open') ev.push({ts:t.ts, h:`✅ buy <b>${t.symbol}</b> <span class="mut">${t.strategy||''}</span>`});
+    else if(t.type==='close'){const w=t.pnl_pct!=null&&t.pnl_pct>=0; ev.push({ts:t.ts, h:`🏁 sell <b>${t.symbol}</b> ${t.pnl_pct!=null?`<span class="${w?'pos':'neg'}">${w?'+':''}${t.pnl_pct.toFixed(2)}%</span>`:''} <span class="mut">${(REASON_LBL[t.reason]||t.reason||'').slice(0,20)}</span>`});}
+  });
+  const nowEv=ev.filter(e=>e.ts==null), timed=ev.filter(e=>e.ts!=null).sort((a,b)=>b.ts-a.ts);
+  const all=[...nowEv,...timed].slice(0,40);
+  const b=document.getElementById('acBody'); if(b) b.innerHTML = all.length ? all.map(e=>`<div class="ac-line"><span class="mut" style="font-size:.64rem">${e.ts?((fmtDt(e.ts)+'').split(' ')[1]||''):'now'}</span> ${e.h}</div>`).join('') : '<span class="mut">agent idle — waiting for the next cycle</span>';
+}
 const short = a => a ? a.slice(0,6)+"…"+a.slice(-4) : "·";
 const KIND = {gas:["BNB (gas)","#F3BA2F"], stable:["stable","#5AA9FF"], token:["token","#34E5A4"]};
 const STATECLR = {IN_POSITION:"pill--up", SCANNING:"pill--gold", PAUSED:"pill", HALTED:"pill--down", IDLE:"pill"};
@@ -306,12 +339,18 @@ async function tick(){
     (Number(s.target_return_pct||0)>0?`<span class="pill pill--gold" style="font-size:11px">🎯 +${Number(s.target_return_pct).toFixed(1)}%/trade</span>`:"");
   // lvUniverse is now the live-TA scoreboard, owned by taTick() / renderUniverse()
 
-  // Composition
+  // Composition — what's in the wallet and what each part is FOR
   const h = s.holdings || [];
-  document.getElementById("lvComp").innerHTML = h.length
-    ? `<table class="tbl"><tr><th>${L.coin}</th><th>${L.value}</th><th>${L.share}</th></tr>`+
-      h.map(x=>{ const k=KIND[x.kind]||["",""]; return `<tr><td><b>${x.symbol}</b> <span class="pill" style="color:${k[1]};font-size:10px">${k[0]}</span></td><td class="mono">${usd(x.value_usd)}</td><td class="mono mut">${(x.pct||0).toFixed(1)}%</td></tr>`; }).join("")+`</table>`
-    : `<span class="mut">·</span>`;
+  const purpose = x => x.symbol==='BNB'?'⛽ gas — pays transaction fees':x.symbol==='USDC'?'💵 trading bankroll':x.kind==='stable'?'stable reserve (heartbeat)':'📈 open position';
+  let comp = h.map(x=>`<div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line-soft)">
+      <span><b>${x.symbol}</b> <span class="mut" style="font-size:.72rem">${purpose(x)}</span></span>
+      <span class="mono">${usd(x.value_usd)} <span class="mut" style="font-size:.7rem">${(x.pct||0).toFixed(0)}%</span></span></div>`).join("");
+  if(d.base_usdc!=null && d.base_usdc>0.01){
+    comp += `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)">
+      <span><b>USDC</b> <span class="pill" style="color:#BF5AF2;font-size:10px">Base</span> <span class="mut" style="font-size:.72rem">🔌 x402 reserve — pays CMC Agent Hub per call</span></span>
+      <span class="mono">${usd(d.base_usdc)}</span></div>`;
+  }
+  document.getElementById("lvComp").innerHTML = comp || `<span class="mut">·</span>`;
 
   // Positions
   document.getElementById("lvPos").innerHTML = pos.length
@@ -373,6 +412,7 @@ async function tick(){
   renderPerf(deals);
   renderRisk(s);
   renderSeal(s.last_seal);
+  renderConsole(d);
 
   // Decision trace — why each candidate did NOT enter
   const tr = s.traces || [];
