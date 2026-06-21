@@ -311,6 +311,7 @@ class BoomerangAgent:
             "breaker_pct": self._cfg.drawdown_safety_pct,
             "daily_cap_pct": self._cfg.daily_loss_cap_pct,
             "halted": self._risk.halted,
+            "posture": self._last_posture or None,
             "last_trade_ts": self._risk.last_trade_ts,
             "agent_address": self.agent_address,
             "holdings": self._last_holdings,
