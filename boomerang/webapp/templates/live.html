@@ -218,7 +218,7 @@ function renderMacro(m, posture){
 }
 function renderPerf(deals, llm){
   const el=document.getElementById('lvPerf'); if(!el) return;
-  const llmLine=(llm&&llm.calls)?`<div class="mut" style="font-size:.7rem;margin-top:8px;border-top:1px solid var(--line-soft);padding-top:8px">🤖 Brain (Claude Sonnet): ${llm.calls} calls · ~$${(llm.cost_usd||0).toFixed(4)} <span style="opacity:.6">since start</span></div>`:'';
+  const llmLine=llm?`<div class="mut" style="font-size:.7rem;margin-top:8px;border-top:1px solid var(--line-soft);padding-top:8px">🤖 Brain (Claude Sonnet): ${llm.calls||0} calls · ~$${(llm.cost_usd||0).toFixed(4)} <span style="opacity:.6">since start</span></div>`:'';
   const cl=deals.filter(x=>x.closed&&x.pnl!=null);
   if(!cl.length){ el.innerHTML='<span class="mut">No closed trades yet — fund the agent and it starts trading</span>'+llmLine; return; }
   const n=cl.length, wins=cl.filter(x=>x.pnl>=0).length, wr=wins/n*100, avg=cl.reduce((a,x)=>a+x.pnl,0)/n;
