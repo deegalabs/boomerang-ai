@@ -175,6 +175,9 @@ const L = {
 const SCAN = "https://bscscan.com";
 const usd = v => v==null ? "·" : "$"+Number(v).toFixed(2);
 const px  = v => { v=Number(v); if(!isFinite(v)) return "·"; return "$"+(v>=1?v.toFixed(4):v>=0.0001?v.toFixed(6):v.toExponential(2)); };
+const fmtDt  = ts => { if(!ts) return "·"; const d=new Date(ts*1000), p=n=>String(n).padStart(2,"0"); return `${p(d.getDate())}/${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+const fmtDur = s => { if(!s||s<0) return "·"; const m=Math.round(s/60); return m<60?(m+"m"):(Math.floor(m/60)+"h"+String(m%60).padStart(2,"0")); };
+const REASON_LBL = { SELL_STOP_LOSS:"🛑 stop-loss hit", SELL_TRAILING:"📈 trailing — profit locked", SELL_TAKE_PROFIT:"🎯 take-profit reached", SELL_BRAIN:"🧠 smart exit — thesis changed", SELL_TIME_STALE:"⏳ time-stop — idle capital freed", SELL_ROTACAO:"🔁 rotation — better setup", SELL_MANUAL:"🤝 manual sell", "liquidação":"🚨 liquidation — circuit breaker" };
 const short = a => a ? a.slice(0,6)+"…"+a.slice(-4) : "·";
 const KIND = {gas:["BNB (gas)","#F3BA2F"], stable:["stable","#5AA9FF"], token:["token","#34E5A4"]};
 const STATECLR = {IN_POSITION:"pill--up", SCANNING:"pill--gold", PAUSED:"pill", HALTED:"pill--down", IDLE:"pill"};
@@ -253,17 +256,38 @@ async function tick(){
       }).join("")+`</table>`
     : `<span class="mut">${L.none}</span>`;
 
-  // History
-  const rows = [...trades].reverse().slice(0,30).map(x=>{
-    const tx = x.tx ? `<a href="${SCAN}/tx/${x.tx}" target="_blank" style="color:var(--info)">${L.tx} ↗</a>` : `<span class="mut">·</span>`;
-    const tipo = x.type==="open" ? `<span class="pill pill--up" style="font-size:10px">${L.buy}</span>` : `<span class="pill" style="font-size:10px">${L.sell}</span>`;
-    const pnl = x.pnl_pct!=null ? `<span class="${x.pnl_pct>=0?'pos':'neg'}">${x.pnl_pct>=0?'+':''}${Number(x.pnl_pct).toFixed(2)}%</span>` : "";
-    const val = x.type==="open" ? usd(x.amount_usd) : pnl;
-    return `<tr><td>${tipo}</td><td><b>${x.symbol}</b></td><td class="mono">${val}</td><td>${tx}</td></tr>`;
-  }).join("");
-  document.getElementById("lvHist").innerHTML = rows
-    ? `<table class="tbl"><tr><th>${L.type}</th><th>${L.token}</th><th>${L.value}/${L.pnl}</th><th>${L.tx}</th></tr>${rows}</table>`
-    : `<span class="mut">${L.noTrades}</span>`;
+  // History — pair each close with its open to tell the full trade story (entry→exit, won/lost, why)
+  const _open = {}, deals = [];
+  trades.forEach(t=>{
+    if(t.type==="open"){ (_open[t.symbol]=_open[t.symbol]||[]).push(t); }
+    else if(t.type==="close"){
+      const o=(_open[t.symbol]||[]).shift()||{};
+      deals.push({sym:t.symbol, inTs:o.ts, outTs:t.ts, entry:o.entry_price, amount:o.amount_usd,
+        strat:o.strategy||t.strategy, regime:t.regime||o.regime, pnl:t.pnl_pct, reason:t.reason, tx:t.tx, closed:true});
+    }
+  });
+  Object.values(_open).flat().forEach(o=>deals.push({sym:o.symbol, inTs:o.ts, entry:o.entry_price,
+    amount:o.amount_usd, strat:o.strategy, regime:o.regime, tx:o.tx, closed:false}));
+  deals.sort((a,b)=>(b.outTs||b.inTs||0)-(a.outTs||a.inTs||0));
+  document.getElementById("lvHist").innerHTML = deals.length ? deals.slice(0,40).map(x=>{
+    const has=x.pnl!=null, win=has&&x.pnl>=0;
+    const exitP=(x.entry!=null&&has)?x.entry*(1+x.pnl/100):null;
+    const pnlUsd=(x.amount!=null&&has)?x.amount*x.pnl/100:null;
+    const head = !x.closed
+      ? `<span class="pill pill--up" style="font-size:10px">${L.openTag||'OPEN'}</span>`
+      : `<span class="${win?'pos':'neg'}" style="font-weight:700">${win?'+':''}${x.pnl.toFixed(2)}%${pnlUsd!=null?` · ${win?'+':''}$${Math.abs(pnlUsd).toFixed(2)}`:''}</span>`;
+    const when = fmtDt(x.inTs)+(x.outTs?(' → '+fmtDt(x.outTs)):'')+((x.outTs&&x.inTs)?(' · '+fmtDur(x.outTs-x.inTs)):'');
+    const prices = (x.entry!=null?('entry '+px(x.entry)):'')+(exitP!=null?(' → exit '+px(exitP)):'')+(x.amount!=null?(' · '+usd(x.amount)):'');
+    const why = x.closed ? (REASON_LBL[x.reason]||x.reason||'') : (L.runningTag||'running');
+    const ctx = [x.strat, x.regime, why].filter(Boolean).join(' · ');
+    const tx = x.tx?`<a href="${SCAN}/tx/${x.tx}" target="_blank" style="color:var(--info);font-size:.68rem">${L.tx} ↗</a>`:'';
+    return `<div style="padding:11px 0;border-bottom:1px solid var(--line-soft)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+        <span style="font-size:.92rem"><b>${x.sym}</b> <span class="mut" style="font-size:.68rem">${when}</span></span>${head}</div>
+      <div class="mono mut" style="font-size:.68rem;margin-top:3px">${prices} ${tx}</div>
+      <div style="font-size:.74rem;margin-top:3px;color:var(--muted)">${ctx}</div>
+    </div>`;
+  }).join("") : `<span class="mut">${L.noTrades}</span>`;
 
   // Decision trace — why each candidate did NOT enter
   const tr = s.traces || [];
