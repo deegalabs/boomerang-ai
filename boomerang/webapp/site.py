@@ -176,6 +176,33 @@ async def api_ta(request):  # noqa: ANN001 — live technical analysis for the c
     })
 
 
+# decision priority for ranking the universe scoreboard (best buy candidate first)
+_UNIV_RANK = {"ENTER": 0, "WAIT": 1, "AVOID": 2}
+
+
+async def api_universe(request):  # noqa: ANN001 — live TA scoreboard across the watched universe
+    """Confluence decision + score for EACH watched token (read-only). Powers the /live
+    scoreboard and tells the chart which token has the strongest setup right now. Klines are
+    cached (~30s), so the parallel fan-out is cheap on repeat polls."""
+    st = load_state() or {}
+    focus = st.get("token_focus") or ["BNB", "ETH", "SOL"]
+
+    async def _score(sym):
+        try:
+            kl = await asyncio.to_thread(fetch_klines, sym, "1m", 90)
+            if not kl or len(kl) < 30:
+                return None
+            conf = evaluate_confluence(compute_indicators(kl))
+            return {"symbol": sym, "decision": conf.decision, "score": round(conf.score, 1),
+                    "mode": conf.mode, "reason": (conf.reasons[0] if conf.reasons else (conf.veto or ""))}
+        except Exception:  # noqa: BLE001
+            return None
+
+    rows = [r for r in await asyncio.gather(*[_score(s) for s in focus[:24]]) if r]
+    rows.sort(key=lambda r: (_UNIV_RANK.get(r["decision"], 3), -r["score"]))
+    return JSONResponse({"universe": rows, "top": rows[0]["symbol"] if rows else None})
+
+
 async def api_x402_status(request):  # noqa: ANN001 — our x402 payment, in the Google A2A x402 standard shape
     """Describes the agent's load-bearing x402 integration using the standard A2A x402
     field names + a real verified settlement on Base (conformance proof for judges)."""
@@ -309,7 +336,7 @@ def create_app() -> Starlette:
     routes = [
         Route("/", home), Route("/style", style), Route("/docs", docs_page),
         Route("/guides", guides_page), Route("/live", live_page),
-        Route("/api/live", api_live), Route("/api/ta", api_ta),
+        Route("/api/live", api_live), Route("/api/ta", api_ta), Route("/api/universe", api_universe),
         Route("/api/x402-status", api_x402_status), Route("/console", console_page),
         Route("/api/auth/nonce", auth_nonce, methods=["POST"]),
         Route("/api/auth/verify", auth_verify, methods=["POST"]),

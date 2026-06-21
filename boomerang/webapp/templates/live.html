@@ -207,6 +207,7 @@ async function tick(){
   ddEl.className = "tv-val " + (dd>=20?"neg":dd>=10?"":"pos");
   setText("lvPeak", usd(s.peak_equity));
   const pos = s.positions || [];
+  window.__chartSym = pos.length ? pos[0].symbol : null;  // chart follows the open position
   setText("lvPosN", pos.length); setText("lvPosN2", pos.length);
 
   // Posture & engine + watched universe
@@ -217,11 +218,7 @@ async function tick(){
     `<span class="pill" style="font-size:11px">${tpG>0?('TP +'+tpG.toFixed(0)+'%'):'TP: '+L.trailing}</span>`+
     `<span class="pill" style="font-size:11px">${L.size}: ${Number(s.position_size_pct||0).toFixed(0)}%</span>`+
     (Number(s.target_return_pct||0)>0?`<span class="pill pill--gold" style="font-size:11px">🎯 +${Number(s.target_return_pct).toFixed(1)}%/trade</span>`:"");
-  const uni = s.token_focus || [];
-  document.getElementById("lvUniverse").innerHTML = uni.length
-    ? `<span class="mut" style="font-size:.78rem">${L.watching} ${uni.length} ${L.tokensWord}:</span><br>`+
-      uni.map(t=>`<span class="pill" style="font-size:10px;margin:3px 3px 0 0">${t}</span>`).join("")
-    : "";
+  // lvUniverse is now the live-TA scoreboard, owned by taTick() / renderUniverse()
 
   // Composition
   const h = s.holdings || [];
@@ -352,8 +349,24 @@ function taRenderPanel(d){
     [['RSI',f(st.rsi)],['MACD',f(st.macd_hist)],['ADX',f(st.adx)],['%B',st.bb_pct_b!=null?(Math.round(st.bb_pct_b*100)/100):'·'],['ATR%',f(st.atr_pct)],['VWAP Δ',f(st.vwap_dist_pct,'%')]]
     .map(([k,v])=>`<div style="text-align:center;flex:1"><div class="mono" style="font-size:.66rem;color:#6E7388">${k}</div><div class="mono" style="font-size:1rem;color:#F5F5F7">${v}</div></div>`).join('');
 }
+function uColor(dec){ return dec==='ENTER'?'#34E5A4':dec==='AVOID'?'#FF5470':'#F3BA2F'; }
+function renderUniverse(rows){
+  const el=document.getElementById('lvUniverse'); if(!el) return;
+  const charted = window.__pinSym || window.__chartSym || (rows[0]&&rows[0].symbol);
+  el.innerHTML = `<div class="mut" style="font-size:.74rem;margin-bottom:7px">${L.watching||'Watching'} ${rows.length} ${L.tokensWord||'tokens'} · live TA — ${(L.bestFirst||'best setup first')}</div>`+
+    `<div style="display:flex;flex-wrap:wrap;gap:6px">`+
+    rows.map(r=>{const on=r.symbol===charted, c=uColor(r.decision);
+      return `<span onclick="window.__pinSym=(window.__pinSym==='${r.symbol}'?null:'${r.symbol}');taTick()" title="${r.decision} · ${r.mode||''} · ${(r.reason||'').replace(/"/g,'')}" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:5px 11px;border-radius:999px;border:1px solid ${on?c:'rgba(255,255,255,.09)'};background:${on?'rgba(243,186,47,.08)':'rgba(255,255,255,.03)'}">`+
+        `<span style="width:7px;height:7px;border-radius:50%;background:${c};flex-shrink:0"></span>`+
+        `<b style="color:#F5F5F7">${r.symbol}</b><span class="mono" style="color:#6E7388">${r.score}</span>${on?' 📌':''}</span>`;
+    }).join('')+`</div>`;
+}
 async function taTick(){
-  let d; try{ d=await(await fetch('/api/ta')).json(); }catch(e){ return; }
+  let u; try{ u=await(await fetch('/api/universe')).json(); }catch(e){ u=null; }
+  if(u&&u.universe&&u.universe.length){ renderUniverse(u.universe); }
+  // chart follows: a pinned token > the open position > the strongest setup
+  const sym = window.__pinSym || window.__chartSym || (u&&u.top) || '';
+  let d; try{ d=await(await fetch('/api/ta'+(sym?('?symbol='+encodeURIComponent(sym)):''))).json(); }catch(e){ return; }
   const box=document.getElementById('taBox'), un=document.getElementById('taUnavail');
   if(!d.available){ box.style.display='none'; un.style.display='block'; un.textContent=TA_UNAVAIL+' · '+(d.symbol||''); return; }
   box.style.display=''; un.style.display='none';
