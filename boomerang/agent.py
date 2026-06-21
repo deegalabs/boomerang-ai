@@ -1059,6 +1059,12 @@ class BoomerangAgent:
         """Qualitative re-evaluation of the position by the brain (throttled). Exits if the thesis
         broke (momentum turned / volume dried up / overextended), regardless of the stop."""
         now = time.time()
+        # Minimum hold before the DISCRETIONARY brain exit can fire: give the thesis room to
+        # play out instead of scratching a position in ~75s and paying round-trip fees for nothing.
+        # The mechanical stop/trailing/time-stop (check_positions) still protect against real moves.
+        min_hold = float(self._cfg.dev_safety.get("min_hold_min_before_brain_exit", 0.0))
+        if min_hold > 0 and (now - pos.opened_at) / 60.0 < min_hold:
+            return False
         if now - self._exit_checks.get(pos.symbol, 0.0) < 300:  # 1 re-evaluation / 5min / position
             return False
         self._exit_checks[pos.symbol] = now
