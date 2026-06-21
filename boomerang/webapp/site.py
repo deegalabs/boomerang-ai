@@ -23,6 +23,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
+from boomerang import market_cache
 from boomerang.identity import bnb_agent as identity
 from boomerang.payments import x402_std
 from boomerang.persistence import load_state, load_trades
@@ -131,8 +132,11 @@ async def live_page(request):  # noqa: ANN001
 
 
 async def api_live(request):  # noqa: ANN001 — public, read-only of the persisted state
+    mc = market_cache.get()
     return JSONResponse({"state": load_state() or {}, "trades": load_trades(),
-                         "identity": identity.summary()})
+                         "identity": identity.summary(),
+                         "macro": {"btc_24h": mc.get("btc_24h"), "fng": mc.get("fng"),
+                                   "age_s": round(market_cache.age_seconds())}})
 
 
 async def api_ta(request):  # noqa: ANN001 — live technical analysis for the chart + confluence panel
