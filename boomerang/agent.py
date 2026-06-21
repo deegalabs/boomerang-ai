@@ -305,6 +305,11 @@ class BoomerangAgent:
             "equity_usd": self._last_equity,
             "drawdown_pct": (self._risk.current_drawdown_pct(self._last_equity)
                              if self._last_equity else 0.0),
+            "daily_drawdown_pct": (self._risk.daily_drawdown_pct(self._last_equity)
+                                   if self._last_equity else 0.0),
+            "breaker_pct": self._cfg.drawdown_safety_pct,
+            "daily_cap_pct": self._cfg.daily_loss_cap_pct,
+            "halted": self._risk.halted,
             "last_trade_ts": self._risk.last_trade_ts,
             "agent_address": self.agent_address,
             "holdings": self._last_holdings,

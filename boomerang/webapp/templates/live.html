@@ -112,6 +112,20 @@
     </div>
   </div>
 
+  <!-- RISK LOCKS + SELF-CUSTODY (trust) -->
+  <div class="grid cols-2" style="gap:14px;margin-top:14px">
+    <div class="card" style="padding:16px 18px">
+      <span class="card__lbl">🛡️ Risk locks — it can't blow up</span>
+      <div id="lvRisk" style="margin-top:10px"><span class="mut">·</span></div>
+    </div>
+    <div class="card" style="padding:16px 18px">
+      <span class="card__lbl">🔐 Self-custody — it can't run off with funds</span>
+      <p style="font-size:.82rem;color:var(--muted);margin:9px 0 8px">Your keys never leave your Trust Wallet. The agent signs every swap <b>locally</b> and can only return funds to <b>you</b> — the anti-drain rule is enforced at execution.</p>
+      <div style="font-size:.74rem">Withdrawals only to the owner: <a href="https://bscscan.com/address/0x779126dd2937974118d67568d1bc5b69b84f059c" target="_blank" class="mono" style="color:var(--info)">0x779126…f059c ↗</a></div>
+      <div style="margin-top:8px"><button class="tv-btn" data-modal="mProof" style="font-size:.72rem">⛓ See the on-chain proof</button></div>
+    </div>
+  </div>
+
   <p class="mono" id="lvUpd" style="text-align:center;color:var(--faint);font-size:.72rem;margin-top:16px"></p>
 
   <!-- MODALS -->
@@ -206,10 +220,13 @@ function renderPerf(deals){
   if(!cl.length){ el.innerHTML='<span class="mut">No closed trades yet — fund the agent and it starts trading</span>'; return; }
   const n=cl.length, wins=cl.filter(x=>x.pnl>=0).length, wr=wins/n*100, avg=cl.reduce((a,x)=>a+x.pnl,0)/n;
   const best=Math.max(...cl.map(x=>x.pnl)), worst=Math.min(...cl.map(x=>x.pnl));
+  const firstTs=Math.min(...cl.map(x=>x.inTs||x.outTs||Infinity).filter(isFinite)), cum=cl.reduce((a,x)=>a+x.pnl,0);
+  const since=isFinite(firstTs)?((fmtDt(firstTs)+'').split(' ')[0]):'—';
+  const track=`<div class="mut" style="font-size:.72rem;margin-bottom:8px">📅 Trading since <b>${since}</b> · ${n} closed · cumulative <b class="${cum>=0?'pos':'neg'}">${cum>=0?'+':''}${cum.toFixed(2)}%</b> <span style="opacity:.7">(price move, gross)</span></div>`;
   const byR={}; cl.forEach(x=>{const r=x.regime||'—';(byR[r]=byR[r]||[]).push(x.pnl);});
   const reg=Object.entries(byR).map(([r,a])=>`<span class="mut" style="font-size:.72rem">${r} ${(a.filter(p=>p>=0).length/a.length*100).toFixed(0)}% (${a.length})</span>`).join(' · ');
   const cell=(k,v,cls='')=>`<div style="text-align:center;flex:1"><div class="mut" style="font-size:.64rem">${k}</div><div class="${cls}" style="font-size:1.02rem;font-weight:700">${v}</div></div>`;
-  el.innerHTML=`<div style="display:flex;gap:6px">`+cell('Trades',n)+cell('Win rate',wr.toFixed(0)+'%',wr>=50?'pos':'neg')+cell('Avg',(avg>=0?'+':'')+avg.toFixed(2)+'%',avg>=0?'pos':'neg')+cell('Best','+'+best.toFixed(1)+'%','pos')+cell('Worst',worst.toFixed(1)+'%','neg')+`</div>`+(reg?`<div style="border-top:1px solid var(--line-soft);margin-top:8px;padding-top:8px"><span class="mut" style="font-size:.66rem">by regime · </span>${reg}</div>`:'');
+  el.innerHTML=track+`<div style="display:flex;gap:6px">`+cell('Trades',n)+cell('Win rate',wr.toFixed(0)+'%',wr>=50?'pos':'neg')+cell('Avg',(avg>=0?'+':'')+avg.toFixed(2)+'%',avg>=0?'pos':'neg')+cell('Best','+'+best.toFixed(1)+'%','pos')+cell('Worst',worst.toFixed(1)+'%','neg')+`</div>`+(reg?`<div style="border-top:1px solid var(--line-soft);margin-top:8px;padding-top:8px"><span class="mut" style="font-size:.66rem">by regime · </span>${reg}</div>`:'');
 }
 function renderActivity(trades, traces){
   const el=document.getElementById('lvActivity'); if(!el) return; const ev=[];
@@ -220,6 +237,16 @@ function renderActivity(trades, traces){
   });
   el.innerHTML = ev.length ? ev.slice(0,12).map(e=>`<div style="display:flex;gap:9px;padding:5px 0;border-bottom:1px solid var(--line-soft);font-size:.78rem;align-items:baseline">
     <span class="mono mut" style="font-size:.64rem;width:42px;flex-shrink:0">${e.t==='now'?'now':((e.t+'').split(' ')[1]||'')}</span><span>${e.h}</span></div>`).join('') : '<span class="mut">·</span>';
+}
+function renderRisk(s){
+  const el=document.getElementById('lvRisk'); if(!el) return;
+  const dd=Math.abs(Number(s.drawdown_pct||0)), br=Number(s.breaker_pct||23);
+  const dl=Math.abs(Number(s.daily_drawdown_pct||0)), cap=Number(s.daily_cap_pct||15);
+  const gauge=(lbl,cur,lim)=>{ const pct=lim>0?Math.min(100,cur/lim*100):0, col=pct>=80?'#FF5470':pct>=50?'#F3BA2F':'#34E5A4';
+    return `<div style="margin-bottom:11px"><div style="display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:4px"><span class="mut">${lbl}</span><span class="mono">-${cur.toFixed(1)}% / -${lim.toFixed(0)}%</span></div>`+
+      `<div style="height:8px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden"><div style="height:100%;width:${pct}%;background:${col};border-radius:999px;transition:width .4s,background .4s"></div></div></div>`; };
+  el.innerHTML = gauge('Drawdown → circuit breaker', dd, br)+gauge('Daily loss → daily cap', dl, cap)+
+    `<div style="font-size:.74rem;margin-top:8px">${s.halted?'<span class="neg">🔴 HALTED — a limit was hit, trading stopped</span>':'<span class="pos">🟢 Armed</span> <span class="mut">— auto-stops if a limit is hit</span>'}</div>`;
 }
 const short = a => a ? a.slice(0,6)+"…"+a.slice(-4) : "·";
 const KIND = {gas:["BNB (gas)","#F3BA2F"], stable:["stable","#5AA9FF"], token:["token","#34E5A4"]};
@@ -335,6 +362,7 @@ async function tick(){
   renderMacro(d.macro, s.posture);
   renderActivity(trades, s.traces);
   renderPerf(deals);
+  renderRisk(s);
 
   // Decision trace — why each candidate did NOT enter
   const tr = s.traces || [];
