@@ -442,8 +442,18 @@ class BoomerangAgent:
         await self._emit(AlertType.CIRCUIT_BREAKER, "Circuit breaker triggered", reason)
         await self._liquidate_all()
         self._risk.halt()
-        await self._emit(AlertType.PAUSED, "Capital protected in stablecoin", "Agent halted (READ_ONLY).")
+        await self._warn_halt_activity(reason)  # actionable: the 24/7 daily-trade rule is now at risk
         await self._publish_risk_state(halted_event=True)  # on-chain proof that the killswitch fired
+
+    async def _warn_halt_activity(self, reason: str) -> None:
+        """A HALT stops ALL trading — including the daily heartbeat — so the hackathon's 24/7 /
+        minimum-1-trade-per-day rule is at risk. Warn the owner immediately to /reiniciar in time."""
+        await self._emit(
+            AlertType.PAUSED,
+            "⚠️ Agent HALTED — daily-trade rule at risk",
+            "Capital is protected in stablecoin (READ_ONLY). While halted the agent makes NO "
+            "trades — including the daily heartbeat — so the 24/7 minimum-1-trade/day rule is at "
+            f"risk.\nReason: {reason}\nResume now with */reiniciar* to keep it active.")
 
     async def _liquidate_all(self) -> None:
         for pos in list(self.positions):
@@ -646,6 +656,7 @@ class BoomerangAgent:
             self.state = AgentState.HALTED
             await self._emit(AlertType.CIRCUIT_BREAKER, "Anomaly halt",
                              "rapid-buy pattern detected — agent frozen, manual review required")
+            await self._warn_halt_activity("rapid-buy anomaly tripwire")
             return
 
         if self._risk.needs_heartbeat(now):
