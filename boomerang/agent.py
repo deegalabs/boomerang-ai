@@ -318,7 +318,7 @@ class BoomerangAgent:
             "identity": identity.summary(),
             "traces": self._last_traces[-12:],
             "last_seal": self._last_seal,
-            "llm": self._analyzer.usage_summary(),
+            "llm": self._llm_usage(),
         }
 
     def _save(self) -> None:
@@ -326,6 +326,13 @@ class BoomerangAgent:
             save_state(self.snapshot())
         except Exception as exc:  # noqa: BLE001
             self._log.warning("Failed to save state: %s", exc)
+
+    def _llm_usage(self):
+        """LLM token-usage summary for /live — defensive so a brain hiccup never blocks _save."""
+        try:
+            return self._analyzer.usage_summary()
+        except Exception:  # noqa: BLE001
+            return None
 
     def restore(self) -> bool:
         """Loads saved state (if any). Returns True if it restored."""
