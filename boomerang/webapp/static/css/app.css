@@ -356,14 +356,14 @@ h3 { font-size: 1.4rem; letter-spacing: -.01em; }
 .proof-row .val a { color: var(--info); }
 
 /* ----- Docs -------------------------------------------------------------- */
-.docs { display: grid; grid-template-columns: 232px 1fr; gap: 48px; align-items: start; padding-block: clamp(32px, 5vw, 56px); }
+.docs { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 48px; align-items: start; padding-block: clamp(32px, 5vw, 56px); }
 .docs-side { position: sticky; top: 88px; align-self: start; }
 .docs-side .lbl { font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--faint); padding: 0 12px 10px; }
 .docs-side a { display: block; padding: 8px 12px; border-radius: var(--r-sm); color: var(--muted); font-size: .92rem; border-left: 2px solid transparent; transition: .15s; }
 .docs-side a:hover { color: var(--text); background: rgba(255,255,255,.03); }
 .docs-side a.active { color: var(--gold); border-left-color: var(--gold); }
 
-.docs-body { max-width: 760px; }
+.docs-body { max-width: 760px; min-width: 0; overflow-wrap: break-word; }
 .docs-body section { padding-block: 14px 40px; scroll-margin-top: 88px; border-bottom: 1px solid var(--line-soft); }
 .docs-body section:last-child { border-bottom: none; }
 .docs-body h2 { font-size: clamp(1.6rem, 3vw, 2.1rem); margin-bottom: 8px; }
@@ -463,6 +463,28 @@ h3 { font-size: 1.4rem; letter-spacing: -.01em; }
   .wrap { padding-inline: 18px; }
   .card { padding: 18px 16px; }
 }
+/* Phones: compact the landing + safe wrapping so nothing is clipped */
+@media (max-width: 640px) {
+  .section { padding-block: 40px; }
+  .display { font-size: clamp(2.05rem, 8.6vw, 2.7rem); line-height: 1.08; }
+  h2 { font-size: clamp(1.62rem, 6.6vw, 2.1rem); }
+  h3 { font-size: 1.22rem; }
+  .lead { font-size: 1.04rem; }
+  .hero-stage { min-height: 200px; }
+  .hero-bmrg { width: 158px; }
+  .hero-glow { width: 220px; height: 220px; }
+  .hero-stats { gap: 16px; margin-top: 22px; padding-top: 16px; }
+  .hs-v { font-size: 1.2rem; }
+  .sec-head h2 { margin: 10px 0 12px; }
+  .spon { padding: 24px 20px; }
+  .shield { padding: 22px 20px; }
+  .shield .num { font-size: 2rem; }
+  .narrate .lead { max-width: none; }
+  .foot { padding-block: 26px; margin-top: 28px; }
+}
+/* Belt-and-suspenders against horizontal overflow on any page */
+.codeblock, pre, table { max-width: 100%; }
+.docs-body .mono, .proof-row .val { overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
