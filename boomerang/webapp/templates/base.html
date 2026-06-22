@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
   <!-- Display: Bricolage Grotesque · Body: Hanken Grotesk · Mono: JetBrains Mono -->
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/app.css?v=20260617">
+  <link rel="stylesheet" href="/static/css/app.css?v=20260622">
   <link rel="icon" href="/static/img/favicon.svg">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
@@ -19,7 +19,7 @@
   <div class="vignette" aria-hidden="true"></div>
 
   <!-- ============ NAV ============ -->
-  <header class="nav">
+  <header class="nav" x-data="{ open: false }" @keydown.escape.window="open = false">
     <div class="wrap nav__in">
       <a class="brand" href="/" aria-label="Boomerang AI">
         {% include "partials/mark.html" %}
@@ -37,11 +37,23 @@
           <a href="?lang=en" class="{{ 'on' if lang == 'en' else '' }}">EN</a>
           <a href="?lang=pt" class="{{ 'on' if lang == 'pt' else '' }}">PT</a>
         </span>
-        <a class="btn btn--gold btn--sm" href="/console">
+        <a class="btn btn--gold btn--sm nav__cta" href="/console">
           <span class="dot" style="color:#14160E"></span>{{ t.connect }}
         </a>
+        <button class="nav__burger" type="button" @click="open = !open"
+                :aria-expanded="open.toString()" aria-label="Menu">
+          <span></span><span></span><span></span>
+        </button>
       </div>
     </div>
+
+    <!-- mobile drawer -->
+    <nav class="nav__drawer" x-cloak x-show="open" x-transition.opacity.duration.180ms @click="open = false">
+      {% for path, label in nav %}
+        <a href="{{ path }}"{% if path == active %} class="active"{% endif %}>{{ label }}</a>
+      {% endfor %}
+      <a href="/console" class="drawer-cta">{{ t.connect }}</a>
+    </nav>
   </header>
 
   <!-- ============ PAGE ============ -->

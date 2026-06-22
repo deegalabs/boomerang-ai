@@ -36,6 +36,25 @@
     color:#A7ADBE;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:14px}
   .tv-modal-x:hover{color:#fff}
   .tv-modal-title{font-size:1.2rem;margin:0 0 16px;color:#F5F5F7}
+
+  /* ----- Mobile layout ----- */
+  @media(max-width:700px){
+    .tv-wrap{padding:16px 14px 48px}
+    .tv-bar{gap:12px 14px;padding:14px}
+    .tv-symbol{font-size:1.3rem}
+    .tv-eq{margin-left:0;width:100%;gap:24px;order:3;padding-top:12px;
+      border-top:1px solid rgba(255,255,255,0.07)}
+    .tv-actions{width:100%;display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    .tv-actions .tv-btn{justify-content:center}
+    .tv-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 8px;
+      padding:14px;min-height:0}
+    #lvMacro{font-size:.78rem;line-height:1.7}
+    #lvChart{height:320px!important}
+  }
+  @media(max-width:380px){
+    .tv-actions{grid-template-columns:1fr}
+    .tv-strip{grid-template-columns:repeat(2,1fr)}
+  }
 </style>
 
 <div class="tv-wrap">
