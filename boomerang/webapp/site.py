@@ -173,7 +173,7 @@ async def api_ta(request):  # noqa: ANN001 — live technical analysis for the c
         focus = st.get("token_focus") or ["BNB"]
         symbol = ((ps[0].get("symbol") if ps else None) or focus[0]).upper()
 
-    klines = await asyncio.to_thread(fetch_klines, symbol, "1m", 90)
+    klines = await asyncio.to_thread(fetch_klines, symbol, "5m", 90)
     if not klines or len(klines) < 30:
         return JSONResponse({"symbol": symbol, "available": False})
 
@@ -217,7 +217,7 @@ async def api_universe(request):  # noqa: ANN001 — live TA scoreboard across t
 
     async def _score(sym):
         try:
-            kl = await asyncio.to_thread(fetch_klines, sym, "1m", 90)
+            kl = await asyncio.to_thread(fetch_klines, sym, "5m", 90)
             if not kl or len(kl) < 30:
                 return None
             conf = evaluate_confluence(compute_indicators(kl))

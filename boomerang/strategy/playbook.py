@@ -54,18 +54,20 @@ class StrategySpec:
 
 MOMENTUM = StrategySpec(
     "momentum", "Momentum/Attention",
-    stop_pct=1.0, take_profit_pct=0.0,
-    trailing_trigger_pct=2.5, trailing_pct=1.5,
-    time_stop_min=20.0, time_stop_band_pct=0.2,
+    # 5m-timeframe exits: a wide stop survives ordinary 5m noise (the 1% stop bled on noise),
+    # the trailing only arms after a real move, and a longer time-stop lets the thrust develop.
+    stop_pct=3.0, take_profit_pct=0.0,
+    trailing_trigger_pct=4.0, trailing_pct=2.0,
+    time_stop_min=60.0, time_stop_band_pct=0.3,
 )
 
 MEAN_REVERSION = StrategySpec(
     "mean_reversion", "Mean Reversion",
-    # TP must clear round-trip friction (0.5% PancakeSwap fees + slippage) with margin —
-    # a 1.2% TP nets negative by construction. 2.5% leaves real edge; the stop stays tight.
-    stop_pct=0.8, take_profit_pct=2.5,
+    # 5m-timeframe exits: stop wide enough to survive noise, TP at 2:1 R/R clears round-trip
+    # friction (0.5% fees + slippage) with real margin; time-stop frees capital if it stalls.
+    stop_pct=2.5, take_profit_pct=5.0,
     trailing_trigger_pct=0.0, trailing_pct=0.0,
-    time_stop_min=120.0, time_stop_band_pct=0.6,  # free capital if the bounce stalls (no 6h squat)
+    time_stop_min=180.0, time_stop_band_pct=0.6,
 )
 
 DCA = StrategySpec(

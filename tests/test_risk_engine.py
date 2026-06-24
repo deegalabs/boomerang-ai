@@ -101,18 +101,18 @@ def test_max_positions_blocks(engine):
 
 # ── evaluate_position per strategy ───────────────────────────────────────────
 def test_momentum_stop_then_trailing(engine):
-    assert engine.evaluate_position(_pos(MOMENTUM), 99.0) == ExitSignal.SELL_STOP_LOSS
+    assert engine.evaluate_position(_pos(MOMENTUM), 97.0) == ExitSignal.SELL_STOP_LOSS  # -3% stop
     p = _pos(MOMENTUM)
-    engine.evaluate_position(p, 103.0)                    # +3% activates trailing
+    engine.evaluate_position(p, 104.0)                    # +4% activates trailing
     assert p.trailing_active
-    assert engine.evaluate_position(p, 101.4) == ExitSignal.SELL_TRAILING
+    assert engine.evaluate_position(p, 101.8) == ExitSignal.SELL_TRAILING  # -2% from peak
 
 
 def test_mean_reversion_fixed_tp_sl(engine):
-    # TP at +2.5% (clears round-trip friction); SL at -0.8%.
-    assert engine.evaluate_position(_pos(MEAN_REVERSION), 102.5) == ExitSignal.SELL_TAKE_PROFIT
-    assert engine.evaluate_position(_pos(MEAN_REVERSION), 101.2) == ExitSignal.HOLD  # below the new TP
-    assert engine.evaluate_position(_pos(MEAN_REVERSION), 99.2) == ExitSignal.SELL_STOP_LOSS
+    # TP at +5% (2:1 R/R clears round-trip friction); SL at -2.5%.
+    assert engine.evaluate_position(_pos(MEAN_REVERSION), 105.0) == ExitSignal.SELL_TAKE_PROFIT
+    assert engine.evaluate_position(_pos(MEAN_REVERSION), 103.0) == ExitSignal.HOLD  # below the new TP
+    assert engine.evaluate_position(_pos(MEAN_REVERSION), 97.0) == ExitSignal.SELL_STOP_LOSS  # below -2.5%
 
 
 def test_dca_has_no_stop_but_tp_and_timestop(engine):
@@ -123,11 +123,11 @@ def test_dca_has_no_stop_but_tp_and_timestop(engine):
 
 def test_greed_tighten_locks_profit_sooner(engine):
     normal = _pos(MOMENTUM)
-    engine.evaluate_position(normal, 102.0, tighten=False)
-    assert not normal.trailing_active                     # +2% < 2.5% trigger
+    engine.evaluate_position(normal, 103.0, tighten=False)
+    assert not normal.trailing_active                     # +3% < 4% trigger
     greedy = _pos(MOMENTUM)
-    engine.evaluate_position(greedy, 102.0, tighten=True)
-    assert greedy.trailing_active                         # trigger halved to 1.25%
+    engine.evaluate_position(greedy, 103.0, tighten=True)
+    assert greedy.trailing_active                         # trigger halved to 2%
 
 
 # ── Pure helpers ─────────────────────────────────────────────────────────────

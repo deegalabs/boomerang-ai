@@ -899,11 +899,12 @@ class BoomerangAgent:
         self._save()
 
     async def _confluence(self, symbol: str, macro: str):
-        """Pre-entry TA confluence gate over Binance 1m candles. Returns a Confluence,
+        """Pre-entry TA confluence gate over Binance 5m candles. Returns a Confluence,
         or None when the token has no candle data (then the gate is simply skipped —
-        on-chain-only tokens are never penalized)."""
+        on-chain-only tokens are never penalized). 5m (vs 1m) cuts the noise/whipsaw that
+        produced false ENTER/AVOID signals — cleaner timing, fewer fee-dead scratches."""
         try:
-            klines = await asyncio.to_thread(fetch_klines, symbol, "1m", 60)
+            klines = await asyncio.to_thread(fetch_klines, symbol, "5m", 60)
         except Exception:  # noqa: BLE001
             return None
         if not klines or len(klines) < 30:
@@ -1080,7 +1081,7 @@ class BoomerangAgent:
         min_hold = float(self._cfg.dev_safety.get("min_hold_min_before_brain_exit", 0.0))
         if min_hold > 0 and (now - pos.opened_at) / 60.0 < min_hold:
             return False
-        if now - self._exit_checks.get(pos.symbol, 0.0) < 300:  # 1 re-evaluation / 5min / position
+        if now - self._exit_checks.get(pos.symbol, 0.0) < 1200:  # 1 re-evaluation / 20min / position
             return False
         self._exit_checks[pos.symbol] = now
         pnl = ((price - pos.entry_price) / pos.entry_price * 100.0) if pos.entry_price else 0.0
