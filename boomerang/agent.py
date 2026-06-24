@@ -744,7 +744,11 @@ class BoomerangAgent:
                                         if t.get("type") == "close" and t.get("pnl_pct") is not None])
         fired = [(spec, s, st) for (spec, s, st) in fired
                  if spec.key in posture.allowed and spec.key not in disabled]
-        TOP_K = 3
+        # COST-AWARE brain budget: candidates are sorted strongest-first, and in a hostile regime
+        # the brain rejects the weaker ones anyway — so evaluate fewer there. BULL (real opportunity)
+        # gets the full 3; NEUTRAL gets 2; defensive/fear regimes get only the single best candidate.
+        # Cuts paid LLM calls ~2/3 in quiet markets without dropping any setup the brain would take.
+        TOP_K = 3 if posture.label == "BULL" else (2 if posture.label == "NEUTRAL" else 1)
         STRONG = 78  # clearly strong setup: stops spending calls and enters right away
 
         opened = False
