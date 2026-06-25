@@ -904,6 +904,15 @@ class BoomerangAgent:
                     await self._emit(AlertType.REJECTED, f"Trade barred: {symbol}",
                                      val.detail, reason=val.reason.value if val.reason else "")
                     continue
+                # LIQUIDITY QUALITY (#2): radar movers (not in the curated, pre-validated basket) must
+                # be DEEP enough that the price is clean — thin pumped movers (TWT/EDGE) cause noisy
+                # exits. The curated focus is always allowed; movers need a tighter impact bar.
+                if symbol.upper() not in {t.upper() for t in self.token_focus}:
+                    strict = float(self._cfg.dev_safety.get("mover_max_impact_pct", 0.7))
+                    if (val.estimated_slippage_pct or 0.0) > strict:
+                        self._trace(symbol, "VALIDATION",
+                                    f"thin mover (impact {val.estimated_slippage_pct:.1f}% > {strict}%) — skipped")
+                        continue
                 # ERC-8004: SEALS the reasoning on-chain BEFORE executing (non-blocking).
                 asyncio.create_task(self._commit_prediction(symbol, verdict, ch24, now))
                 # TA STRATEGY (opt-in): refine the exit profile with the matching TA pattern.
@@ -1124,6 +1133,16 @@ class BoomerangAgent:
                 price = await asyncio.to_thread(self._validator.onchain_price_usd, pos.token_address)
             except Exception as exc:  # noqa: BLE001
                 self._log.warning("price unavailable %s: %s", pos.symbol, exc)
+                continue
+            # ORACLE SANITY (#1): a noisy on-chain read on a thin token can falsely arm the trailing
+            # or trip the stop (the TWT case). Ignore a read that diverges wildly from the recent CMC
+            # reference — don't update the peak/PnL or evaluate exits on bad data; wait for a clean tick.
+            cmc_px = (market_cache.get().get("quotes", {}).get(pos.symbol.upper()) or {}).get("price_usd")
+            sane_pct = float(self._cfg.dev_safety.get("monitor_price_sanity_pct", 3.0))
+            if (cmc_px and price and market_cache.age_seconds() < 600
+                    and abs(price - cmc_px) / cmc_px * 100.0 > sane_pct):
+                self._log.warning("noisy on-chain price for %s ignored: $%.8g vs CMC $%.8g",
+                                  pos.symbol, price, cmc_px)
                 continue
             # Record the live price/PnL so the public /live panel shows it (parity with Telegram).
             pos.last_price = price
