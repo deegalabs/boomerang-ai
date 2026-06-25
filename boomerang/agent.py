@@ -99,6 +99,11 @@ class BoomerangAgent:
         self._last_posture: str = ""            # latest Action-Matrix posture label (for /status parity)
         self._last_seal: dict | None = None     # last reasoning sealed on-chain (for the /live "verify" panel)
         self.agent_address: str | None = None   # wallet address (filled in at startup)
+        # CO-PILOT mode: instead of auto-executing, propose the trade and wait for the owner's
+        # approval (60s) on Telegram. Off by default (autonomous = the competition default).
+        self._copilot: bool = False
+        self._pending: dict[str, dict] = {}      # proposal_id -> stored trade params + expiry
+        self._prop_seq: int = 0
 
     # ── loading of eligible addresses ────────────────────────────────────────
     def _load_token_map(self) -> dict[str, str]:
@@ -311,6 +316,7 @@ class BoomerangAgent:
             "breaker_pct": self._cfg.drawdown_safety_pct,
             "daily_cap_pct": self._cfg.daily_loss_cap_pct,
             "halted": self._risk.halted,
+            "copilot": self._copilot,
             "posture": self._last_posture or None,
             "last_trade_ts": self._risk.last_trade_ts,
             "agent_address": self.agent_address,
@@ -365,6 +371,7 @@ class BoomerangAgent:
         self.take_profit_pct = data.get("take_profit_pct", self.take_profit_pct)
         self.position_size_pct = data.get("position_size_pct", self.position_size_pct)
         self.mode = data.get("mode", self.mode)
+        self._copilot = bool(data.get("copilot", self._copilot))
         self._cfg.user["token_focus"] = self.token_focus
         self._cfg.user["stop_loss_pct"] = self.stop_loss_pct
         self._cfg.user["take_profit_pct"] = self.take_profit_pct
@@ -569,6 +576,53 @@ class BoomerangAgent:
         tag = f"manual buy {size_pct:.0f}%" if size_pct is not None else "manual buy"
         await self._open(symbol, addr, size, f"{tag} (validation)", now)
 
+    # ── CO-PILOT mode (propose → owner approves on Telegram → execute) ─────────
+    def set_copilot(self, on: bool) -> None:
+        self._copilot = bool(on)
+        self._save()
+
+    async def _propose(self, symbol: str, addr: str, size: float, rationale: str, exec_spec,
+                       verdict, proj: dict, entry_px: float, open_kwargs: dict) -> None:  # noqa: ANN001
+        """Co-pilot: queue a proposal and alert the owner with $/risk/R:R; 60s to approve."""
+        now = time.time()
+        self._pending = {k: v for k, v in self._pending.items() if v["expiry"] > now}
+        if self._pending:  # one proposal awaiting your decision at a time — don't spam
+            return
+        self._prop_seq += 1
+        pid = f"p{self._prop_seq}"
+        stop_pct = exec_spec.stop_pct or self.stop_loss_pct
+        tp_pct = exec_spec.take_profit_pct
+        risk = round(size * stop_pct / 100.0, 2) if stop_pct else None
+        reward = round(size * tp_pct / 100.0, 2) if tp_pct else None
+        rr = round(tp_pct / stop_pct, 1) if (stop_pct and tp_pct) else None
+        hold_min = int(exec_spec.time_stop_min or self._cfg.max_hold_hours * 60)
+        self._pending[pid] = {"symbol": symbol, "addr": addr, "size": size,
+                              "rationale": rationale, "kwargs": open_kwargs, "expiry": now + 60}
+        await self._emit(
+            AlertType.TRADE_PROPOSAL, f"Trade proposal: {symbol}", rationale,
+            pid=pid, symbol=symbol, size_usd=round(size, 2),
+            size_pct=round(self.position_size_pct, 1), entry=entry_px,
+            stop_pct=stop_pct, tp_pct=tp_pct, risk_usd=risk, reward_usd=reward, rr=rr,
+            hold_min=hold_min, strategy=exec_spec.key, score=verdict.confidence_score,
+            ev_pct=proj.get("ev_pct"), expires_s=60)
+
+    async def approve_proposal(self, pid: str) -> str:
+        """Owner approved a co-pilot proposal — re-validate and execute. Returns a status word."""
+        p = self._pending.pop(pid, None)
+        if not p or time.time() > p["expiry"]:
+            return "expired"
+        val = await asyncio.to_thread(self._validator.validate, symbol=p["symbol"],
+                                      token_address=p["addr"], amount_usd=p["size"])
+        if not val.ok:
+            await self._emit(AlertType.REJECTED, f"Proposal can't execute: {p['symbol']}", val.detail)
+            return "failed"
+        ok = await self._open(p["symbol"], p["addr"], p["size"], p["rationale"], time.time(),
+                              **p["kwargs"])
+        return "executed" if ok else "failed"
+
+    def reject_proposal(self, pid: str) -> None:
+        self._pending.pop(pid, None)
+
     async def sell_position(self, symbol: str) -> bool:
         """Manual sell of ONE open position (at market), by the owner via Telegram.
         Doesn't halt the agent (unlike /panic) — it keeps trading."""
@@ -732,7 +786,7 @@ class BoomerangAgent:
             mq = quotes.get(s)
             if not mq or self._exec_cooldown.get(s, 0.0) > now:
                 continue
-            spec = select_strategy(fng, mq, btc24, self._cfg.loose_entries)
+            spec = select_strategy(fng, mq, btc24, self._cfg.loose_entries or self._copilot)
             if spec:
                 fired.append((spec, s, setup_strength(spec, mq)))
         fired.sort(key=lambda x: -x[2])
@@ -742,8 +796,9 @@ class BoomerangAgent:
         self._last_posture = posture.label
         disabled = expectancy_disabled([t for t in load_trades()
                                         if t.get("type") == "close" and t.get("pnl_pct") is not None])
+        # Co-pilot surfaces every strategy (the human is the filter); autonomous obeys the posture.
         fired = [(spec, s, st) for (spec, s, st) in fired
-                 if spec.key in posture.allowed and spec.key not in disabled]
+                 if (self._copilot or spec.key in posture.allowed) and spec.key not in disabled]
         # COST-AWARE brain budget: candidates are sorted strongest-first, and in a hostile regime
         # the brain rejects the weaker ones anyway — so evaluate fewer there. BULL (real opportunity)
         # gets the full 3; NEUTRAL gets 2; defensive/fear regimes get only the single best candidate.
@@ -791,7 +846,9 @@ class BoomerangAgent:
                 if verdict.confidence_score > best_score:
                     best_score = verdict.confidence_score
                     top_eval = f"{symbol} {verdict.confidence_score}{'✓' if verdict.is_buy else ''} [{spec.key}]"
-                if verdict.is_buy:
+                # Co-pilot surfaces decent-but-sub-threshold setups too (score >= 35) — the human
+                # is the final filter and sees the score; autonomous only acts on a true is_buy.
+                if verdict.is_buy or (self._copilot and verdict.confidence_score >= 35):
                     buys.append((verdict, symbol, addr, spec))
                 else:
                     self._trace(symbol, "BRAIN", f"score {verdict.confidence_score} — no setup [{spec.key}]")
@@ -862,13 +919,20 @@ class BoomerangAgent:
                     rationale += f" · TA: {conf.summary}"
                 if verdict.invalidation:
                     rationale += f" · Invalidated if: {verdict.invalidation}"
-                if await self._open(symbol, addr, size, rationale, now,
-                                    stop_pct=exec_spec.stop_pct, tp_pct=exec_spec.take_profit_pct,
-                                    trailing_trigger_pct=exec_spec.trailing_trigger_pct,
-                                    trailing_pct=exec_spec.trailing_pct, time_stop_min=exec_spec.time_stop_min,
-                                    time_stop_band_pct=exec_spec.time_stop_band_pct,
-                                    strategy=exec_spec.key, regime=verdict.regime,
-                                    projection=proj.as_dict()):
+                open_kwargs = dict(
+                    stop_pct=exec_spec.stop_pct, tp_pct=exec_spec.take_profit_pct,
+                    trailing_trigger_pct=exec_spec.trailing_trigger_pct,
+                    trailing_pct=exec_spec.trailing_pct, time_stop_min=exec_spec.time_stop_min,
+                    time_stop_band_pct=exec_spec.time_stop_band_pct,
+                    strategy=exec_spec.key, regime=verdict.regime, projection=proj.as_dict())
+                if self._copilot:
+                    # CO-PILOT: don't execute — send the owner a proposal to approve within 60s.
+                    entry_px = float(quotes[symbol].get("price_usd") or 0.0)
+                    await self._propose(symbol, addr, size, rationale, exec_spec, verdict,
+                                        proj.as_dict(), entry_px, open_kwargs)
+                    opened = True  # one proposal per cycle; don't fire the others
+                    break
+                if await self._open(symbol, addr, size, rationale, now, **open_kwargs):
                     opened = True
                     break
                 # Execution failed (e.g.: revert due to liquidity): cooldown and try the next one.

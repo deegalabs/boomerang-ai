@@ -19,6 +19,7 @@ class AlertType(str, Enum):
     ERROR = "ERROR"
     SCAN = "SCAN"            # summary of each scan cycle
     DATA_ERROR = "DATA_ERROR"  # failure to fetch market data (CMC/x402)
+    TRADE_PROPOSAL = "TRADE_PROPOSAL"  # co-pilot: a setup awaiting the owner's approval (60s)
 
 
 @dataclass

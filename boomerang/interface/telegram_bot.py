@@ -30,7 +30,7 @@ _EMOJI = {
     AlertType.STARTED: "✅", AlertType.PAUSED: "⏸️", AlertType.CIRCUIT_BREAKER: "🚨",
     AlertType.TRADE_OPENED: "📈", AlertType.TRADE_CLOSED: "🏁", AlertType.REJECTED: "🛡️",
     AlertType.HEARTBEAT: "💓", AlertType.WITHDRAWN: "🪃", AlertType.ERROR: "⚠️",
-    AlertType.SCAN: "🔍", AlertType.DATA_ERROR: "⚠️",
+    AlertType.SCAN: "🔍", AlertType.DATA_ERROR: "⚠️", AlertType.TRADE_PROPOSAL: "🤝",
 }
 
 # Exit reason → friendly label.
@@ -86,6 +86,10 @@ class TelegramInterface:
             text += f"\n{alert.detail}"
         d = alert.data or {}
 
+        if alert.type == AlertType.TRADE_PROPOSAL:
+            await self._send_proposal(d)
+            return
+
         if alert.type == AlertType.TRADE_OPENED:
             text += f"\n💵 Bought *${d.get('amount_usd')}* @ entry {_fmt_price(d.get('entry'))}"
             if d.get("stop"):
@@ -123,6 +127,51 @@ class TelegramInterface:
             await self._app.bot.send_message(self._master, text, parse_mode=ParseMode.MARKDOWN)
         except Exception as exc:  # noqa: BLE001
             self._log.error("Failed to send alert: %s", exc)
+
+    # ── co-pilot: trade proposal with approve/reject buttons ──────────────────
+    async def _send_proposal(self, d: dict) -> None:
+        pid = d.get("pid")
+        lines = [f"🤝 *Trade proposal — {d.get('symbol')}*",
+                 f"_{d.get('strategy')} · brain score {d.get('score')}_",
+                 f"💵 Buy *${d.get('size_usd')}* ({d.get('size_pct')}% of bankroll) @ ~{_fmt_price(d.get('entry'))}"]
+        if d.get("stop_pct"):
+            r = f" (risk ~${d['risk_usd']})" if d.get("risk_usd") is not None else ""
+            lines.append(f"🛑 Stop −{d.get('stop_pct')}%{r}")
+        if d.get("tp_pct"):
+            rw = f" (reward ~${d['reward_usd']})" if d.get("reward_usd") is not None else ""
+            lines.append(f"🎯 Target +{d.get('tp_pct')}%{rw}")
+        else:
+            lines.append("🎯 Target: let it run (trailing)")
+        if d.get("rr"):
+            lines.append(f"⚖️ Risk:Reward 1:{d.get('rr')}")
+        if d.get("hold_min"):
+            lines.append(f"⏱ Est. hold ~{d.get('hold_min')} min")
+        lines.append(f"\n⏳ *Approve within {d.get('expires_s', 60)}s* or it's skipped.")
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Approve", callback_data=f"appr_{pid}"),
+            InlineKeyboardButton("❌ Reject", callback_data=f"rej_{pid}")]])
+        try:
+            await self._app.bot.send_message(self._master, "\n".join(lines),
+                                             reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+        except Exception as exc:  # noqa: BLE001
+            self._log.error("Failed to send proposal: %s", exc)
+
+    async def cmd_copilot(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_master(update):
+            return
+        self._agent.set_copilot(True)
+        await update.message.reply_text(
+            "🤝 *Co-pilot mode ON* — I'll propose each trade with size, stop, target and "
+            "risk/reward, and execute only after you approve (60s window). Use /auto for autonomous.",
+            parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_auto(self, update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_master(update):
+            return
+        self._agent.set_copilot(False)
+        await update.message.reply_text(
+            "🤖 *Autonomous mode ON* — I execute trades myself, hands-off (the competition default).",
+            parse_mode=ParseMode.MARKDOWN)
 
     # ── handlers ─────────────────────────────────────────────────────────────
     def _home_menu(self) -> tuple[str, InlineKeyboardMarkup]:
@@ -234,6 +283,17 @@ class TelegramInterface:
         elif data == "withdraw":
             await q.edit_message_text("🪃 Withdrawing everything to your wallet and stopping...")
             await self._agent.withdraw_all()
+        elif data.startswith("appr_"):
+            await q.edit_message_text("⏳ *Approved* — executing the real swap...",
+                                      parse_mode=ParseMode.MARKDOWN)
+            res = await self._agent.approve_proposal(data.split("_", 1)[1])
+            msg = {"executed": "✅ Trade executed — you'll get the position details next.",
+                   "expired": "⌛ Too late — the 60s window passed, no trade.",
+                   "failed": "⚠️ Couldn't execute (liquidity/price moved). No trade."}.get(res, res)
+            await self._app.bot.send_message(self._master, msg)
+        elif data.startswith("rej_"):
+            self._agent.reject_proposal(data.split("_", 1)[1])
+            await q.edit_message_text("❌ Proposal rejected — no trade.")
 
     # ── configuration wizard steps ─────────────────────────────────
     async def _step_tokens(self, q) -> None:  # noqa: ANN001
@@ -629,6 +689,8 @@ class TelegramInterface:
         app.add_handler(CommandHandler(["pausar", "parar", "stop"], self.cmd_pause))
         app.add_handler(CommandHandler(["reiniciar", "restart", "destravar"], self.cmd_reiniciar))
         app.add_handler(CommandHandler("buy", self.cmd_buy))
+        app.add_handler(CommandHandler(["copilot", "copiloto"], self.cmd_copilot))
+        app.add_handler(CommandHandler(["auto", "autonomo"], self.cmd_auto))
         app.add_handler(CommandHandler(["porque", "why", "trace"], self.cmd_porque))
         app.add_handler(CommandHandler(["meta", "target"], self.cmd_meta))
         app.add_handler(CommandHandler("dashboard", self.cmd_dashboard))
