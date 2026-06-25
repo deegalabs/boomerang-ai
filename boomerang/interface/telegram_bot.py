@@ -177,23 +177,29 @@ class TelegramInterface:
 
     # ── handlers ─────────────────────────────────────────────────────────────
     def _home_menu(self) -> tuple[str, InlineKeyboardMarkup]:
+        copilot = getattr(self._agent, "_copilot", False)
+        mode_line = ("🤝 *Co-pilot is ON* — I propose, you approve each trade (60s window)."
+                     if copilot else "🤖 *Autonomous is ON* — I trade hands-off.")
         text = (
             "🪃 *Boomerang AI*\n\n"
             "Trading agent on BNB Chain. Every action passes through the "
             "*3-Shield Protocol*:\n"
             "🧠 Analytical (CoinMarketCap) · 🛡️ Network (BNB Chain) · 💼 Wallet (Trust Wallet)\n\n"
             "🤖 *Automatic* — the AI decides on its own when to enter and exit.\n"
-            "🎮 *Manual* — you pick the coin and the size; I execute the real swap "
-            "with all the security shields (the AI doesn't block you).\n\n"
-            "Use the menu below:"
+            "🤝 *Co-pilot* — I propose each trade (size, stop, target, R:R) and you approve.\n"
+            "🎮 *Manual* — you pick the coin and the size; I execute the real swap.\n\n"
+            f"{mode_line}\n\nUse the menu below:"
         )
+        cop_btn = (InlineKeyboardButton("🤖 Back to Autonomous", callback_data="copilot_off")
+                   if copilot else
+                   InlineKeyboardButton("🤝 Co-pilot Mode", callback_data="copilot_on"))
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🤖 Automatic Mode", callback_data="cfg"),
              InlineKeyboardButton("🎮 Manual Mode", callback_data="manual")],
+            [cop_btn, InlineKeyboardButton("📊 Status", callback_data="status")],
             [InlineKeyboardButton("▶️ Activate (auto)", callback_data="activate"),
-             InlineKeyboardButton("📊 Status", callback_data="status")],
-            [InlineKeyboardButton("⏸️ Pause", callback_data="pause"),
-             InlineKeyboardButton("🚨 Withdraw All and Stop", callback_data="withdraw")],
+             InlineKeyboardButton("⏸️ Pause", callback_data="pause")],
+            [InlineKeyboardButton("🚨 Withdraw All and Stop", callback_data="withdraw")],
         ])
         return text, kb
 
@@ -296,6 +302,10 @@ class TelegramInterface:
         elif data.startswith("rej_"):
             self._agent.reject_proposal(data.split("_", 1)[1])
             await q.edit_message_text("❌ Proposal rejected — no trade.")
+        elif data in ("copilot_on", "copilot_off"):
+            self._agent.set_copilot(data == "copilot_on")
+            text, kb = self._home_menu()
+            await q.edit_message_text(text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
 
     # ── configuration wizard steps ─────────────────────────────────
     async def _step_tokens(self, q) -> None:  # noqa: ANN001
