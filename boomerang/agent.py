@@ -29,6 +29,7 @@ from boomerang.persistence import (
 from boomerang.risk import RiskEngine
 from boomerang.risk.audit import audit
 from boomerang.risk.risk_engine import ExitSignal
+from boomerang.strategy.chart import analyze_structure
 from boomerang.strategy.confluence import evaluate_confluence
 from boomerang.strategy.indicators import compute_indicators
 from boomerang.strategy.klines import fetch_klines
@@ -839,9 +840,13 @@ class BoomerangAgent:
                 # Mean-rev/DCA: the DEFENSIVE regime adjustment does NOT apply (the strategy IS already
                 # the response to the regime). The brain CONFIRMS the setup in the active strategy's frame.
                 ca = cut_adjust if spec.key == "momentum" else 0
+                # Chart-structure skill: read S/R + trend off 5m candles and feed it to the brain.
+                ck = await asyncio.to_thread(fetch_klines, symbol, "5m", 90)
+                chart = analyze_structure(ck)
                 verdict = await self._analyzer.evaluate(
                     symbol, raw_metrics={**global_metrics, **self._x402_deriv, **quotes[symbol]},
-                    memory=memory, cut_adjust=ca, strategy=spec.key)
+                    memory=memory, cut_adjust=ca, strategy=spec.key,
+                    chart=chart.as_dict() if chart else None)
                 claude_calls += 1
                 if verdict.confidence_score > best_score:
                     best_score = verdict.confidence_score
