@@ -456,6 +456,27 @@ class TelegramInterface:
             return
         await self._send_status(update)
 
+    async def cmd_sell(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        """Reliable text command to sell a position (no menu needed): /vender SKYAI."""
+        if not self._is_master(update):
+            return
+        syms = [p.symbol for p in self._agent.positions]
+        if not ctx.args:
+            if not syms:
+                await update.message.reply_text("No open positions to sell.")
+                return
+            rows = [[InlineKeyboardButton(f"🔴 Sell {s}", callback_data=f"sell_{s}")] for s in syms]
+            await update.message.reply_text("Which position do you want to sell?",
+                                            reply_markup=InlineKeyboardMarkup(rows))
+            return
+        sym = ctx.args[0].upper()
+        await update.message.reply_text(f"🔴 Selling *{sym}* at market — real swap in progress...",
+                                        parse_mode=ParseMode.MARKDOWN)
+        ok = await self._agent.sell_position(sym)
+        await update.message.reply_text(
+            "✅ Sell sent — you'll get the trade confirmation." if ok else
+            f"⚠️ Couldn't sell {sym} (no open position by that name, or the swap reverted on a thin pool).")
+
     async def _send_status(self, target) -> None:  # noqa: ANN001
         s = await self._agent.status()
         eq = f"${s['equity_usd']:.2f}" if s["equity_usd"] is not None else "n/a"
@@ -513,7 +534,12 @@ class TelegramInterface:
                      InlineKeyboardButton("🔄 Refresh", callback_data="status")])
         kb = InlineKeyboardMarkup(rows)
         send = target.edit_message_text if hasattr(target, "edit_message_text") else target.message.reply_text
-        await send(text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+        try:
+            await send(text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+        except Exception as exc:  # noqa: BLE001  — e.g. "message is not modified" on an unchanged refresh
+            self._log.warning("status edit failed (%s); sending a fresh message", exc)
+            await self._app.bot.send_message(self._master, text, reply_markup=kb,
+                                             parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 
     # ── decision trace: WHY no trade (Telegram↔/live parity) ──────────────────
     _STAGE_EMOJI = {"REGIME": "🌐", "GATE": "🚪", "BRAIN": "🧠", "CONFLUENCE": "📊", "VALIDATION": "🛡️"}
@@ -701,6 +727,7 @@ class TelegramInterface:
         app.add_handler(CommandHandler(["pausar", "parar", "stop"], self.cmd_pause))
         app.add_handler(CommandHandler(["reiniciar", "restart", "destravar"], self.cmd_reiniciar))
         app.add_handler(CommandHandler("buy", self.cmd_buy))
+        app.add_handler(CommandHandler(["vender", "sell", "vende"], self.cmd_sell))
         app.add_handler(CommandHandler(["copilot", "copiloto"], self.cmd_copilot))
         app.add_handler(CommandHandler(["auto", "autonomo"], self.cmd_auto))
         app.add_handler(CommandHandler(["porque", "why", "trace"], self.cmd_porque))
