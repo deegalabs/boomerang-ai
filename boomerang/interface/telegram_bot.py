@@ -146,6 +146,8 @@ class TelegramInterface:
             lines.append(f"⚖️ Risk:Reward 1:{d.get('rr')}")
         if d.get("hold_min"):
             lines.append(f"⏱ Est. hold ~{d.get('hold_min')} min")
+        if d.get("warn"):
+            lines.append(f"\n{d.get('warn')}")
         lines.append(f"\n⏳ *Approve within {d.get('expires_s', 60)}s* or it's skipped.")
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ Approve", callback_data=f"appr_{pid}"),

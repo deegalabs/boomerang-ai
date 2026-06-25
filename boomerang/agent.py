@@ -583,7 +583,8 @@ class BoomerangAgent:
         self._save()
 
     async def _propose(self, symbol: str, addr: str, size: float, rationale: str, exec_spec,
-                       verdict, proj: dict, entry_px: float, open_kwargs: dict) -> None:  # noqa: ANN001
+                       verdict, proj: dict, entry_px: float, open_kwargs: dict,
+                       warn: str = "") -> None:  # noqa: ANN001
         """Co-pilot: queue a proposal and alert the owner with $/risk/R:R; 60s to approve."""
         now = time.time()
         self._pending = {k: v for k, v in self._pending.items() if v["expiry"] > now}
@@ -605,7 +606,7 @@ class BoomerangAgent:
             size_pct=round(self.position_size_pct, 1), entry=entry_px,
             stop_pct=stop_pct, tp_pct=tp_pct, risk_usd=risk, reward_usd=reward, rr=rr,
             hold_min=hold_min, strategy=exec_spec.key, score=verdict.confidence_score,
-            ev_pct=proj.get("ev_pct"), expires_s=60)
+            ev_pct=proj.get("ev_pct"), warn=warn, expires_s=60)
 
     async def approve_proposal(self, pid: str) -> str:
         """Owner approved a co-pilot proposal — re-validate and execute. Returns a status word."""
@@ -870,11 +871,15 @@ class BoomerangAgent:
                 ch24 = float(quotes[symbol].get("percent_change_24h") or 0.0)
                 # Anti-top + overextension dampening ONLY for MOMENTUM. Mean-rev and DCA
                 # buy DROPS on purpose — penalizing them here would kill the strategy.
-                if spec.key == "momentum" and ch24 > self._cfg.max_entry_24h_pct:
+                overext = spec.key == "momentum" and ch24 > self._cfg.max_entry_24h_pct
+                warn = ""
+                if overext and not self._copilot:
                     self._trace(symbol, "BRAIN", f"overextended 24h {ch24:+.1f}% — top risk")
                     await self._emit(AlertType.REJECTED, f"Entry barred (overextended): {symbol}",
                                      f"24h {ch24:+.1f}% > {self._cfg.max_entry_24h_pct:.0f}% — top risk.")
                     continue
+                if overext:  # co-pilot: surface it WITH a warning — you decide
+                    warn = f"⚠️ already +{ch24:.0f}%/24h — chasing the top, high reversal risk"
                 # ── Filter 1 timing gate: TA confluence on 1m candles (don't chase pumps) ──
                 conf = await self._confluence(symbol, self._macro_label(posture.size_mult))
                 if conf and conf.decision == "AVOID":
@@ -934,7 +939,7 @@ class BoomerangAgent:
                     # CO-PILOT: don't execute — send the owner a proposal to approve within 60s.
                     entry_px = float(quotes[symbol].get("price_usd") or 0.0)
                     await self._propose(symbol, addr, size, rationale, exec_spec, verdict,
-                                        proj.as_dict(), entry_px, open_kwargs)
+                                        proj.as_dict(), entry_px, open_kwargs, warn=warn)
                     opened = True  # one proposal per cycle; don't fire the others
                     break
                 if await self._open(symbol, addr, size, rationale, now, **open_kwargs):
