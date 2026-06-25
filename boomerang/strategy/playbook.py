@@ -146,8 +146,10 @@ def select_strategy(fng: int | None, metrics: dict,
     # free fall. CRISIS REBOUND: don't catch the falling knife — only buy once the bounce has
     # STARTED (price ticking up in the last hour while 24h is deeply negative). When fear is high
     # but the tape is stable (BTC > FEAR_STABLE_BTC), skip this branch and route normally.
+    # `loose` (co-pilot / loose mode) skips the PANIC lockdown: it routes normally and lets the
+    # human (or the lowered bar) be the filter, instead of refusing everything in extreme fear.
     panic_tape = btc_24h is None or btc_24h <= FEAR_STABLE_BTC
-    if fng is not None and fng < PANIC_FNG and panic_tape:
+    if fng is not None and fng < PANIC_FNG and panic_tape and not loose:
         if p24 < -10.0 and p1 > DCA_REBOUND_MIN_1H:
             return DCA
         return None

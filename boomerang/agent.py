@@ -851,9 +851,9 @@ class BoomerangAgent:
                 if verdict.confidence_score > best_score:
                     best_score = verdict.confidence_score
                     top_eval = f"{symbol} {verdict.confidence_score}{'✓' if verdict.is_buy else ''} [{spec.key}]"
-                # Co-pilot surfaces decent-but-sub-threshold setups too (score >= 35) — the human
-                # is the final filter and sees the score; autonomous only acts on a true is_buy.
-                if verdict.is_buy or (self._copilot and verdict.confidence_score >= 35):
+                # Co-pilot surfaces the best available setups (score >= 20) — the human is the final
+                # filter and sees the score/R:R; autonomous only acts on a true is_buy.
+                if verdict.is_buy or (self._copilot and verdict.confidence_score >= 20):
                     buys.append((verdict, symbol, addr, spec))
                 else:
                     self._trace(symbol, "BRAIN", f"score {verdict.confidence_score} — no setup [{spec.key}]")

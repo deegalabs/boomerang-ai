@@ -50,6 +50,14 @@ def test_loose_mode_fires_on_a_mild_move():
     assert select_strategy(50, mild_dn, loose=True).key == "mean_reversion"
 
 
+def test_loose_bypasses_panic_lockdown():
+    # PANIC (fng<25 + falling tape): strict mode routes nothing but DCA; loose/co-pilot routes
+    # normally so the human (or the lowered bar) is the filter instead of refusing everything.
+    mild = {"percent_change_1h": 1.0, "percent_change_24h": 0.5, "volume_change_24h_pct": 0}
+    assert select_strategy(18, mild, btc_24h=-3.0) is None                        # strict: blocked
+    assert select_strategy(18, mild, btc_24h=-3.0, loose=True).key == "momentum"  # loose: routes
+
+
 def test_no_setup_returns_none():
     assert select_strategy(50, FLAT) is None
 
