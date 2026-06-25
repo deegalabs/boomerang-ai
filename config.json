@@ -32,7 +32,7 @@
     "min_confidence_score_conservative": 58,
     "loose_entries": false,
     "min_hold_min_before_brain_exit": 12.0,
-    "monitor_price_sanity_pct": 3.0,
+    "monitor_max_tick_jump_pct": 10.0,
     "mover_max_impact_pct": 0.7,
     "prefilter_min_vol_change_pct": 3.0,
     "max_slippage_pct": 1.5,

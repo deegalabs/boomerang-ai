@@ -1134,15 +1134,15 @@ class BoomerangAgent:
             except Exception as exc:  # noqa: BLE001
                 self._log.warning("price unavailable %s: %s", pos.symbol, exc)
                 continue
-            # ORACLE SANITY (#1): a noisy on-chain read on a thin token can falsely arm the trailing
-            # or trip the stop (the TWT case). Ignore a read that diverges wildly from the recent CMC
-            # reference — don't update the peak/PnL or evaluate exits on bad data; wait for a clean tick.
-            cmc_px = (market_cache.get().get("quotes", {}).get(pos.symbol.upper()) or {}).get("price_usd")
-            sane_pct = float(self._cfg.dev_safety.get("monitor_price_sanity_pct", 3.0))
-            if (cmc_px and price and market_cache.age_seconds() < 600
-                    and abs(price - cmc_px) / cmc_px * 100.0 > sane_pct):
-                self._log.warning("noisy on-chain price for %s ignored: $%.8g vs CMC $%.8g",
-                                  pos.symbol, price, cmc_px)
+            # NOISE GUARD (#1): a single jumpy on-chain read on a thin token can falsely arm the
+            # trailing or trip the stop (the TWT case). A REAL move arrives as consecutive in-range
+            # ticks; a noise spike is one outlier. So reject only a read that JUMPS absurdly from the
+            # last clean tick — this catches spikes WITHOUT blinding a token that legitimately ran
+            # (comparing to a stale CMC reference wrongly froze a +74% mover like SKYAI).
+            jump = float(self._cfg.dev_safety.get("monitor_max_tick_jump_pct", 10.0))
+            if pos.last_price and price and abs(price - pos.last_price) / pos.last_price * 100.0 > jump:
+                self._log.warning("noisy on-chain tick for %s ignored: $%.8g vs last $%.8g",
+                                  pos.symbol, price, pos.last_price)
                 continue
             # Record the live price/PnL so the public /live panel shows it (parity with Telegram).
             pos.last_price = price
