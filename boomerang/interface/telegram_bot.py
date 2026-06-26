@@ -146,6 +146,9 @@ class TelegramInterface:
             lines.append(f"⚖️ Risk:Reward 1:{d.get('rr')}")
         if d.get("hold_min"):
             lines.append(f"⏱ Est. hold ~{d.get('hold_min')} min")
+        imp = d.get("impact")
+        if isinstance(imp, (int, float)):
+            lines.append(f"💧 Liquidity OK — sells back at ~{imp:.1f}% impact (validated round-trip)")
         if d.get("warn"):
             lines.append(f"\n{d.get('warn')}")
         lines.append(f"\n⏳ *Approve within {d.get('expires_s', 60)}s* or it's skipped.")

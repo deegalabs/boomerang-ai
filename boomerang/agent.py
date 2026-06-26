@@ -105,6 +105,9 @@ class BoomerangAgent:
         self._copilot: bool = False
         self._pending: dict[str, dict] = {}      # proposal_id -> stored trade params + expiry
         self._prop_seq: int = 0
+        # Liquidity audit / rug detection: tokens whose pool drained after we held them.
+        self._illiquid_syms: set[str] = set()
+        self._last_liq_audit: float = 0.0
 
     # ── loading of eligible addresses ────────────────────────────────────────
     def _load_token_map(self) -> dict[str, str]:
@@ -148,6 +151,13 @@ class BoomerangAgent:
                 if total > 0:
                     holdings = bd.get("holdings", [])
                     self._last_holdings = holdings
+                    # EQUITY HONESTY (#2): a rugged/illiquid token's spot value is a mirage (can't
+                    # be sold back to USDC). Discount any holding the liquidity audit flagged so the
+                    # equity reflects REALIZABLE money, not paper (the B/SKYAI trap).
+                    if self._illiquid_syms:
+                        ghost = sum(float(h.get("value_usd") or 0.0) for h in holdings
+                                    if str(h.get("symbol", "")).upper() in self._illiquid_syms)
+                        total = max(total - ghost, 0.0)
                     reliable = equity_reading_reliable(holdings, [p.symbol for p in self.positions])
                     return total, reliable
             except Exception as exc:  # noqa: BLE001
@@ -584,7 +594,7 @@ class BoomerangAgent:
 
     async def _propose(self, symbol: str, addr: str, size: float, rationale: str, exec_spec,
                        verdict, proj: dict, entry_px: float, open_kwargs: dict,
-                       warn: str = "") -> None:  # noqa: ANN001
+                       warn: str = "", impact: float | None = None) -> None:  # noqa: ANN001
         """Co-pilot: queue a proposal and alert the owner with $/risk/R:R; 60s to approve."""
         now = time.time()
         self._pending = {k: v for k, v in self._pending.items() if v["expiry"] > now}
@@ -606,7 +616,7 @@ class BoomerangAgent:
             size_pct=round(self.position_size_pct, 1), entry=entry_px,
             stop_pct=stop_pct, tp_pct=tp_pct, risk_usd=risk, reward_usd=reward, rr=rr,
             hold_min=hold_min, strategy=exec_spec.key, score=verdict.confidence_score,
-            ev_pct=proj.get("ev_pct"), warn=warn, expires_s=60)
+            ev_pct=proj.get("ev_pct"), warn=warn, impact=impact, expires_s=60)
 
     async def approve_proposal(self, pid: str) -> str:
         """Owner approved a co-pilot proposal — re-validate and execute. Returns a status word."""
@@ -700,6 +710,7 @@ class BoomerangAgent:
         self._risk.update_equity(equity, now)
         self._last_equity = equity  # cache for dashboard
         await self._reconcile_positions()  # syncs tracking↔on-chain (clears test dust)
+        await self._audit_liquidity(now)   # rug detection: flag drained tokens, alert + discount
         stable = self._stable_usd()  # real available USDC to buy with (not total equity)
         if self._risk.circuit_breaker_tripped(equity):
             await self.panic(f"Drawdown {self._risk.current_drawdown_pct(equity):.1f}% hit the trigger.")
@@ -948,7 +959,8 @@ class BoomerangAgent:
                     # CO-PILOT: don't execute — send the owner a proposal to approve within 60s.
                     entry_px = float(quotes[symbol].get("price_usd") or 0.0)
                     await self._propose(symbol, addr, size, rationale, exec_spec, verdict,
-                                        proj.as_dict(), entry_px, open_kwargs, warn=warn)
+                                        proj.as_dict(), entry_px, open_kwargs, warn=warn,
+                                        impact=val.estimated_slippage_pct)
                     opened = True  # one proposal per cycle; don't fire the others
                     break
                 if await self._open(symbol, addr, size, rationale, now, **open_kwargs):
@@ -1125,6 +1137,42 @@ class BoomerangAgent:
                          projection=projection, tx=res.tx_hash)
         self._save()
         return True
+
+    # ── liquidity audit / rug detection (#1) ──────────────────────────────────
+    async def _audit_liquidity(self, now: float) -> None:
+        """Throttled re-check of every non-stable holding's POOL. A token can pass validation
+        at buy time and be rugged later (pool drained) — this catches it: alerts the owner the
+        moment a held token's liquidity collapses, and flags it so equity stops counting the mirage.
+        """
+        if now - self._last_liq_audit < 600:  # ~10 min between full audits
+            return
+        self._last_liq_audit = now
+        stables = {"USDC", "USDT", "BNB", "WBNB", "DAI", "FDUSD", "USD1"}
+        held = {p.symbol.upper() for p in self.positions}
+        for h in list(self._last_holdings):
+            sym = str(h.get("symbol", "")).upper()
+            if sym in stables or not sym:
+                continue
+            addr = self._addr(sym)
+            if not addr:
+                continue
+            try:
+                liq = await asyncio.to_thread(self._validator.wbnb_pool_liquidity_usd, addr)
+            except Exception:  # noqa: BLE001
+                continue
+            thin = liq is not None and liq < self._cfg.min_pool_liquidity_usd
+            if thin and sym not in self._illiquid_syms:
+                self._illiquid_syms.add(sym)
+                in_pos = sym in held
+                await self._emit(
+                    AlertType.CIRCUIT_BREAKER if in_pos else AlertType.ERROR,
+                    f"🚨 Liquidity drained: {sym}",
+                    f"Pool fell to ~${liq:,.0f} (< minimum ${self._cfg.min_pool_liquidity_usd:,.0f}) — "
+                    f"likely a RUG. {'Your OPEN position may be stuck (can not be sold).' if in_pos else 'This residual is near-worthless on exit.'} "
+                    f"It is now DISCOUNTED from your real equity.")
+                self._log.warning("liquidity-audit: %s pool ~$%.0f → flagged illiquid", sym, liq or 0)
+            elif not thin and sym in self._illiquid_syms:
+                self._illiquid_syms.discard(sym)  # liquidity recovered
 
     # ── position monitor (stop / trailing) ───────────────────────────────────
     async def check_positions(self) -> None:
