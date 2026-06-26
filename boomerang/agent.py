@@ -36,7 +36,7 @@ from boomerang.strategy.klines import fetch_klines
 from boomerang.strategy.playbook import (
     expectancy_disabled, regime_posture, select_strategy, setup_strength, ta_select)
 from boomerang.strategy.projection import project
-from boomerang.types import AgentState, Position
+from boomerang.types import AgentState, Position, RejectReason
 from boomerang.vault.bnb_validation import BNBValidator
 from boomerang.vault.twak_executor import TwakError, TwakExecutor
 
@@ -1148,6 +1148,11 @@ class BoomerangAgent:
             return
         self._last_liq_audit = now
         stables = {"USDC", "USDT", "BNB", "WBNB", "DAI", "FDUSD", "USD1"}
+        # A pool can SHOW deep liquidity yet be unsellable (manipulated/asymmetric, like B's $1.2M
+        # WBNB pool that still costs 90% to exit). So test SELLABILITY via the round-trip validator,
+        # not pool depth — these reasons mean "can't get USDC back out".
+        illiquid_reasons = {RejectReason.NO_LIQUIDITY, RejectReason.HIGH_SLIPPAGE,
+                            RejectReason.BURNING_TAX}
         held = {p.symbol.upper() for p in self.positions}
         for h in list(self._last_holdings):
             sym = str(h.get("symbol", "")).upper()
@@ -1157,20 +1162,24 @@ class BoomerangAgent:
             if not addr:
                 continue
             try:
-                liq = await asyncio.to_thread(self._validator.wbnb_pool_liquidity_usd, addr)
+                r = await asyncio.to_thread(self._validator.validate, symbol=sym,
+                                            token_address=addr, amount_usd=10.0)
             except Exception:  # noqa: BLE001
                 continue
-            thin = liq is not None and liq < self._cfg.min_pool_liquidity_usd
+            liq = getattr(r, "estimated_slippage_pct", None)
+            thin = (not r.ok) and (r.reason in illiquid_reasons)
             if thin and sym not in self._illiquid_syms:
                 self._illiquid_syms.add(sym)
                 in_pos = sym in held
+                imp_txt = f"~{liq:.0f}% to exit" if isinstance(liq, (int, float)) else "no sell route"
                 await self._emit(
                     AlertType.CIRCUIT_BREAKER if in_pos else AlertType.ERROR,
-                    f"🚨 Liquidity drained: {sym}",
-                    f"Pool fell to ~${liq:,.0f} (< minimum ${self._cfg.min_pool_liquidity_usd:,.0f}) — "
-                    f"likely a RUG. {'Your OPEN position may be stuck (can not be sold).' if in_pos else 'This residual is near-worthless on exit.'} "
+                    f"🚨 Can't sell: {sym}",
+                    f"Round-trip check failed ({imp_txt}) — likely a RUG / manipulated pool. "
+                    f"{'Your OPEN position may be stuck (can not be converted back to USDC).' if in_pos else 'This residual is near-worthless on exit.'} "
                     f"It is now DISCOUNTED from your real equity.")
-                self._log.warning("liquidity-audit: %s pool ~$%.0f → flagged illiquid", sym, liq or 0)
+                self._log.warning("liquidity-audit: %s round-trip failed (%s) → flagged illiquid",
+                                  sym, r.detail)
             elif not thin and sym in self._illiquid_syms:
                 self._illiquid_syms.discard(sym)  # liquidity recovered
 
