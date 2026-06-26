@@ -146,7 +146,17 @@ class TelegramInterface:
         if d.get("rr"):
             lines.append(f"⚖️ Risk:Reward 1:{d.get('rr')}")
         if d.get("hold_min"):
-            lines.append(f"⏱ Est. hold ~{d.get('hold_min')} min")
+            lines.append(f"⏱ Est. hold ~{d.get('hold_min')} min (closes here if it goes nowhere)")
+        scen = d.get("scenarios") or []
+        if scen:
+            moves = " · ".join(f"+{x['pct']}% → *+${x['usd']:.2f}*" for x in scen)
+            lines.append(f"📈 If it rises: {moves}")
+        tp = d.get("target_pct")
+        if isinstance(tp, (int, float)) and tp > 0 and d.get("size_usd"):
+            gain = d["size_usd"] * tp / 100.0
+            ew = d.get("est_win")
+            ew_txt = f" · est. win {ew:.0f}%" if isinstance(ew, (int, float)) else ""
+            lines.append(f"🎯 Agent's estimate: reach +{tp:.0f}% (≈ +${gain:.2f}){ew_txt}")
         imp = d.get("impact")
         if isinstance(imp, (int, float)):
             lines.append(f"💧 Liquidity OK — sells back at ~{imp:.1f}% impact (validated round-trip)")

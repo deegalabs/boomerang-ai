@@ -612,13 +612,17 @@ class BoomerangAgent:
                               "rationale": rationale, "kwargs": open_kwargs, "expiry": now + 60}
         eq = self._last_equity or 0.0
         real_pct = round(size / eq * 100.0, 1) if eq > 0 else round(self.position_size_pct, 1)
+        # Profit scenarios: what each price move is worth in $ (gain depends on the MOVE, not time).
+        scenarios = [{"pct": p, "usd": round(size * p / 100.0, 2)} for p in (3, 5, 10)]
         await self._emit(
             AlertType.TRADE_PROPOSAL, f"Trade proposal: {symbol}", rationale,
             pid=pid, symbol=symbol, size_usd=round(size, 2),
             size_pct=real_pct, bankroll=round(eq, 2), entry=entry_px,
             stop_pct=stop_pct, tp_pct=tp_pct, risk_usd=risk, reward_usd=reward, rr=rr,
             hold_min=hold_min, strategy=exec_spec.key, score=verdict.confidence_score,
-            ev_pct=proj.get("ev_pct"), warn=warn, impact=impact, expires_s=60)
+            ev_pct=proj.get("ev_pct"), target_pct=proj.get("target_pct"),
+            est_win=proj.get("est_win"), scenarios=scenarios,
+            warn=warn, impact=impact, expires_s=60)
 
     async def approve_proposal(self, pid: str) -> str:
         """Owner approved a co-pilot proposal — re-validate and execute. Returns a status word."""
