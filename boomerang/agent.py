@@ -610,10 +610,12 @@ class BoomerangAgent:
         hold_min = int(exec_spec.time_stop_min or self._cfg.max_hold_hours * 60)
         self._pending[pid] = {"symbol": symbol, "addr": addr, "size": size,
                               "rationale": rationale, "kwargs": open_kwargs, "expiry": now + 60}
+        eq = self._last_equity or 0.0
+        real_pct = round(size / eq * 100.0, 1) if eq > 0 else round(self.position_size_pct, 1)
         await self._emit(
             AlertType.TRADE_PROPOSAL, f"Trade proposal: {symbol}", rationale,
             pid=pid, symbol=symbol, size_usd=round(size, 2),
-            size_pct=round(self.position_size_pct, 1), entry=entry_px,
+            size_pct=real_pct, bankroll=round(eq, 2), entry=entry_px,
             stop_pct=stop_pct, tp_pct=tp_pct, risk_usd=risk, reward_usd=reward, rr=rr,
             hold_min=hold_min, strategy=exec_spec.key, score=verdict.confidence_score,
             ev_pct=proj.get("ev_pct"), warn=warn, impact=impact, expires_s=60)
@@ -898,13 +900,18 @@ class BoomerangAgent:
                     await self._emit(AlertType.REJECTED, f"Entry vetoed (TA): {symbol}",
                                      conf.veto or conf.summary)
                     continue
-                conv_pct = conviction_size_pct(self.position_size_pct, verdict.confidence_score,
-                                               max_pct=self._cfg.max_position_pct)
-                if spec.key == "momentum":
-                    conv_pct *= overextension_factor(ch24)
-                conv_pct *= posture.size_mult  # ACTION MATRIX: regime scales the bet (defensive shrinks)
-                if conf:  # CONFLUENCE: scale the bet by how much the TA agrees (cap respected later)
-                    conv_pct *= 1.15 if conf.enter else (0.75 if conf.decision == "WAIT" else 1.0)
+                if self._copilot:
+                    # CO-PILOT: apply the size YOU set (you're the filter and the decision-maker) —
+                    # don't shrink it by conviction/regime, so the trade is meaningful for growth.
+                    conv_pct = min(self.position_size_pct, self._cfg.max_position_pct)
+                else:
+                    conv_pct = conviction_size_pct(self.position_size_pct, verdict.confidence_score,
+                                                   max_pct=self._cfg.max_position_pct)
+                    if spec.key == "momentum":
+                        conv_pct *= overextension_factor(ch24)
+                    conv_pct *= posture.size_mult  # ACTION MATRIX: regime scales the bet (defensive shrinks)
+                    if conf:  # CONFLUENCE: scale the bet by how much the TA agrees (cap respected later)
+                        conv_pct *= 1.15 if conf.enter else (0.75 if conf.decision == "WAIT" else 1.0)
                 size = self._risk.position_size_usd(equity, stable, override_pct=conv_pct)
                 val = await asyncio.to_thread(
                     self._validator.validate, symbol=symbol, token_address=addr, amount_usd=size,

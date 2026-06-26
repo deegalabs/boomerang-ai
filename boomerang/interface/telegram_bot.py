@@ -133,7 +133,8 @@ class TelegramInterface:
         pid = d.get("pid")
         lines = [f"🤝 *Trade proposal — {d.get('symbol')}*",
                  f"_{d.get('strategy')} · brain score {d.get('score')}_",
-                 f"💵 Buy *${d.get('size_usd')}* ({d.get('size_pct')}% of bankroll) @ ~{_fmt_price(d.get('entry'))}"]
+                 f"💵 Buy *${d.get('size_usd')}* (~{d.get('size_pct')}% of your ${d.get('bankroll')} bankroll) "
+                 f"@ ~{_fmt_price(d.get('entry'))}"]
         if d.get("stop_pct"):
             r = f" (risk ~${d['risk_usd']})" if d.get("risk_usd") is not None else ""
             lines.append(f"🛑 Stop −{d.get('stop_pct')}%{r}")
